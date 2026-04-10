@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  
+  --color-primary: #0f172a; /* Navy Blue */
+  --color-secondary: #000000; /* Black */
+  --color-accent: #bef264; /* Lime Green */
+  --color-surface: #ffffff;
+  --color-background: #f8fafc;
+  --color-error: #ef4444;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-background text-secondary selection:bg-primary/30;
+    background-image: 
+      radial-gradient(circle at 2px 2px, rgba(15, 23, 42, 0.02) 1px, transparent 0);
+    background-size: 32px 32px;
+    /* Prevent layout shift when keyboard opens */
+    min-height: -webkit-fill-available;
+  }
+  html {
+    scroll-padding-top: 2rem;
+    scroll-padding-bottom: 50vh;
+    height: -webkit-fill-available;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-bold tracking-tight;
+  }
+}
+
+.glass-card {
+  @apply bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden;
+}
+
+.btn-primary {
+  @apply relative overflow-hidden bg-primary text-white px-4 md:px-8 py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-md hover:bg-primary/90 hover:-translate-y-0.5 transition-all active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+}
+
+.btn-outline {
+  @apply border-2 border-slate-200 text-slate-600 px-4 md:px-8 py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center;
+}
+
+.input-field {
+  @apply w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50/50 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none transition-all font-medium;
+}
+
+.score-display {
+  @apply font-display font-black text-7xl md:text-8xl tracking-tighter text-secondary;
+}
+
+.player-card {
+  @apply p-6 rounded-3xl border-2 border-transparent transition-all duration-300;
+}
+
+.player-card.active {
+  @apply border-primary bg-primary/5;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+}
+
+.match-finished {
+  @apply bg-emerald-50 border-emerald-100;
+}
+
+.match-pending {
+  @apply bg-white border-slate-200;
+}
