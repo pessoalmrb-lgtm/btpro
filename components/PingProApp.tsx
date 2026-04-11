@@ -42,10 +42,10 @@ const Header = ({ step, resetApp }: { step: AppStep, resetApp: () => void }) => 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <button 
           onClick={resetApp} 
-          className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2.5 md:py-2 bg-white rounded-xl border border-slate-200 text-slate-500 hover:text-primary hover:border-primary/30 transition-all shadow-sm text-xs md:text-sm font-bold"
+          className="flex items-center gap-1.5 md:gap-2 px-4 md:px-5 py-2.5 md:py-2.5 bg-primary text-white rounded-xl shadow-lg hover:bg-primary/90 hover:-translate-y-0.5 transition-all text-xs md:text-sm font-bold border-2 border-accent/20"
         >
           <Home size={14} className="md:w-4 md:h-4" />
-          <span>Início</span>
+          <span>Meus Torneios</span>
         </button>
       </motion.div>
     )}
@@ -175,8 +175,8 @@ export default function PingProApp() {
     }
     setError(null);
     
-    const isIndividual = ['REI_DA_QUADRA', 'SUPER_6_INDIVIDUAL', 'SUPER_8_INDIVIDUAL', 'SUPER_10_INDIVIDUAL'].includes(tournamentFormat);
-
+    const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
+    
     if (isIndividual) {
       setStep('DRAWING');
       setIsDrawing(true);
@@ -303,7 +303,7 @@ export default function PingProApp() {
     }
     setError(null);
 
-    const isIndividual = ['REI_DA_QUADRA', 'SUPER_6_INDIVIDUAL', 'SUPER_8_INDIVIDUAL', 'SUPER_10_INDIVIDUAL'].includes(tournamentFormat);
+    const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     
     if (isIndividual) {
       setRegistrationType('RANDOM_DRAW');
@@ -398,6 +398,22 @@ export default function PingProApp() {
         colors: ['#0f172a', '#bef264', '#000000']
       });
     }
+  };
+
+  const prevRound = () => {
+    if (!activeTournament) return;
+    if (activeTournament.currentRound > 1) {
+      setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, currentRound: t.currentRound - 1 } : t));
+    }
+  };
+
+  const editMatch = (matchId: string) => {
+    if (!activeTournament) return;
+    const newMatches = activeTournament.matches.map(m => {
+      if (m.id !== matchId) return m;
+      return { ...m, isCompleted: false };
+    });
+    setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, matches: newMatches } : t));
   };
 
   const resetApp = () => {
@@ -674,14 +690,17 @@ export default function PingProApp() {
                 {[
                   { id: 'REI_DA_QUADRA', title: 'REI DA QUADRA (4 Atletas)', desc: 'Formato individual: 3 rodadas onde cada atleta joga com um parceiro diferente a cada jogo. Todos jogam com todos.', icon: Trophy, req: 4 },
                   { id: 'SUPER_6_INDIVIDUAL', title: 'SUPER 6 INDIVIDUAL', desc: 'Formato individual: 5 rodadas de integração total. Você joga uma vez com cada um dos outros 5 atletas como parceiro.', icon: Users, req: 6 },
-                  { id: 'SUPER_6_FIXED', title: 'SUPER 6 DUPLAS FIXAS', desc: '6 duplas fixas que se enfrentam todas contra todas. Sistema de pontos corridos para definir a melhor parceria.', icon: Users, req: 12 },
-                  { id: 'SUPER_8_INDIVIDUAL', title: 'SUPER 8 INDIVIDUAL', desc: 'Formato individual: 7 rodadas épicas. Rotação completa de parceiros para definir quem é o melhor jogador individual.', icon: Users, req: 8 },
-                  { id: 'SUPER_4_FIXED', title: 'SUPER 4 DUPLAS FIXAS', desc: '4 duplas prontas em combate direto. Sistema de todos contra todos (Round Robin) para definir a dupla campeã.', icon: Users, req: 8 },
-                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL', desc: 'Formato individual: 9 rodadas de alto nível. Máxima integração com troca de parceiros em cada partida.', icon: Users, req: 10 },
-                  { id: 'SUPER_8_FIXED', title: 'SUPER 8 DUPLAS FIXAS', desc: '8 duplas fixas em disputa intensa. Todas as duplas se enfrentam em busca do topo do ranking.', icon: Users, req: 16 },
-                  { id: 'SUPER_10_FIXED', title: 'SUPER 10 DUPLAS FIXAS', desc: '10 duplas fixas em formato de liga. Confrontos diretos entre todas as parcerias inscritas.', icon: Users, req: 20 },
-                  { id: 'SUPER_12_FIXED', title: 'SUPER 12 DUPLAS FIXAS', desc: '12 duplas fixas. O desafio máximo de resistência e técnica em um grupo único de todos contra todos.', icon: Users, req: 24 },
-                  { id: 'GROUPS_MATA_MATA', title: 'GRUPOS + MATA-MATA', desc: 'Torneio clássico: fase de grupos para classificação seguida de eliminatórias emocionantes até a final.', icon: LayoutGrid, req: 4 },
+                  { id: 'SUPER_3_FIXED', title: 'SUPER 3 DUPLAS FIXAS', desc: '3 duplas fixas (6 atletas) em formato todos contra todos.', icon: Users, req: 6 },
+                  { id: 'SUPER_4_FIXED', title: 'SUPER 4 DUPLAS FIXAS', desc: '4 duplas fixas (8 atletas) em combate direto. Round Robin completo.', icon: Users, req: 8 },
+                  { id: 'SUPER_8_INDIVIDUAL', title: 'SUPER 8 INDIVIDUAL', desc: 'Formato individual: 7 rodadas épicas. Rotação completa de parceiros.', icon: Users, req: 8 },
+                  { id: 'SUPER_5_FIXED', title: 'SUPER 5 DUPLAS FIXAS', desc: '5 duplas fixas (10 atletas) em formato todos contra todos.', icon: Users, req: 10 },
+                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL', desc: 'Formato individual: 9 rodadas de alto nível. Máxima integração.', icon: Users, req: 10 },
+                  { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL', desc: 'Formato individual: 11 rodadas de integração total. Rotação completa de parceiros.', icon: Users, req: 12 },
+                  { id: 'SUPER_6_FIXED', title: 'SUPER 6 DUPLAS FIXAS', desc: '6 duplas fixas (12 atletas) que se enfrentam todas contra todas.', icon: Users, req: 12 },
+                  { id: 'SUPER_8_FIXED', title: 'SUPER 8 DUPLAS FIXAS', desc: '8 duplas fixas (16 atletas) em disputa intensa.', icon: Users, req: 16 },
+                  { id: 'SUPER_10_FIXED', title: 'SUPER 10 DUPLAS FIXAS', desc: '10 duplas fixas (20 atletas) em formato de liga.', icon: Users, req: 20 },
+                  { id: 'SUPER_12_FIXED', title: 'SUPER 12 DUPLAS FIXAS', desc: '12 duplas fixas (24 atletas). O desafio máximo de resistência.', icon: Users, req: 24 },
+                  { id: 'GROUPS_MATA_MATA', title: 'GRUPOS + MATA-MATA', desc: 'Torneio clássico: fase de grupos seguida de eliminatórias.', icon: LayoutGrid, req: 4 },
                 ].filter(f => {
                   if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 4;
                   return playerCount === f.req;
@@ -1092,16 +1111,32 @@ export default function PingProApp() {
                     <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest shrink-0">Em Andamento</span>
                     <span className="text-slate-500 text-[10px] font-bold uppercase truncate">{activeTournament.name}</span>
                   </div>
-                  <h2 className="text-xl font-display font-bold text-primary leading-tight">
-                    Rodada {activeTournament.currentRound} <span className="text-slate-300 font-normal">de {activeTournament.totalRounds}</span>
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={nextRound}
+                      disabled={!activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted)}
+                      className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronRight size={20} className="text-primary" />
+                    </button>
+                    <h2 className="text-xl font-display font-bold text-primary leading-tight">
+                      Rodada {activeTournament.currentRound} <span className="text-slate-300 font-normal">de {activeTournament.totalRounds}</span>
+                    </h2>
+                    <button 
+                      onClick={prevRound}
+                      disabled={activeTournament.currentRound === 1}
+                      className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronLeft size={20} className="text-primary" />
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="flex items-center gap-2 shrink-0">
                   {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) ? (
                     <button 
                       onClick={nextRound} 
-                      className="px-3 py-1.5 bg-primary/10 rounded-lg text-primary font-bold text-[10px] md:text-[11px] flex items-center gap-1.5 border border-primary/20 hover:bg-primary/20 transition-all shadow-sm animate-pulse"
+                      className="px-4 py-2 bg-primary rounded-lg text-white font-bold text-[10px] md:text-[11px] flex items-center gap-1.5 hover:bg-primary/90 transition-all shadow-md animate-pulse uppercase tracking-widest"
                     >
                       <ChevronRight size={12} />
                       <span>{activeTournament.currentRound === activeTournament.totalRounds ? 'Finalizar' : 'Próxima Rodada'}</span>
@@ -1139,38 +1174,55 @@ export default function PingProApp() {
                             {match.groupId && <span className="ml-2 border-l border-slate-300 pl-2">Grupo {match.groupId}</span>}
                           </div>
                           {match.isCompleted && (
-                            <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[10px] uppercase tracking-widest">
-                              <CheckCircle2 size={14} />
-                              Concluído
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => editMatch(match.id)}
+                                className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[9px] font-bold text-slate-500 transition-colors"
+                              >
+                                <RefreshCw size={10} />
+                                EDITAR
+                              </button>
+                              <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-[10px] uppercase tracking-widest">
+                                <CheckCircle2 size={14} />
+                                Concluído
+                              </div>
                             </div>
                           )}
                         </div>
 
                         <div className="flex items-center justify-between gap-2 mb-6">
                           <div className="flex-1 text-center min-w-0">
-                            <div className="text-sm md:text-base font-bold text-primary mb-0.5 truncate px-1">{p1.name}</div>
-                            {match.player1PartnerId && (
-                              <div className="text-[10px] text-slate-400 font-medium mb-1 truncate px-1">
-                                / {activeTournament.players.find(p => p.id === match.player1PartnerId)?.name}
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                {p1.name}
                               </div>
-                            )}
+                              {match.player1PartnerId && (
+                                <div className="text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                  {activeTournament.players.find(p => p.id === match.player1PartnerId)?.name}
+                                </div>
+                              )}
+                            </div>
                             <div className={cn(
-                              "text-3xl md:text-4xl font-display font-black transition-colors",
+                              "mt-2 text-3xl md:text-4xl font-display font-black transition-colors",
                               p1Games > p2Games ? "text-accent" : "text-slate-300"
                             )}>
                               {p1Games}
                             </div>
                           </div>
-                          <div className="text-slate-200 font-display font-black text-lg italic shrink-0">VS</div>
+                          <div className="text-primary/60 font-display font-black text-xl italic shrink-0 px-2">VS</div>
                           <div className="flex-1 text-center min-w-0">
-                            <div className="text-sm md:text-base font-bold text-primary mb-0.5 truncate px-1">{p2.name}</div>
-                            {match.player2PartnerId && (
-                              <div className="text-[10px] text-slate-400 font-medium mb-1 truncate px-1">
-                                / {activeTournament.players.find(p => p.id === match.player2PartnerId)?.name}
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                {p2.name}
                               </div>
-                            )}
+                              {match.player2PartnerId && (
+                                <div className="text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                  {activeTournament.players.find(p => p.id === match.player2PartnerId)?.name}
+                                </div>
+                              )}
+                            </div>
                             <div className={cn(
-                              "text-3xl md:text-4xl font-display font-black transition-colors",
+                              "mt-2 text-3xl md:text-4xl font-display font-black transition-colors",
                               p2Games > p1Games ? "text-accent" : "text-slate-300"
                             )}>
                               {p2Games}
@@ -1244,20 +1296,34 @@ export default function PingProApp() {
                   })}
               </div>
 
-              {/* Bottom Next Round Button */}
-              {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) && (
+              {/* Bottom Navigation */}
+              {(activeTournament.currentRound > 1 || activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted)) && (
                 <motion.div 
                   initial={{ y: 10, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="pt-2 pb-4 flex justify-center"
+                  className="pt-4 pb-10 flex flex-col sm:flex-row justify-center gap-4 px-4"
                 >
-                  <button 
-                    onClick={nextRound} 
-                    className="btn-primary py-2.5 px-8 flex items-center justify-center gap-2 text-xs shadow-lg"
-                  >
-                    <span>{activeTournament.currentRound === activeTournament.totalRounds ? 'FINALIZAR' : 'PRÓXIMA RODADA'}</span>
-                    <ChevronRight size={16} />
-                  </button>
+                  {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) && (
+                    <button 
+                      onClick={nextRound} 
+                      className="flex-1 sm:flex-none btn-primary py-4 px-10 flex items-center justify-center gap-3 text-sm shadow-xl"
+                    >
+                      <span className="font-black tracking-widest">
+                        {activeTournament.currentRound === activeTournament.totalRounds ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
+                      </span>
+                      <ChevronRight size={20} className="animate-pulse" />
+                    </button>
+                  )}
+
+                  {activeTournament.currentRound > 1 && (
+                    <button 
+                      onClick={prevRound} 
+                      className="flex-1 sm:flex-none btn-outline py-4 px-8 flex items-center justify-center gap-3 text-sm shadow-sm border-slate-300 bg-white group"
+                    >
+                      <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                      <span className="font-black tracking-widest">VOLTAR RODADA</span>
+                    </button>
+                  )}
                 </motion.div>
               )}
             </motion.div>

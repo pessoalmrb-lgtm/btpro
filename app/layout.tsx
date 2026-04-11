@@ -13,14 +13,14 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: 'BeachPró',
-  description: 'Gestão profissional de torneios de Beach Tennis',
+  title: 'BeachPró | Gestão de Torneios',
+  description: 'Aplicativo profissional para gerenciamento de torneios de Beach Tennis.',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body className="antialiased" suppressHydrationWarning>
+    <html lang="pt-BR" className={`${inter.variable} ${spaceGrotesk.variable}`} suppressHydrationWarning>
+      <body className="antialiased">
         {children}
       </body>
     </html>
