@@ -97,10 +97,52 @@ export default function PingProApp() {
   const [tournamentFormat, setTournamentFormat] = useState<TournamentFormat>('SUPER_8_INDIVIDUAL');
   const [rankingCriteria, setRankingCriteria] = useState<RankingCriterion[]>(['WINS', 'GAME_BALANCE', 'HEAD_TO_HEAD']);
   const [error, setError] = useState<string | null>(null);
+  const [showMatchHistory, setShowMatchHistory] = useState(false);
   const [, setIsDrawing] = useState(false);
   const [drawnTeams, setDrawnTeams] = useState<{p1: Player, p2: Player}[]>([]);
   const [courtWarning, setCourtWarning] = useState<{ court: number; tournamentName: string } | null>(null);
   const [showLimitPopup, setShowLimitPopup] = useState(false);
+
+  // --- History Management ---
+  React.useEffect(() => {
+    // Set initial state if not present
+    if (!window.history.state) {
+      window.history.replaceState({ step: 'HOME', activeTournamentId: null }, '');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        if (event.state.step) setStep(event.state.step);
+        // We use undefined check because null is a valid value for activeTournamentId
+        if ('activeTournamentId' in event.state) {
+          setActiveTournamentId(event.state.activeTournamentId);
+        }
+        if ('showMatchHistory' in event.state) {
+          setShowMatchHistory(event.state.showMatchHistory);
+        }
+      } else {
+        setStep('HOME');
+        setActiveTournamentId(null);
+        setShowMatchHistory(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync step, activeTournamentId and showMatchHistory with history
+  React.useEffect(() => {
+    const currentState = window.history.state;
+    const hasChanged = 
+      currentState?.step !== step || 
+      currentState?.activeTournamentId !== activeTournamentId ||
+      currentState?.showMatchHistory !== showMatchHistory;
+    
+    if (hasChanged) {
+      window.history.pushState({ step, activeTournamentId, showMatchHistory }, '');
+    }
+  }, [step, activeTournamentId, showMatchHistory]);
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId);
 
@@ -1297,36 +1339,36 @@ export default function PingProApp() {
                   })}
               </div>
 
-              {/* Bottom Navigation */}
-              {(activeTournament.currentRound > 1 || activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted)) && (
-                <motion.div 
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="pt-4 pb-10 flex flex-col sm:flex-row justify-center gap-4 px-4"
-                >
-                  {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) && (
-                    <button 
-                      onClick={nextRound} 
-                      className="flex-1 sm:flex-none btn-primary py-4 px-10 flex items-center justify-center gap-3 text-sm shadow-xl"
-                    >
-                      <span className="font-black tracking-widest">
-                        {activeTournament.currentRound === activeTournament.totalRounds ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
-                      </span>
-                      <ChevronRight size={20} className="animate-pulse" />
-                    </button>
-                  )}
+                {/* Bottom Navigation */}
+                {(activeTournament.currentRound > 1 || activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted)) && (
+                  <motion.div 
+                    initial={{ y: 10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="pt-4 flex flex-col sm:flex-row justify-center gap-4"
+                  >
+                    {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) && (
+                      <button 
+                        onClick={nextRound} 
+                        className="flex-1 sm:flex-none btn-primary py-4 px-10 flex items-center justify-center gap-3 text-sm shadow-xl"
+                      >
+                        <span className="font-black tracking-widest">
+                          {activeTournament.currentRound === activeTournament.totalRounds ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
+                        </span>
+                        <ChevronRight size={20} className="animate-pulse" />
+                      </button>
+                    )}
 
-                  {activeTournament.currentRound > 1 && (
-                    <button 
-                      onClick={prevRound} 
-                      className="flex-1 sm:flex-none btn-outline py-4 px-8 flex items-center justify-center gap-3 text-sm shadow-sm border-slate-300 bg-white group"
-                    >
-                      <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-                      <span className="font-black tracking-widest">VOLTAR RODADA</span>
-                    </button>
-                  )}
-                </motion.div>
-              )}
+                    {activeTournament.currentRound > 1 && (
+                      <button 
+                        onClick={prevRound} 
+                        className="flex-1 sm:flex-none btn-outline py-4 px-8 flex items-center justify-center gap-3 text-sm shadow-sm border-slate-300 bg-white group"
+                      >
+                        <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                        <span className="font-black tracking-widest">VOLTAR RODADA</span>
+                      </button>
+                    )}
+                  </motion.div>
+                )}
             </motion.div>
           )}
 
@@ -1409,6 +1451,67 @@ export default function PingProApp() {
                             </div>
                           </div>
                         ))}
+                      </div>
+
+                      <div className="w-full mb-8">
+                        <button 
+                          onClick={() => setShowMatchHistory(!showMatchHistory)}
+                          className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="bg-white p-2 rounded-xl shadow-sm">
+                              <BarChart size={18} className="text-primary" />
+                            </div>
+                            <span className="font-bold text-slate-600 text-sm">Ver Histórico de Partidas</span>
+                          </div>
+                          <ChevronRight size={18} className={cn("text-slate-400 transition-transform", showMatchHistory && "rotate-90")} />
+                        </button>
+
+                        <AnimatePresence>
+                          {showMatchHistory && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="pt-4 space-y-3">
+                                {activeTournament.matches.filter(m => m.isCompleted).map((m) => {
+                                  const p1 = activeTournament.players.find(p => p.id === m.player1Id)!;
+                                  const p2 = activeTournament.players.find(p => p.id === m.player2Id)!;
+                                  const p1p = m.player1PartnerId ? activeTournament.players.find(p => p.id === m.player1PartnerId) : null;
+                                  const p2p = m.player2PartnerId ? activeTournament.players.find(p => p.id === m.player2PartnerId) : null;
+                                  const p1Games = m.sets.reduce((acc, s) => acc + s.player1, 0);
+                                  const p2Games = m.sets.reduce((acc, s) => acc + s.player2, 0);
+
+                                  return (
+                                    <div key={m.id} className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm">
+                                      <div className="flex items-center justify-between text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3">
+                                        <span>Rodada {m.round}</span>
+                                        <span>Quadra {m.table}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-4">
+                                        <div className="flex-1 text-center">
+                                          <div className="text-[10px] font-black text-indigo-600 uppercase leading-tight">
+                                            {p1.name} {p1p && `/ ${p1p.name}`}
+                                          </div>
+                                          <div className="text-xl font-display font-black text-primary mt-1">{p1Games}</div>
+                                        </div>
+                                        <div className="text-[10px] font-black text-slate-300 italic">VS</div>
+                                        <div className="flex-1 text-center">
+                                          <div className="text-[10px] font-black text-orange-600 uppercase leading-tight">
+                                            {p2.name} {p2p && `/ ${p2p.name}`}
+                                          </div>
+                                          <div className="text-xl font-display font-black text-primary mt-1">{p2Games}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </>
                   );

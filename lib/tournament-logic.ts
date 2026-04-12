@@ -262,18 +262,44 @@ export function calculateRankings(players: Player[], matches: Match[], criteria:
         if (b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
       }
       if (criterion === 'HEAD_TO_HEAD') {
-        const directMatch = matches.find(m => 
+        const directMatches = matches.filter(m => 
           m.isCompleted && 
           ((m.player1Id === a.id && m.player2Id === b.id) || 
-           (m.player1Id === b.id && m.player2Id === a.id))
+           (m.player1Id === b.id && m.player2Id === a.id) ||
+           (m.player1Id === a.id && m.player2PartnerId === b.id) ||
+           (m.player1PartnerId === a.id && m.player2Id === b.id) ||
+           (m.player1PartnerId === a.id && m.player2PartnerId === b.id) ||
+           (m.player2Id === a.id && m.player1PartnerId === b.id) ||
+           (m.player2PartnerId === a.id && m.player1Id === b.id) ||
+           (m.player2PartnerId === a.id && m.player1PartnerId === b.id))
         );
 
-        if (directMatch) {
-          if (directMatch.winnerId === a.id) return -1;
-          if (directMatch.winnerId === b.id) return 1;
+        if (directMatches.length > 0) {
+          let aWins = 0;
+          let bWins = 0;
+          
+          directMatches.forEach(dm => {
+            const aInTeam1 = dm.player1Id === a.id || dm.player1PartnerId === a.id;
+            const bInTeam1 = dm.player1Id === b.id || dm.player1PartnerId === b.id;
+            const aInTeam2 = dm.player2Id === a.id || dm.player2PartnerId === a.id;
+            const bInTeam2 = dm.player2Id === b.id || dm.player2PartnerId === b.id;
+            
+            // Only count if they were on opposite teams
+            if ((aInTeam1 && bInTeam2) || (aInTeam2 && bInTeam1)) {
+              const team1Wins = dm.winnerId === dm.player1Id || dm.winnerId === 'TEAM1';
+              if (aInTeam1) {
+                if (team1Wins) aWins++; else bWins++;
+              } else {
+                if (team1Wins) bWins++; else aWins++;
+              }
+            }
+          });
+          
+          if (aWins !== bWins) return bWins - aWins;
         }
       }
     }
-    return 0;
+    // Final fallback for absolute ties: alphabetical order
+    return a.name.localeCompare(b.name);
   });
 }
