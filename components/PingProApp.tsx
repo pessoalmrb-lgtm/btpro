@@ -102,6 +102,7 @@ export default function PingProApp() {
   const [drawnTeams, setDrawnTeams] = useState<{p1: Player, p2: Player}[]>([]);
   const [courtWarning, setCourtWarning] = useState<{ court: number; tournamentName: string } | null>(null);
   const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
 
   // --- History Management ---
   React.useEffect(() => {
@@ -384,6 +385,8 @@ export default function PingProApp() {
         if (newValue > 5) return m;
       } else if (activeTournament.matchFormat === 'SUM_9_GAMES') {
         if (sum > 9) return m;
+      } else if (activeTournament.matchFormat === 'SUM_7_GAMES') {
+        if (sum > 7) return m;
       } else if (activeTournament.matchFormat === 'SUM_5_GAMES') {
         if (sum > 5) return m;
       }
@@ -553,11 +556,12 @@ export default function PingProApp() {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteTournament(t.id);
+                                setTournamentToDelete(t.id);
                               }}
-                              className="p-2 text-slate-300 hover:text-error transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-500 rounded-lg font-bold text-[10px] hover:bg-red-100 transition-all uppercase tracking-widest border border-red-100"
                             >
-                              <AlertCircle size={20} />
+                              <AlertCircle size={14} />
+                              EXCLUIR TORNEIO
                             </button>
                           </div>
 
@@ -631,6 +635,45 @@ export default function PingProApp() {
                       >
                         ENTENDI
                       </button>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* Delete Confirmation Popup */}
+              <AnimatePresence>
+                {tournamentToDelete && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100"
+                    >
+                      <div className="bg-red-50 w-16 h-16 rounded-2xl flex items-center justify-center text-red-500 mb-6 mx-auto">
+                        <AlertCircle size={32} />
+                      </div>
+                      <h3 className="text-xl font-bold text-primary text-center mb-2">Excluir Torneio?</h3>
+                      <p className="text-slate-500 text-center mb-8 text-sm leading-relaxed">
+                        Tem certeza que deseja excluir este torneio? <span className="font-bold text-red-500">Esta ação é irreversível e todos os dados serão apagados permanentemente.</span>
+                      </p>
+                      <div className="flex flex-col gap-3">
+                        <button 
+                          onClick={() => {
+                            deleteTournament(tournamentToDelete);
+                            setTournamentToDelete(null);
+                          }}
+                          className="btn-primary bg-red-500 hover:bg-red-600 border-red-600 py-4 w-full"
+                        >
+                          SIM, EXCLUIR TUDO
+                        </button>
+                        <button 
+                          onClick={() => setTournamentToDelete(null)}
+                          className="btn-outline py-4 w-full"
+                        >
+                          CANCELAR
+                        </button>
+                      </div>
                     </motion.div>
                   </div>
                 )}
@@ -1233,39 +1276,39 @@ export default function PingProApp() {
                         </div>
 
                         {/* Match Players Display */}
-                        <div className="flex items-center justify-between gap-2 mb-6">
+                        <div className="flex items-center justify-between gap-1 md:gap-2 mb-6">
                           <div className="flex-1 text-center min-w-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                            <div className="flex flex-col items-center gap-0.5 md:gap-1">
+                              <div className="text-[11px] sm:text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
                                 {p1.name}
                               </div>
                               {match.player1PartnerId && (
-                                <div className="text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                <div className="text-[11px] sm:text-sm md:text-base font-black text-indigo-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
                                   {activeTournament.players.find(p => p.id === match.player1PartnerId)?.name}
                                 </div>
                               )}
                             </div>
                             <div className={cn(
-                              "mt-2 text-3xl md:text-4xl font-display font-black transition-colors",
+                              "mt-2 text-4xl sm:text-5xl md:text-6xl font-display font-black transition-colors leading-none",
                               p1Games > p2Games ? "text-accent" : "text-slate-300"
                             )}>
                               {p1Games}
                             </div>
                           </div>
-                          <div className="text-primary/60 font-display font-black text-xl italic shrink-0 px-2">VS</div>
+                          <div className="text-primary/40 font-display font-black text-lg sm:text-xl italic shrink-0 px-1 sm:px-2">VS</div>
                           <div className="flex-1 text-center min-w-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                            <div className="flex flex-col items-center gap-0.5 md:gap-1">
+                              <div className="text-[11px] sm:text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
                                 {p2.name}
                               </div>
                               {match.player2PartnerId && (
-                                <div className="text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
+                                <div className="text-[11px] sm:text-sm md:text-base font-black text-orange-600 uppercase tracking-tight leading-tight px-1 break-words w-full">
                                   {activeTournament.players.find(p => p.id === match.player2PartnerId)?.name}
                                 </div>
                               )}
                             </div>
                             <div className={cn(
-                              "mt-2 text-3xl md:text-4xl font-display font-black transition-colors",
+                              "mt-2 text-4xl sm:text-5xl md:text-6xl font-display font-black transition-colors leading-none",
                               p2Games > p1Games ? "text-accent" : "text-slate-300"
                             )}>
                               {p2Games}
@@ -1283,42 +1326,42 @@ export default function PingProApp() {
                             <div className="flex items-center justify-between gap-1 md:gap-4">
                               {/* Player 1 Points */}
                               <div className="flex-1 flex flex-col items-center gap-2">
-                                <div className="flex items-center gap-1.5 md:gap-2">
+                                <div className="flex items-center gap-1 md:gap-2">
                                   <button 
                                     onClick={() => updateMatchScore(match.id, 1, -1)}
-                                    className="w-7 h-7 md:w-9 md:h-9 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-slate-400"
+                                    className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-slate-400"
                                   >
                                     <Minus size={14} />
                                   </button>
-                                  <span className="text-xl md:text-3xl font-display font-black text-primary w-6 md:w-10 text-center">
+                                  <span className="text-2xl sm:text-3xl md:text-4xl font-display font-black text-primary w-8 sm:w-10 md:w-12 text-center">
                                     {match.currentSet.player1}
                                   </span>
                                   <button 
                                     onClick={() => updateMatchScore(match.id, 1, 1)}
-                                    className="w-7 h-7 md:w-9 md:h-9 flex items-center justify-center bg-primary text-white rounded-lg shadow-md hover:bg-primary/90"
+                                    className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center bg-primary text-white rounded-lg shadow-md hover:bg-primary/90"
                                   >
                                     <Plus size={14} />
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="h-6 w-px bg-slate-200" />
+                              <div className="h-8 w-px bg-slate-200" />
 
                               {/* Player 2 Points */}
                               <div className="flex-1 flex flex-col items-center gap-2">
-                                <div className="flex items-center gap-1.5 md:gap-2">
+                                <div className="flex items-center gap-1 md:gap-2">
                                   <button 
                                     onClick={() => updateMatchScore(match.id, 2, -1)}
-                                    className="w-7 h-7 md:w-9 md:h-9 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-slate-400"
+                                    className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center bg-white rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 text-slate-400"
                                   >
                                     <Minus size={14} />
                                   </button>
-                                  <span className="text-xl md:text-3xl font-display font-black text-primary w-6 md:w-10 text-center">
+                                  <span className="text-2xl sm:text-3xl md:text-4xl font-display font-black text-primary w-8 sm:w-10 md:w-12 text-center">
                                     {match.currentSet.player2}
                                   </span>
                                   <button 
                                     onClick={() => updateMatchScore(match.id, 2, 1)}
-                                    className="w-7 h-7 md:w-9 md:h-9 flex items-center justify-center bg-primary text-white rounded-lg shadow-md hover:bg-primary/90"
+                                    className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center bg-primary text-white rounded-lg shadow-md hover:bg-primary/90"
                                   >
                                     <Plus size={14} />
                                   </button>
