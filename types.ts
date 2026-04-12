@@ -33,6 +33,9 @@ export type TournamentFormat =
   | 'SUPER_8_FIXED' 
   | 'SUPER_10_FIXED' 
   | 'SUPER_12_FIXED' 
+  | 'SUPER_3_FIXED'
+  | 'SUPER_5_FIXED'
+  | 'SUPER_12_INDIVIDUAL'
   | 'GROUPS_MATA_MATA';
 
 export type MatchFormat = 
