@@ -1190,6 +1190,7 @@ export default function PingProApp() {
                           )}
                         </div>
 
+                        {/* Match Players Display */}
                         <div className="flex items-center justify-between gap-2 mb-6">
                           <div className="flex-1 text-center min-w-0">
                             <div className="flex flex-col items-center gap-1">
