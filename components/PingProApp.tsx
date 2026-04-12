@@ -18,9 +18,9 @@ import {
   BarChart
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion } from '@/types';
-import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles } from '@/lib/tournament-logic';
-import { cn } from '@/lib/utils';
+import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion } from '../types';
+import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles } from '../lib/tournament-logic';
+import { cn } from '../lib/utils';
 
 const Header = ({ step, resetApp }: { step: AppStep, resetApp: () => void }) => (
   <div className="flex items-center justify-between mb-6 md:mb-8 w-full max-w-6xl">

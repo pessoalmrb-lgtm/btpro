@@ -1,4 +1,4 @@
-import PingProApp from '@/components/PingProApp';
+import PingProApp from '../components/PingProApp';
 
 export default function Home() {
   return <PingProApp />;

@@ -2,8 +2,6 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
-  distDir: '.next',
   eslint: {
     ignoreDuringBuilds: true,
   },
