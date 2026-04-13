@@ -57,31 +57,44 @@ export function generateRoundRobin(teams: Player[], selectedCourts: number[]): M
 /**
  * Generates matches for a group stage.
  */
-export function generateGroupStage(teams: Player[], selectedCourts: number[], groupsCount: number): Match[] {
+export function generateGroupStage(teams: Player[], selectedCourts: number[], teamsPerGroup: number): { matches: Match[], groups: { id: string, teams: Player[] }[] } {
   const shuffled = [...teams].sort(() => Math.random() - 0.5);
-  const groups: Player[][] = Array.from({ length: groupsCount }, () => []);
+  const groupsCount = Math.ceil(teams.length / teamsPerGroup);
+  const groups: { id: string, teams: Player[] }[] = Array.from({ length: groupsCount }, (_, i) => ({
+    id: String.fromCharCode(65 + i),
+    teams: []
+  }));
   
   shuffled.forEach((team, i) => {
-    groups[i % groupsCount].push(team);
+    groups[i % groupsCount].teams.push(team);
   });
 
   let allMatches: Match[] = [];
   let maxRound = 0;
 
-  groups.forEach((groupTeams, groupIdx) => {
-    const groupMatches = generateRoundRobin(groupTeams, selectedCourts);
-    const groupId = String.fromCharCode(65 + groupIdx); // A, B, C...
+  groups.forEach((group) => {
+    const groupMatches = generateRoundRobin(group.teams, selectedCourts);
     
     groupMatches.forEach(m => {
-      m.groupId = groupId;
-      m.id = `group-${groupId}-${m.id}`;
+      m.groupId = group.id;
+      m.id = `group-${group.id}-${m.id}`;
       if (m.round > maxRound) maxRound = m.round;
     });
     
     allMatches = [...allMatches, ...groupMatches];
   });
 
-  return allMatches;
+  return { matches: allMatches, groups };
+}
+
+/**
+ * Generates playoff matches based on selected rounds.
+ */
+export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: number[], selectedRounds: string[]): Match[] {
+  // This is a placeholder for playoff generation logic.
+  // In a real app, this would be more complex, handling seeds and bracket positions.
+  // For now, we'll just return an empty array or basic structure if needed.
+  return [];
 }
 
 /**

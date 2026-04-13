@@ -160,6 +160,8 @@ export default function PingProApp() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Creation Flow State
   const [tournamentName, setTournamentName] = useState('');
@@ -170,6 +172,9 @@ export default function PingProApp() {
   const [registrationType, setRegistrationType] = useState<TeamRegistrationType>('RANDOM_DRAW');
   const [tournamentFormat, setTournamentFormat] = useState<TournamentFormat>('SUPER_8_INDIVIDUAL');
   const [rankingCriteria, setRankingCriteria] = useState<RankingCriterion[]>(['WINS', 'GAME_BALANCE', 'HEAD_TO_HEAD']);
+  const [teamsPerGroup, setTeamsPerGroup] = useState(4);
+  const [playoffRounds, setPlayoffRounds] = useState<PlayoffRound[]>(['FINAL']);
+  const [drawnGroups, setDrawnGroups] = useState<{ id: string, teams: Player[] }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showMatchHistory, setShowMatchHistory] = useState(false);
   const [, setIsDrawing] = useState(false);
@@ -333,7 +338,11 @@ export default function PingProApp() {
 
   const handleFormatConfirm = (format: TournamentFormat) => {
     setTournamentFormat(format);
-    setStep('MATCH_FORMAT');
+    if (format === 'GROUPS_MATA_MATA') {
+      setStep('GROUP_CONFIG');
+    } else {
+      setStep('MATCH_FORMAT');
+    }
   };
 
   const handlePlayerCountConfirm = () => {
@@ -389,6 +398,32 @@ export default function PingProApp() {
 
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     
+    if (tournamentFormat === 'GROUPS_MATA_MATA') {
+      setStep('DRAWING');
+      setIsDrawing(true);
+      
+      setTimeout(() => {
+        setIsDrawing(false);
+        let teamsToGroup: Player[] = [];
+        if (registrationType === 'RANDOM_DRAW') {
+          const shuffled = [...players].sort(() => Math.random() - 0.5);
+          for (let i = 0; i < shuffled.length; i += 2) {
+            teamsToGroup.push({
+              id: `team-${shuffled[i].id}-${shuffled[i+1].id}`,
+              name: `${shuffled[i].name} / ${shuffled[i+1].name}`
+            });
+          }
+        } else {
+          teamsToGroup = players;
+        }
+
+        const { groups } = generateGroupStage(teamsToGroup, selectedCourts, teamsPerGroup);
+        setDrawnGroups(groups);
+        setStep('GROUPS_DISPLAY');
+      }, 2000);
+      return;
+    }
+
     if (isIndividual) {
       setStep('DRAWING');
       setIsDrawing(true);
@@ -917,23 +952,33 @@ export default function PingProApp() {
                             </div>
                           </div>
 
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <button 
                               onClick={() => {
                                 setActiveTournamentId(t.id);
                                 setStep('FINISHED'); // Show classification
                               }}
-                              className="flex-1 py-4 bg-slate-50 rounded-xl font-bold text-xs md:text-sm text-primary hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+                              className="flex-1 min-w-[100px] py-3 bg-slate-50 rounded-xl font-bold text-[10px] md:text-xs text-primary hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
                             >
-                              <BarChart size={16} />
+                              <BarChart size={14} />
                               RANKING
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setActiveTournamentId(t.id);
+                                setStep('ALL_ROUNDS');
+                              }}
+                              className="flex-1 min-w-[100px] py-3 bg-slate-50 rounded-xl font-bold text-[10px] md:text-xs text-primary hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+                            >
+                              <RefreshCw size={14} />
+                              RODADAS
                             </button>
                             <button 
                               onClick={() => {
                                 setActiveTournamentId(t.id);
                                 setStep(t.isFinished ? 'FINISHED' : 'TOURNAMENT');
                               }}
-                              className="flex-[2] py-4 bg-primary text-accent rounded-xl font-bold text-xs md:text-sm hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+                              className="w-full py-3 bg-primary text-accent rounded-xl font-bold text-xs md:text-sm hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
                             >
                               GERENCIAR
                               <ChevronRight size={16} />
@@ -1120,17 +1165,24 @@ export default function PingProApp() {
                   { id: 'SUPER_8_FIXED', title: 'SUPER 8 DUPLAS FIXAS', desc: '8 duplas fixas (16 atletas) em disputa intensa.', icon: Users, req: 16 },
                   { id: 'SUPER_10_FIXED', title: 'SUPER 10 DUPLAS FIXAS', desc: '10 duplas fixas (20 atletas) em formato de liga.', icon: Users, req: 20 },
                   { id: 'SUPER_12_FIXED', title: 'SUPER 12 DUPLAS FIXAS', desc: '12 duplas fixas (24 atletas). O desafio máximo de resistência.', icon: Users, req: 24 },
-                  { id: 'GROUPS_MATA_MATA', title: 'GRUPOS + MATA-MATA', desc: 'Torneio clássico: fase de grupos seguida de eliminatórias.', icon: LayoutGrid, req: 4 },
+                  { id: 'GROUPS_MATA_MATA', title: 'GRUPOS + MATA-MATA', desc: 'Torneio clássico: fase de grupos seguida de eliminatórias.', icon: LayoutGrid, req: 4, isPro: true },
                 ].filter(f => {
                   if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 4;
                   return playerCount === f.req;
                 }).map((f) => (
                   <div 
                     key={f.id}
-                    onClick={() => handleFormatConfirm(f.id as TournamentFormat)}
+                    onClick={() => {
+                      if (f.isPro && !isPremium) {
+                        setShowUpgradeModal(true);
+                        return;
+                      }
+                      handleFormatConfirm(f.id as TournamentFormat);
+                    }}
                     className={cn(
                       "p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between group",
-                      tournamentFormat === f.id ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200"
+                      tournamentFormat === f.id ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200",
+                      f.isPro && !isPremium && "opacity-80 grayscale-[0.5]"
                     )}
                   >
                     <div className="flex items-center gap-4">
@@ -1141,11 +1193,15 @@ export default function PingProApp() {
                         <f.icon size={20} />
                       </div>
                       <div>
-                        <h3 className="font-bold text-primary">{f.title}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-primary">{f.title}</h3>
+                          {f.isPro && <span className="text-[8px] font-black bg-accent text-primary px-1.5 py-0.5 rounded uppercase tracking-widest">PRO</span>}
+                        </div>
                         <p className="text-slate-500 text-xs">{f.desc}</p>
                       </div>
                     </div>
                     {tournamentFormat === f.id && <CheckCircle2 className="text-primary" size={20} />}
+                    {f.isPro && !isPremium && <Lock size={16} className="text-slate-300" />}
                   </div>
                 ))}
 
@@ -1159,6 +1215,121 @@ export default function PingProApp() {
                   <button onClick={() => setStep('PLAYER_COUNT')} className="btn-outline w-full py-4">
                     VOLTAR
                   </button>
+                </div>
+              </div>
+            </StepContainer>
+          )}
+
+          {step === 'GROUP_CONFIG' && (
+            <StepContainer 
+              key="group-config"
+              title="Configuração de Grupos"
+              subtitle="Quantas duplas por grupo?"
+              currentStep={3}
+            >
+              <div className="space-y-6">
+                <div className="flex flex-col items-center gap-6">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setTeamsPerGroup(Math.max(4, teamsPerGroup - 1))}
+                      className="w-12 h-12 flex items-center justify-center bg-slate-100 rounded-2xl hover:bg-slate-200 transition-all text-slate-600"
+                    >
+                      <Minus size={24} />
+                    </button>
+                    <div className="text-center">
+                      <div className="text-5xl font-display font-black text-primary">{teamsPerGroup}</div>
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Duplas por Grupo</div>
+                    </div>
+                    <button 
+                      onClick={() => setTeamsPerGroup(teamsPerGroup + 1)}
+                      className="w-12 h-12 flex items-center justify-center bg-slate-100 rounded-2xl hover:bg-slate-200 transition-all text-slate-600"
+                    >
+                      <Plus size={24} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 text-center">
+                    Com {playerCount} atletas ({playerCount/2} duplas), teremos {Math.ceil((playerCount/2)/teamsPerGroup)} grupos.
+                  </p>
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button onClick={() => setStep('FORMAT_SELECTION')} className="btn-outline flex-1 py-4">VOLTAR</button>
+                  <button onClick={() => setStep('PLAYOFF_CONFIG')} className="btn-primary flex-1 py-4">AVANÇAR</button>
+                </div>
+              </div>
+            </StepContainer>
+          )}
+
+          {step === 'PLAYOFF_CONFIG' && (
+            <StepContainer 
+              key="playoff-config"
+              title="Fase Eliminatória"
+              subtitle="Quais fases o torneio terá?"
+              currentStep={3}
+            >
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Ordem Selecionada</p>
+                  <div className="flex flex-wrap gap-2">
+                    {playoffRounds.map((r, idx) => (
+                      <div key={r} className="bg-primary text-accent px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2">
+                        <span>{idx + 1}º {r === 'ROUND_OF_16' ? 'Oitavas' : r === 'QUARTER_FINALS' ? 'Quartas' : r === 'SEMI_FINALS' ? 'Semi' : 'Final'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { id: 'ROUND_OF_16', title: 'Oitavas de Final', minTeams: 16 },
+                    { id: 'QUARTER_FINALS', title: 'Quartas de Final', minTeams: 8 },
+                    { id: 'SEMI_FINALS', title: 'Semifinal', minTeams: 4 },
+                    { id: 'FINAL', title: 'Final', minTeams: 2 },
+                  ].map((round) => {
+                    const isPossible = (playerCount / 2) >= round.minTeams;
+                    const isSelected = playoffRounds.includes(round.id as PlayoffRound);
+                    
+                    return (
+                      <button 
+                        key={round.id}
+                        disabled={!isPossible}
+                        onClick={() => {
+                          if (isSelected) {
+                            setPlayoffRounds(playoffRounds.filter(r => r !== round.id));
+                          } else {
+                            setPlayoffRounds([...playoffRounds, round.id as PlayoffRound]);
+                          }
+                        }}
+                        className={cn(
+                          "p-4 rounded-2xl border-2 transition-all flex items-center justify-between group text-left",
+                          !isPossible ? "opacity-30 cursor-not-allowed bg-slate-50 border-transparent" :
+                          isSelected ? "border-primary bg-primary/5 cursor-pointer" : "border-slate-100 hover:border-slate-200 cursor-pointer"
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "p-2.5 rounded-xl",
+                            isSelected ? "bg-primary text-accent" : "bg-slate-50 text-slate-400"
+                          )}>
+                            <LayoutGrid size={20} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-primary">{round.title}</h3>
+                            {!isPossible && <p className="text-error text-[10px] font-bold uppercase">Atletas insuficientes</p>}
+                          </div>
+                        </div>
+                        <div className={cn(
+                          "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                          isSelected ? "bg-primary border-primary text-accent" : "border-slate-200"
+                        )}>
+                          {isSelected && <span className="text-[10px] font-black">{playoffRounds.indexOf(round.id as PlayoffRound) + 1}</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button onClick={() => setStep('GROUP_CONFIG')} className="btn-outline flex-1 py-4">VOLTAR</button>
+                  <button onClick={() => setStep('MATCH_FORMAT')} className="btn-primary flex-1 py-4">AVANÇAR</button>
                 </div>
               </div>
             </StepContainer>
@@ -1329,6 +1500,72 @@ export default function PingProApp() {
                     </motion.div>
                   ))}
                   <p className="text-center text-slate-400 text-sm animate-bounce pt-4">Finalizando sorteio...</p>
+                </div>
+              </div>
+            </StepContainer>
+          )}
+
+          {step === 'GROUPS_DISPLAY' && (
+            <StepContainer 
+              key="groups-display"
+              title="Grupos Sorteados"
+              subtitle="Confira a composição dos grupos."
+            >
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {drawnGroups.map((group) => (
+                    <div key={group.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <h3 className="text-lg font-display font-black text-primary mb-3 flex items-center gap-2">
+                        <Users size={18} className="text-accent" />
+                        Grupo {group.id}
+                      </h3>
+                      <div className="space-y-2">
+                        {group.teams.map((team, idx) => (
+                          <div key={team.id} className="bg-white p-2 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 flex items-center gap-2">
+                            <span className="text-slate-300">{idx + 1}º</span>
+                            {team.name}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button onClick={() => setStep('ATHLETE_REGISTRATION')} className="btn-outline flex-1 py-4">REFAZER SORTEIO</button>
+                  <button onClick={async () => {
+                    // Finalize tournament creation for Mata-Mata
+                    if (!user) return;
+                    
+                    const { matches } = generateGroupStage(drawnGroups.flatMap(g => g.teams), selectedCourts, teamsPerGroup);
+                    const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
+                    
+                    const tournamentId = `t-${Date.now()}`;
+                    const newTournament: TournamentState = {
+                      id: tournamentId,
+                      name: tournamentName,
+                      players: drawnGroups.flatMap(g => g.teams),
+                      matches,
+                      currentRound: 1,
+                      totalRounds,
+                      tables: selectedCourts,
+                      format: tournamentFormat,
+                      matchFormat,
+                      registrationType,
+                      rankingCriteria,
+                      teamsPerGroup,
+                      playoffRounds,
+                      isFinished: false,
+                      createdAt: Date.now()
+                    };
+                    
+                    try {
+                      await setDoc(doc(db, 'tournaments', tournamentId), { ...newTournament, uid: user.uid });
+                      setActiveTournamentId(tournamentId);
+                      setStep('TOURNAMENT');
+                    } catch (err) {
+                      handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+                    }
+                  }} className="btn-primary flex-1 py-4">AVANÇAR</button>
                 </div>
               </div>
             </StepContainer>
@@ -1751,6 +1988,83 @@ export default function PingProApp() {
             </motion.div>
           )}
 
+          {step === 'ALL_ROUNDS' && activeTournament && (
+            <StepContainer 
+              key="all-rounds"
+              title="Todas as Rodadas"
+              subtitle={activeTournament.name}
+            >
+              <div className="space-y-8">
+                <div className="flex justify-between items-center">
+                  <button 
+                    onClick={() => setStep('HOME')}
+                    className="text-xs font-bold text-primary flex items-center gap-1 hover:underline"
+                  >
+                    <ChevronLeft size={14} /> VOLTAR AO INÍCIO
+                  </button>
+                </div>
+
+                <div className="space-y-10">
+                  {Array.from({ length: activeTournament.totalRounds }, (_, i) => i + 1).map((roundNum) => (
+                    <div key={roundNum} className="space-y-4">
+                      <h3 className="text-lg font-display font-black text-primary flex items-center gap-3">
+                        <span className="bg-primary text-accent w-8 h-8 rounded-lg flex items-center justify-center text-sm">{roundNum}</span>
+                        Rodada {roundNum}
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 gap-3">
+                        {activeTournament.matches
+                          .filter(m => m.round === roundNum)
+                          .map((m) => {
+                            const p1 = activeTournament.players.find(p => p.id === m.player1Id)!;
+                            const p2 = activeTournament.players.find(p => p.id === m.player2Id)!;
+                            const p1p = m.player1PartnerId ? activeTournament.players.find(p => p.id === m.player1PartnerId) : null;
+                            const p2p = m.player2PartnerId ? activeTournament.players.find(p => p.id === m.player2PartnerId) : null;
+                            const p1Games = m.isCompleted ? m.sets[0].player1 : m.currentSet.player1;
+                            const p2Games = m.isCompleted ? m.sets[0].player2 : m.currentSet.player2;
+
+                            return (
+                              <div key={m.id} className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-between gap-4">
+                                <div className="flex-1 text-right">
+                                  <div className="text-[10px] font-black text-indigo-600 uppercase leading-tight">
+                                    {p1.name} {p1p && `/ ${p1p.name}`}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                                  <span className={cn(
+                                    "text-xl font-display font-black",
+                                    m.isCompleted && p1Games < p2Games ? "text-slate-300" : "text-primary"
+                                  )}>{p1Games}</span>
+                                  <span className="text-slate-300 font-black italic text-xs">X</span>
+                                  <span className={cn(
+                                    "text-xl font-display font-black",
+                                    m.isCompleted && p2Games < p1Games ? "text-slate-300" : "text-primary"
+                                  )}>{p2Games}</span>
+                                </div>
+
+                                <div className="flex-1 text-left">
+                                  <div className="text-[10px] font-black text-orange-600 uppercase leading-tight">
+                                    {p2.name} {p2p && `/ ${p2p.name}`}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-6">
+                  <button onClick={() => setStep('HOME')} className="btn-primary w-full py-4">
+                    VOLTAR AO INÍCIO
+                  </button>
+                </div>
+              </div>
+            </StepContainer>
+          )}
+
           {step === 'FINISHED' && activeTournament && (
             <StepContainer 
               key="finished"
@@ -1956,6 +2270,72 @@ export default function PingProApp() {
                 </button>
               </div>
             </StepContainer>
+          )}
+        </AnimatePresence>
+
+        {/* Upgrade Modal */}
+        <AnimatePresence>
+          {showUpgradeModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-lg w-full shadow-2xl border border-slate-100 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-6">
+                  <button onClick={() => setShowUpgradeModal(false)} className="text-slate-300 hover:text-slate-500 transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div className="bg-accent/20 w-20 h-20 rounded-3xl flex items-center justify-center text-accent mb-8 mx-auto shadow-inner">
+                  <Zap size={40} />
+                </div>
+
+                <div className="text-center space-y-4 mb-10">
+                  <h3 className="text-3xl font-display font-black text-primary tracking-tight">
+                    Seja <span className="text-accent italic">BeachPró Premium</span>
+                  </h3>
+                  <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                    Libere todos os formatos de torneio, incluindo Grupos + Mata-Mata, e organize eventos profissionais sem limites.
+                  </p>
+                </div>
+
+                <div className="space-y-4 mb-10">
+                  {[
+                    'Torneios Mata-Mata Ilimitados',
+                    'Configuração de Grupos Personalizada',
+                    'Fases Eliminatórias (Oitavas a Final)',
+                    'Suporte Prioritário',
+                    'Sem Anúncios'
+                  ].map((feature, i) => (
+                    <div key={i} className="flex items-center gap-3 text-slate-600 font-bold text-sm">
+                      <div className="bg-accent/20 p-1 rounded-full text-accent">
+                        <CheckCircle2 size={16} />
+                      </div>
+                      {feature}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-4">
+                  <button 
+                    onClick={() => {
+                      // In a real app, this would trigger the Google Play Billing flow
+                      setShowUpgradeModal(false);
+                    }}
+                    className="w-full btn-primary py-5 text-lg shadow-xl flex items-center justify-center gap-3 group"
+                  >
+                    <span>ASSINAR AGORA</span>
+                    <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                  </button>
+                  <p className="text-[10px] text-slate-400 text-center font-bold uppercase tracking-widest">
+                    Apenas R$ 19,90 / mês
+                  </p>
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>

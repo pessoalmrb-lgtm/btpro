@@ -50,6 +50,8 @@ export type TeamRegistrationType = 'RANDOM_DRAW' | 'DEFINED_TEAMS';
 
 export type RankingCriterion = 'WINS' | 'GAME_BALANCE' | 'HEAD_TO_HEAD' | 'GAMES_WON';
 
+export type PlayoffRound = 'ROUND_OF_16' | 'QUARTER_FINALS' | 'SEMI_FINALS' | 'FINAL';
+
 export type TournamentState = {
   id: string;
   name: string;
@@ -62,6 +64,8 @@ export type TournamentState = {
   matchFormat: MatchFormat;
   registrationType: TeamRegistrationType;
   rankingCriteria: RankingCriterion[];
+  teamsPerGroup?: number;
+  playoffRounds?: PlayoffRound[];
   isFinished: boolean;
   createdAt: number;
 };
@@ -75,8 +79,12 @@ export type AppStep =
   | 'REGISTRATION_TYPE'
   | 'ATHLETE_REGISTRATION' 
   | 'DRAWING'
+  | 'GROUP_CONFIG'
+  | 'PLAYOFF_CONFIG'
+  | 'GROUPS_DISPLAY'
   | 'RANKING_CRITERIA'
   | 'TABLE_COUNT' 
   | 'TOURNAMENT' 
   | 'FINISHED'
+  | 'ALL_ROUNDS'
   | 'DASHBOARD';
