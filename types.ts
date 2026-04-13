@@ -36,7 +36,13 @@ export type TournamentFormat =
   | 'SUPER_3_FIXED'
   | 'SUPER_5_FIXED'
   | 'SUPER_12_INDIVIDUAL'
-  | 'GROUPS_MATA_MATA';
+  | 'GROUPS_MATA_MATA'
+  | 'INDIVIDUAL'
+  | 'GROUPS'
+  | 'SUPER_12'
+  | 'SUPER_16'
+  | 'SUPER_20'
+  | 'SUPER_24';
 
 export type MatchFormat = 
   | '6_GAMES_TIEBREAK' 

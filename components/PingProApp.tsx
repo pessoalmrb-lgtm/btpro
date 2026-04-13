@@ -17,10 +17,13 @@ import {
   Home,
   BarChart,
   LogOut,
-  LogIn
+  LogIn,
+  Lock,
+  Zap,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion } from '../types';
+import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
 import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, User, handleFirestoreError, OperationType } from '../firebase';
