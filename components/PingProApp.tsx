@@ -303,8 +303,10 @@ export default function PingProApp() {
         setAuthError("O popup de login foi bloqueado pelo seu navegador.");
       } else if (err.code === 'auth/cancelled-popup-request') {
         // User closed the popup, ignore
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setAuthError("Este domínio não está autorizado no Firebase Console. Adicione este domínio às 'Authorized Domains' nas configurações de Autenticação do Firebase.");
       } else {
-        setAuthError("Erro ao tentar entrar com o Google.");
+        setAuthError("Erro ao tentar entrar com o Google. Verifique se os popups estão permitidos.");
       }
     } finally {
       setIsAuthLoading(false);
@@ -1797,52 +1799,76 @@ export default function PingProApp() {
                       )}
                       
                       {activeTournament.isFinished && (
-                        <h3 className="text-4xl font-display font-black text-primary mb-10 text-center">{champion.name}</h3>
+                        <h3 className="text-3xl md:text-4xl font-display font-black text-primary mb-10 text-center">{champion.name}</h3>
                       )}
+                      
+                      {/* Ranking Table Header */}
+                      <div className="w-full grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 bg-slate-100 rounded-t-2xl text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-x border-t border-slate-200">
+                        <span className="text-center">Pos</span>
+                        <span>Atleta / Dupla</span>
+                        <span className="text-center">Vit</span>
+                        <span className="text-center">Sal</span>
+                        <span className="text-center">Pró</span>
+                        <span className="text-center hidden md:block">Con</span>
+                      </div>
 
-                      <div className="w-full space-y-3 mb-10">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Ranking Geral</h4>
+                      <div className="w-full border-x border-b border-slate-200 rounded-b-2xl overflow-hidden mb-8 bg-white shadow-sm">
                         {rankings.map((p, idx) => (
                           <div 
                             key={p.id} 
                             className={cn(
-                              "flex items-center justify-between p-5 rounded-2xl border transition-all",
-                              idx === 0 && activeTournament.isFinished ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"
+                              "grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-4 items-center border-t border-slate-100 transition-colors",
+                              idx === 0 && activeTournament.isFinished ? "bg-amber-50/50" : "hover:bg-slate-50"
                             )}
                           >
-                            <div className="flex items-center gap-4">
+                            <div className="flex justify-center">
                               <span className={cn(
-                                "w-10 h-10 flex items-center justify-center rounded-xl font-black text-sm",
-                                idx === 0 ? "bg-amber-400 text-white" : 
+                                "w-7 h-7 md:w-9 md:h-9 flex items-center justify-center rounded-lg font-black text-[10px] md:text-xs",
+                                idx === 0 ? "bg-amber-400 text-white shadow-sm" : 
                                 idx === 1 ? "bg-slate-300 text-white" :
-                                idx === 2 ? "bg-amber-700 text-white" : "bg-slate-50 text-slate-400"
+                                idx === 2 ? "bg-amber-700/60 text-white" : "text-slate-400"
                               )}>
                                 {idx + 1}º
                               </span>
-                              <div>
-                                <span className="font-bold text-primary block leading-none mb-1">{p.name}</span>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.wins} Vitórias</span>
-                              </div>
                             </div>
-                            <div className="flex gap-6">
-                              <div className="text-center">
-                                <div className="text-emerald-500 font-display font-bold text-xl leading-none">{p.gamesWon}</div>
-                                <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest">G. Pró</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-slate-300 font-display font-bold text-xl leading-none">{p.gamesLost}</div>
-                                <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest">G. Contra</div>
-                              </div>
-                              <div className="text-center">
-                                <div className={cn(
-                                  "font-display font-bold text-xl leading-none",
-                                  p.gameBalance >= 0 ? "text-primary" : "text-error"
-                                )}>{p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}</div>
-                                <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Saldo</div>
-                              </div>
+                            
+                            <div className="min-w-0">
+                              <span className="font-bold text-primary text-xs md:text-sm block truncate">{p.name}</span>
+                            </div>
+
+                            <div className="text-center font-display font-black text-sm md:text-lg text-primary">
+                              {p.wins}
+                            </div>
+
+                            <div className={cn(
+                              "text-center font-display font-bold text-sm md:text-lg",
+                              p.gameBalance > 0 ? "text-emerald-500" : p.gameBalance < 0 ? "text-error" : "text-slate-400"
+                            )}>
+                              {p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}
+                            </div>
+
+                            <div className="text-center font-display font-medium text-xs md:text-base text-slate-400">
+                              {p.gamesWon}
+                            </div>
+
+                            <div className="text-center font-display font-medium text-xs md:text-base text-slate-300 hidden md:block">
+                              {p.gamesLost}
                             </div>
                           </div>
                         ))}
+                      </div>
+
+                      <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-8">
+                        <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <AlertCircle size={12} /> Critérios de Desempate (Ordem)
+                        </h5>
+                        <div className="flex flex-wrap gap-2">
+                          {activeTournament.rankingCriteria.map((c, i) => (
+                            <div key={c} className="bg-white border border-slate-200 px-2 py-1 rounded-lg text-[9px] font-bold text-slate-600">
+                              {i + 1}. {c === 'WINS' ? 'Vitórias' : c === 'GAME_BALANCE' ? 'Saldo' : c === 'GAMES_WON' ? 'Games Pró' : 'Confronto Direto'}
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="w-full mb-8">
