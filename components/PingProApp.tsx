@@ -98,6 +98,13 @@ const Header = ({ step, resetApp, user }: { step: AppStep, resetApp: () => void,
       )}
       
       {user && (
+        <div className="hidden sm:flex flex-col items-end mr-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logado como</span>
+          <span className="text-xs font-bold text-primary truncate max-w-[150px]">{user.email}</span>
+        </div>
+      )}
+      
+      {user && (
         <button 
           onClick={() => signOut(auth)}
           className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
