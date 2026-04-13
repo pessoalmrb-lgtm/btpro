@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A beach tennis tournament with players, matches and configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "uid": { "type": "string", "description": "The user ID who created the tournament." },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" }
+            }
+          }
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "player1Id": { "type": "string" },
+              "player1PartnerId": { "type": "string" },
+              "player2Id": { "type": "string" },
+              "player2PartnerId": { "type": "string" },
+              "table": { "type": "number" },
+              "sets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "player1": { "type": "number" },
+                    "player2": { "type": "number" }
+                  }
+                }
+              },
+              "currentSet": {
+                "type": "object",
+                "properties": {
+                  "player1": { "type": "number" },
+                  "player2": { "type": "number" }
+                }
+              },
+              "winnerId": { "type": "string" },
+              "isCompleted": { "type": "boolean" },
+              "round": { "type": "number" },
+              "groupId": { "type": "string" }
+            }
+          }
+        },
+        "currentRound": { "type": "number" },
+        "totalRounds": { "type": "number" },
+        "tables": { "type": "array", "items": { "type": "number" } },
+        "format": { "type": "string" },
+        "matchFormat": { "type": "string" },
+        "registrationType": { "type": "string" },
+        "rankingCriteria": { "type": "array", "items": { "type": "string" } },
+        "isFinished": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "uid", "players", "matches", "currentRound", "totalRounds", "tables", "format", "matchFormat", "registrationType", "rankingCriteria", "isFinished", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Collection of tournaments."
+    }
+  }
+}

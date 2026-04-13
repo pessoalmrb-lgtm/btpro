@@ -15,14 +15,60 @@ import {
   AlertCircle,
   RefreshCw,
   Home,
-  BarChart
+  BarChart,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, User, handleFirestoreError, OperationType } from '../firebase';
 
-const Header = ({ step, resetApp }: { step: AppStep, resetApp: () => void }) => (
+// --- Error Boundary ---
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, errorInfo: string | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let displayMessage = "Ocorreu um erro inesperado.";
+      try {
+        const parsed = JSON.parse(this.state.errorInfo || "");
+        if (parsed.error && parsed.error.includes("insufficient permissions")) {
+          displayMessage = "Erro de permissão no banco de dados. Por favor, verifique se você está logado corretamente.";
+        }
+      } catch (e) {
+        // Not a JSON error
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+          <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl text-center">
+            <AlertCircle size={48} className="text-error mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-primary mb-2">Ops! Algo deu errado</h2>
+            <p className="text-slate-500 mb-6">{displayMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="btn-primary w-full py-3"
+            >
+              Recarregar Aplicativo
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const Header = ({ step, resetApp, user }: { step: AppStep, resetApp: () => void, user: User | null }) => (
   <div className="flex items-center justify-between mb-6 md:mb-8 w-full max-w-6xl">
     <motion.div 
       initial={{ x: -20, opacity: 0 }}
@@ -38,17 +84,29 @@ const Header = ({ step, resetApp }: { step: AppStep, resetApp: () => void }) => 
       </div>
     </motion.div>
     
-    {step !== 'HOME' && (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <div className="flex items-center gap-2">
+      {user && step !== 'HOME' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <button 
+            onClick={resetApp} 
+            className="flex items-center gap-1.5 md:gap-2 px-4 md:px-5 py-2.5 md:py-2.5 bg-primary text-white rounded-xl shadow-lg hover:bg-primary/90 hover:-translate-y-0.5 transition-all text-xs md:text-sm font-bold border-2 border-accent/20"
+          >
+            <Home size={14} className="md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Meus Torneios</span>
+          </button>
+        </motion.div>
+      )}
+      
+      {user && (
         <button 
-          onClick={resetApp} 
-          className="flex items-center gap-1.5 md:gap-2 px-4 md:px-5 py-2.5 md:py-2.5 bg-primary text-white rounded-xl shadow-lg hover:bg-primary/90 hover:-translate-y-0.5 transition-all text-xs md:text-sm font-bold border-2 border-accent/20"
+          onClick={() => signOut(auth)}
+          className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
+          title="Sair"
         >
-          <Home size={14} className="md:w-4 md:h-4" />
-          <span>Meus Torneios</span>
+          <LogOut size={18} />
         </button>
-      </motion.div>
-    )}
+      )}
+    </div>
   </div>
 );
 
@@ -83,6 +141,8 @@ const StepContainer = ({ children, title, subtitle, currentStep }: { children: R
 );
 
 export default function PingProApp() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [step, setStep] = useState<AppStep>('HOME');
   const [tournaments, setTournaments] = useState<TournamentState[]>([]);
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
@@ -103,6 +163,32 @@ export default function PingProApp() {
   const [courtWarning, setCourtWarning] = useState<{ court: number; tournamentName: string } | null>(null);
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
+
+  // --- Auth & Firestore Sync ---
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  React.useEffect(() => {
+    if (!user) {
+      setTournaments([]);
+      return;
+    }
+
+    const q = query(collection(db, 'tournaments'), where('uid', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => doc.data() as TournamentState);
+      setTournaments(docs.sort((a, b) => b.createdAt - a.createdAt));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'tournaments');
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // --- History Management ---
   React.useEffect(() => {
@@ -209,7 +295,7 @@ export default function PingProApp() {
     setStep('ATHLETE_REGISTRATION');
   };
 
-  const handleAthletesConfirm = () => {
+  const handleAthletesConfirm = async () => {
     const emptyIndex = players.findIndex(p => !p.name.trim());
     if (emptyIndex !== -1) {
       const label = registrationType === 'RANDOM_DRAW' ? `Atleta ${emptyIndex + 1}` : `Dupla ${emptyIndex + 1}`;
@@ -218,24 +304,28 @@ export default function PingProApp() {
     }
     setError(null);
     
+    if (!user) {
+      setError("Você precisa estar logado para criar um torneio.");
+      return;
+    }
+
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     
     if (isIndividual) {
       setStep('DRAWING');
       setIsDrawing(true);
       
-      // For individual formats, we don't draw teams yet, we just start the tournament with individual players
-      // But we show a "sorting" animation for partners
-      setTimeout(() => {
+      setTimeout(async () => {
         setIsDrawing(false);
         
         const matches = generateIndividualDoubles(players, selectedCourts);
         const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
         
+        const tournamentId = `t-${Date.now()}`;
         const newTournament: TournamentState = {
-          id: `t-${Date.now()}`,
+          id: tournamentId,
           name: tournamentName,
-          players: players, // Individual athletes
+          players: players,
           matches,
           currentRound: 1,
           totalRounds,
@@ -248,9 +338,13 @@ export default function PingProApp() {
           createdAt: Date.now()
         };
         
-        setTournaments([...tournaments, newTournament]);
-        setActiveTournamentId(newTournament.id);
-        setStep('TOURNAMENT');
+        try {
+          await setDoc(doc(db, 'tournaments', tournamentId), { ...newTournament, uid: user.uid });
+          setActiveTournamentId(tournamentId);
+          setStep('TOURNAMENT');
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+        }
       }, 2000);
     } else if (registrationType === 'RANDOM_DRAW') {
       setStep('DRAWING');
@@ -263,10 +357,9 @@ export default function PingProApp() {
       }
       setDrawnTeams(teams);
 
-      setTimeout(() => {
+      setTimeout(async () => {
         setIsDrawing(false);
         
-        // Finalize drawing and start tournament
         const finalTeams = teams.map(t => ({
           id: `team-${t.p1.id}-${t.p2.id}`,
           name: `${t.p1.name} / ${t.p2.name}`
@@ -281,8 +374,9 @@ export default function PingProApp() {
 
         const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
         
+        const tournamentId = `t-${Date.now()}`;
         const newTournament: TournamentState = {
-          id: `t-${Date.now()}`,
+          id: tournamentId,
           name: tournamentName,
           players: finalTeams,
           matches,
@@ -297,12 +391,15 @@ export default function PingProApp() {
           createdAt: Date.now()
         };
         
-        setTournaments([...tournaments, newTournament]);
-        setActiveTournamentId(newTournament.id);
-        setStep('TOURNAMENT');
+        try {
+          await setDoc(doc(db, 'tournaments', tournamentId), { ...newTournament, uid: user.uid });
+          setActiveTournamentId(tournamentId);
+          setStep('TOURNAMENT');
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+        }
       }, 3000);
     } else {
-      // Fixed teams - start tournament directly
       const finalTeams = [...players];
       let matches: Match[] = [];
       if (tournamentFormat === 'GROUPS_MATA_MATA') {
@@ -313,8 +410,9 @@ export default function PingProApp() {
 
       const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
       
+      const tournamentId = `t-${Date.now()}`;
       const newTournament: TournamentState = {
-        id: `t-${Date.now()}`,
+        id: tournamentId,
         name: tournamentName,
         players: finalTeams,
         matches,
@@ -329,9 +427,13 @@ export default function PingProApp() {
         createdAt: Date.now()
       };
       
-      setTournaments([...tournaments, newTournament]);
-      setActiveTournamentId(newTournament.id);
-      setStep('TOURNAMENT');
+      try {
+        await setDoc(doc(db, 'tournaments', tournamentId), { ...newTournament, uid: user.uid });
+        setActiveTournamentId(tournamentId);
+        setStep('TOURNAMENT');
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+      }
     }
   };
 
@@ -361,7 +463,7 @@ export default function PingProApp() {
     }
   };
 
-  const updateMatchScore = (matchId: string, player: 1 | 2, value: number) => {
+  const updateMatchScore = async (matchId: string, player: 1 | 2, value: number) => {
     if (!activeTournament) return;
 
     const newMatches = activeTournament.matches.map(m => {
@@ -397,10 +499,14 @@ export default function PingProApp() {
       return { ...m, currentSet };
     });
 
-    setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, matches: newMatches } : t));
+    try {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatches });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+    }
   };
 
-  const confirmSet = (matchId: string) => {
+  const confirmSet = async (matchId: string) => {
     if (!activeTournament) return;
     const match = activeTournament.matches.find(m => m.id === matchId)!;
     const set = match.currentSet;
@@ -425,40 +531,60 @@ export default function PingProApp() {
         };
     });
 
-    setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, matches: newMatches } : t));
-    setError(null);
+    try {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatches });
+      setError(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+    }
   };
 
-  const nextRound = () => {
+  const nextRound = async () => {
     if (!activeTournament) return;
     if (activeTournament.currentRound < activeTournament.totalRounds) {
-      setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, currentRound: t.currentRound + 1 } : t));
+      try {
+        await updateDoc(doc(db, 'tournaments', activeTournament.id), { currentRound: activeTournament.currentRound + 1 });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+      }
     } else {
-      setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, isFinished: true } : t));
-      setStep('FINISHED');
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#0f172a', '#bef264', '#000000']
-      });
+      try {
+        await updateDoc(doc(db, 'tournaments', activeTournament.id), { isFinished: true });
+        setStep('FINISHED');
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#0f172a', '#bef264', '#000000']
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+      }
     }
   };
 
-  const prevRound = () => {
+  const prevRound = async () => {
     if (!activeTournament) return;
     if (activeTournament.currentRound > 1) {
-      setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, currentRound: t.currentRound - 1 } : t));
+      try {
+        await updateDoc(doc(db, 'tournaments', activeTournament.id), { currentRound: activeTournament.currentRound - 1 });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+      }
     }
   };
 
-  const editMatch = (matchId: string) => {
+  const editMatch = async (matchId: string) => {
     if (!activeTournament) return;
     const newMatches = activeTournament.matches.map(m => {
       if (m.id !== matchId) return m;
       return { ...m, isCompleted: false };
     });
-    setTournaments(tournaments.map(t => t.id === activeTournamentId ? { ...t, matches: newMatches } : t));
+    try {
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatches });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+    }
   };
 
   const resetApp = () => {
@@ -470,18 +596,60 @@ export default function PingProApp() {
     setError(null);
   };
 
-  const deleteTournament = (id: string) => {
-    setTournaments(tournaments.filter(t => t.id !== id));
-    if (activeTournamentId === id) setActiveTournamentId(null);
+  const deleteTournament = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'tournaments', id));
+      if (activeTournamentId === id) setActiveTournamentId(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `tournaments/${id}`);
+    }
   };
 
   return (
-    <main className="min-h-[100dvh] p-4 md:p-8 flex flex-col items-center pb-40 md:pb-8">
-      <Header step={step} resetApp={resetApp} />
+    <ErrorBoundary>
+      <main className="min-h-[100dvh] p-4 md:p-8 flex flex-col items-center pb-40 md:pb-8">
+        <Header step={step} resetApp={resetApp} user={user} />
 
       <div className="w-full max-w-6xl">
         <AnimatePresence mode="wait">
-          {step === 'HOME' && (
+          {!isAuthReady ? (
+            <motion.div 
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center py-20"
+            >
+              <RefreshCw size={48} className="animate-spin text-primary mb-4" />
+              <p className="text-slate-500 font-medium">Carregando...</p>
+            </motion.div>
+          ) : !user ? (
+            <motion.div 
+              key="login"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-20 text-center space-y-10"
+            >
+              <div className="space-y-4">
+                <div className="bg-accent/20 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 text-accent shadow-inner">
+                  <Trophy size={48} />
+                </div>
+                <h2 className="text-5xl md:text-6xl font-display font-black text-primary tracking-tight">
+                  Arena <span className="text-accent italic">BeachPró</span>
+                </h2>
+                <p className="text-slate-500 text-xl font-medium max-w-md mx-auto">
+                  Entre para salvar seus torneios e acessá-los de qualquer lugar.
+                </p>
+              </div>
+
+              <button 
+                onClick={() => signInWithPopup(auth, googleProvider)} 
+                className="btn-primary flex items-center justify-center gap-3 px-8 py-5 text-xl shadow-2xl"
+              >
+                <LogIn size={24} />
+                ENTRAR COM GOOGLE
+              </button>
+            </motion.div>
+          ) : step === 'HOME' && (
             <motion.div 
               key="home"
               initial={{ opacity: 0, y: 20 }}
@@ -1578,5 +1746,6 @@ export default function PingProApp() {
         </AnimatePresence>
       </div>
     </main>
+    </ErrorBoundary>
   );
 }

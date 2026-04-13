@@ -1,0 +1,95 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: tournaments
+// Document ID: tournamentId
+// Fields:
+//   - id: string (required)
+//   - name: string (required, 1-100 chars)
+//   - uid: string (required, immutable) - Owner's UID
+//   - players: list (required, max 100 items)
+//   - matches: list (required, max 500 items)
+//   - currentRound: number (required)
+//   - totalRounds: number (required)
+//   - tables: list (required, max 20 items)
+//   - format: string (required)
+//   - matchFormat: string (required)
+//   - registrationType: string (required)
+//   - rankingCriteria: list (required, max 10 items)
+//   - isFinished: bool (required)
+//   - createdAt: number (required, immutable)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidTournament(data) {
+      return hasRequiredFields(['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.uid is string &&
+             data.players is list && data.players.size() <= 100 &&
+             data.matches is list && data.matches.size() <= 500 &&
+             data.currentRound is int &&
+             data.totalRounds is int &&
+             data.tables is list && data.tables.size() <= 20 &&
+             data.format is string &&
+             data.matchFormat is string &&
+             data.registrationType is string &&
+             data.rankingCriteria is list && data.rankingCriteria.size() <= 10 &&
+             data.isFinished is bool &&
+             data.createdAt is int;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /tournaments/{tournamentId} {
+      allow read: if isDocOwner();
+      
+      allow create: if isAuthenticated() && 
+                      isValidTournament(request.resource.data) && 
+                      request.resource.data.uid == request.auth.uid;
+      
+      allow update: if isDocOwner() && 
+                      isValidTournament(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      
+      allow delete: if isDocOwner();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
