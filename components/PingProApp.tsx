@@ -147,6 +147,13 @@ export default function PingProApp() {
   const [tournaments, setTournaments] = useState<TournamentState[]>([]);
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   
+  // Auth Form State
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+
   // Creation Flow State
   const [tournamentName, setTournamentName] = useState('');
   const [playerCount, setPlayerCount] = useState(0);
@@ -234,6 +241,70 @@ export default function PingProApp() {
   const activeTournament = tournaments.find(t => t.id === activeTournamentId);
 
   // --- Actions ---
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setIsAuthLoading(true);
+
+    if (username.length < 3) {
+      setAuthError("O nome de usuário deve ter pelo menos 3 caracteres.");
+      setIsAuthLoading(false);
+      return;
+    }
+
+    if (password.length !== 6) {
+      setAuthError("A senha deve ter exatamente 6 dígitos.");
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const email = `${username.toLowerCase()}@beachpro.app`;
+
+    try {
+      if (authMode === 'REGISTER') {
+        // Check if username is taken
+        const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
+        if (usernameDoc.exists()) {
+          setAuthError("Este nome de usuário já está em uso.");
+          setIsAuthLoading(false);
+          return;
+        }
+
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Reserve username
+        await setDoc(doc(db, 'usernames', username.toLowerCase()), { uid: userCredential.user.uid });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setAuthError("Usuário ou senha incorretos.");
+      } else if (err.code === 'auth/email-already-in-use') {
+        setAuthError("Este usuário já existe.");
+      } else {
+        setAuthError("Ocorreu um erro ao processar sua solicitação.");
+      }
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      console.error("Google login error:", err);
+      if (err.code === 'auth/popup-blocked') {
+        setAuthError("O popup de login foi bloqueado pelo seu navegador.");
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // User closed the popup, ignore
+      } else {
+        setAuthError("Erro ao tentar entrar com o Google.");
+      }
+    }
+  };
 
   const startNewTournament = () => {
     if (tournaments.length >= 4) {
@@ -627,27 +698,84 @@ export default function PingProApp() {
               key="login"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center py-20 text-center space-y-10"
+              className="flex flex-col items-center justify-center py-10 text-center w-full max-w-md mx-auto"
             >
-              <div className="space-y-4">
-                <div className="bg-accent/20 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 text-accent shadow-inner">
-                  <Trophy size={48} />
+              <div className="space-y-4 mb-10">
+                <div className="bg-accent/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-4 text-accent shadow-inner">
+                  <Trophy size={40} />
                 </div>
-                <h2 className="text-5xl md:text-6xl font-display font-black text-primary tracking-tight">
+                <h2 className="text-4xl md:text-5xl font-display font-black text-primary tracking-tight">
                   Arena <span className="text-accent italic">BeachPró</span>
                 </h2>
-                <p className="text-slate-500 text-xl font-medium max-w-md mx-auto">
-                  Entre para salvar seus torneios e acessá-los de qualquer lugar.
+                <p className="text-slate-500 font-medium">
+                  {authMode === 'LOGIN' ? 'Bem-vindo de volta!' : 'Crie sua conta gratuita'}
                 </p>
               </div>
 
-              <button 
-                onClick={() => signInWithPopup(auth, googleProvider)} 
-                className="btn-primary flex items-center justify-center gap-3 px-8 py-5 text-xl shadow-2xl"
-              >
-                <LogIn size={24} />
-                ENTRAR COM GOOGLE
-              </button>
+              <form onSubmit={handleAuth} className="w-full space-y-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+                <div className="space-y-2 text-left">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Usuário</label>
+                  <input 
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
+                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary"
+                    placeholder="ex: joaosilva"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2 text-left">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha (6 dígitos)</label>
+                  <input 
+                    type="password"
+                    maxLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary tracking-[0.5em]"
+                    placeholder="••••••"
+                    required
+                  />
+                </div>
+
+                {authError && (
+                  <div className="p-4 bg-error/10 text-error rounded-xl text-xs font-bold flex items-center gap-2">
+                    <AlertCircle size={14} />
+                    {authError}
+                  </div>
+                )}
+
+                <button 
+                  type="submit"
+                  disabled={isAuthLoading}
+                  className="w-full btn-primary py-5 text-lg shadow-lg flex items-center justify-center gap-2"
+                >
+                  {isAuthLoading ? (
+                    <RefreshCw size={20} className="animate-spin" />
+                  ) : (
+                    authMode === 'LOGIN' ? 'ENTRAR' : 'CADASTRAR'
+                  )}
+                </button>
+
+                <div className="pt-4 flex flex-col gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setAuthMode(authMode === 'LOGIN' ? 'REGISTER' : 'LOGIN')}
+                    className="text-xs font-bold text-slate-400 hover:text-primary transition-colors"
+                  >
+                    {authMode === 'LOGIN' ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Entre aqui'}
+                  </button>
+
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                    <div className="relative flex justify-center text-[10px] uppercase font-black text-slate-300 bg-white px-2">Ou</div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Também é possível <button type="button" onClick={handleGoogleLogin} className="text-primary font-bold hover:underline">Entrar com o Google</button>
+                  </p>
+                </div>
+              </form>
             </motion.div>
           ) : step === 'HOME' && (
             <motion.div 
