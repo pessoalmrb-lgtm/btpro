@@ -1623,10 +1623,18 @@ export default function PingProApp() {
                             </div>
                             <div className={cn(
                               "mt-2 text-4xl sm:text-5xl md:text-6xl font-display font-black transition-colors leading-none",
-                              p1Games > p2Games ? "text-accent" : "text-slate-300"
+                              match.isCompleted && p1Games < p2Games ? "text-primary/30" : "text-primary"
                             )}>
                               {p1Games}
                             </div>
+                            {match.isCompleted && (
+                              <div className={cn(
+                                "mt-2 inline-block px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
+                                p1Games > p2Games ? "bg-accent text-primary shadow-sm" : "bg-slate-100 text-slate-400"
+                              )}>
+                                {p1Games > p2Games ? 'Vencedor' : 'Perdedor'}
+                              </div>
+                            )}
                           </div>
                           <div className="text-primary/40 font-display font-black text-lg sm:text-xl italic shrink-0 px-1 sm:px-2">VS</div>
                           <div className="flex-1 text-center min-w-0">
@@ -1642,10 +1650,18 @@ export default function PingProApp() {
                             </div>
                             <div className={cn(
                               "mt-2 text-4xl sm:text-5xl md:text-6xl font-display font-black transition-colors leading-none",
-                              p2Games > p1Games ? "text-accent" : "text-slate-300"
+                              match.isCompleted && p2Games < p1Games ? "text-primary/30" : "text-primary"
                             )}>
                               {p2Games}
                             </div>
+                            {match.isCompleted && (
+                              <div className={cn(
+                                "mt-2 inline-block px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
+                                p2Games > p1Games ? "bg-accent text-primary shadow-sm" : "bg-slate-100 text-slate-400"
+                              )}>
+                                {p2Games > p1Games ? 'Vencedor' : 'Perdedor'}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1871,14 +1887,36 @@ export default function PingProApp() {
                                           <div className="text-[10px] font-black text-indigo-600 uppercase leading-tight">
                                             {p1.name} {p1p && `/ ${p1p.name}`}
                                           </div>
-                                          <div className="text-xl font-display font-black text-primary mt-1">{p1Games}</div>
+                                          <div className={cn(
+                                            "text-xl font-display font-black mt-1",
+                                            p1Games < p2Games ? "text-primary/30" : "text-primary"
+                                          )}>
+                                            {p1Games}
+                                          </div>
+                                          <div className={cn(
+                                            "mt-1 inline-block px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest",
+                                            p1Games > p2Games ? "bg-accent text-primary" : "bg-slate-100 text-slate-400"
+                                          )}>
+                                            {p1Games > p2Games ? 'Vencedor' : 'Perdedor'}
+                                          </div>
                                         </div>
                                         <div className="text-[10px] font-black text-slate-300 italic">VS</div>
                                         <div className="flex-1 text-center">
                                           <div className="text-[10px] font-black text-orange-600 uppercase leading-tight">
                                             {p2.name} {p2p && `/ ${p2p.name}`}
                                           </div>
-                                          <div className="text-xl font-display font-black text-primary mt-1">{p2Games}</div>
+                                          <div className={cn(
+                                            "text-xl font-display font-black mt-1",
+                                            p2Games < p1Games ? "text-primary/30" : "text-primary"
+                                          )}>
+                                            {p2Games}
+                                          </div>
+                                          <div className={cn(
+                                            "mt-1 inline-block px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest",
+                                            p2Games > p1Games ? "bg-accent text-primary" : "bg-slate-100 text-slate-400"
+                                          )}>
+                                            {p2Games > p1Games ? 'Vencedor' : 'Perdedor'}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
