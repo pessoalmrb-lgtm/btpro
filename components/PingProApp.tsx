@@ -293,6 +293,8 @@ export default function PingProApp() {
   };
 
   const handleGoogleLogin = async () => {
+    setAuthError(null);
+    setIsAuthLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
@@ -304,6 +306,8 @@ export default function PingProApp() {
       } else {
         setAuthError("Erro ao tentar entrar com o Google.");
       }
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
