@@ -1788,13 +1788,13 @@ export default function PingProApp() {
                       )}
                       
                       {/* Ranking Table Header */}
-                      <div className="w-full grid grid-cols-[40px_1fr_60px_60px_60px] md:grid-cols-[60px_1fr_100px_100px_100px_100px] gap-2 px-4 py-3 bg-slate-100 rounded-t-2xl text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-x border-t border-slate-200">
+                      <div className="w-full grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 bg-slate-100 rounded-t-2xl text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-x border-t border-slate-200">
                         <span className="text-center">Pos</span>
                         <span>Atleta / Dupla</span>
-                        <span className="text-center">Vitórias</span>
-                        <span className="text-center">Saldo</span>
-                        <span className="text-center">G. Pró</span>
-                        <span className="text-center hidden md:block">G. Contra</span>
+                        <span className="text-center">Vit</span>
+                        <span className="text-center">Sal</span>
+                        <span className="text-center">Pró</span>
+                        <span className="text-center hidden md:block">Con</span>
                       </div>
 
                       <div className="w-full border-x border-b border-slate-200 rounded-b-2xl overflow-hidden mb-8 bg-white shadow-sm">
@@ -1802,7 +1802,7 @@ export default function PingProApp() {
                           <div 
                             key={p.id} 
                             className={cn(
-                              "grid grid-cols-[40px_1fr_60px_60px_60px] md:grid-cols-[60px_1fr_100px_100px_100px_100px] gap-2 px-4 py-4 items-center border-t border-slate-100 transition-colors",
+                              "grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-4 items-center border-t border-slate-100 transition-colors",
                               idx === 0 && activeTournament.isFinished ? "bg-amber-50/50" : "hover:bg-slate-50"
                             )}
                           >
