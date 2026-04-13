@@ -1532,41 +1532,26 @@ export default function PingProApp() {
                     <span className="text-slate-500 text-[10px] font-bold uppercase truncate">{activeTournament.name}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button 
-                      onClick={nextRound}
-                      disabled={!activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted)}
-                      className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronRight size={20} className="text-primary" />
-                    </button>
                     <h2 className="text-xl font-display font-bold text-primary leading-tight">
                       Rodada {activeTournament.currentRound} <span className="text-slate-300 font-normal">de {activeTournament.totalRounds}</span>
                     </h2>
-                    <button 
-                      onClick={prevRound}
-                      disabled={activeTournament.currentRound === 1}
-                      className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronLeft size={20} className="text-primary" />
-                    </button>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-2 shrink-0">
-                  {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) ? (
-                    <button 
-                      onClick={nextRound} 
-                      className="px-4 py-2 bg-primary rounded-lg text-white font-bold text-[10px] md:text-[11px] flex items-center gap-1.5 hover:bg-primary/90 transition-all shadow-md animate-pulse uppercase tracking-widest"
-                    >
-                      <ChevronRight size={12} />
-                      <span>{activeTournament.currentRound === activeTournament.totalRounds ? 'Finalizar' : 'Próxima Rodada'}</span>
-                    </button>
-                  ) : (
-                    <div className="px-3 py-1.5 bg-slate-50 rounded-lg text-slate-400 font-bold text-[10px] md:text-[11px] flex items-center gap-1.5 border border-slate-100">
-                      <RefreshCw size={12} className="animate-spin" />
-                      Aguardando...
-                    </div>
-                  )}
+                  <div className="px-3 py-1.5 bg-slate-50 rounded-lg text-slate-400 font-bold text-[10px] md:text-[11px] flex items-center gap-1.5 border border-slate-100">
+                    {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) ? (
+                      <>
+                        <CheckCircle2 size={12} className="text-emerald-500" />
+                        <span className="text-emerald-600">Rodada Concluída</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={12} className="animate-spin" />
+                        <span>Em andamento</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1743,7 +1728,7 @@ export default function PingProApp() {
                     {activeTournament.matches.filter(m => m.round === activeTournament.currentRound).every(m => m.isCompleted) && (
                       <button 
                         onClick={nextRound} 
-                        className="flex-1 sm:flex-none btn-primary py-4 px-10 flex items-center justify-center gap-3 text-sm shadow-xl"
+                        className="flex-1 sm:flex-none btn-primary bg-accent text-primary border-accent hover:bg-accent/90 py-4 px-10 flex items-center justify-center gap-3 text-sm shadow-xl"
                       >
                         <span className="font-black tracking-widest">
                           {activeTournament.currentRound === activeTournament.totalRounds ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
@@ -1803,13 +1788,13 @@ export default function PingProApp() {
                       )}
                       
                       {/* Ranking Table Header */}
-                      <div className="w-full grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-3 bg-slate-100 rounded-t-2xl text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-x border-t border-slate-200">
+                      <div className="w-full grid grid-cols-[40px_1fr_60px_60px_60px] md:grid-cols-[60px_1fr_100px_100px_100px_100px] gap-2 px-4 py-3 bg-slate-100 rounded-t-2xl text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-x border-t border-slate-200">
                         <span className="text-center">Pos</span>
                         <span>Atleta / Dupla</span>
-                        <span className="text-center">Vit</span>
-                        <span className="text-center">Sal</span>
-                        <span className="text-center">Pró</span>
-                        <span className="text-center hidden md:block">Con</span>
+                        <span className="text-center">Vitórias</span>
+                        <span className="text-center">Saldo</span>
+                        <span className="text-center">G. Pró</span>
+                        <span className="text-center hidden md:block">G. Contra</span>
                       </div>
 
                       <div className="w-full border-x border-b border-slate-200 rounded-b-2xl overflow-hidden mb-8 bg-white shadow-sm">
@@ -1817,7 +1802,7 @@ export default function PingProApp() {
                           <div 
                             key={p.id} 
                             className={cn(
-                              "grid grid-cols-[40px_1fr_45px_45px_45px] md:grid-cols-[60px_1fr_80px_80px_80px_80px] gap-2 px-4 py-4 items-center border-t border-slate-100 transition-colors",
+                              "grid grid-cols-[40px_1fr_60px_60px_60px] md:grid-cols-[60px_1fr_100px_100px_100px_100px] gap-2 px-4 py-4 items-center border-t border-slate-100 transition-colors",
                               idx === 0 && activeTournament.isFinished ? "bg-amber-50/50" : "hover:bg-slate-50"
                             )}
                           >
