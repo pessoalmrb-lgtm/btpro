@@ -280,8 +280,12 @@ export default function PingProApp() {
         setAuthError("Este e-mail já está sendo usado.");
       } else if (err.code === 'auth/invalid-email') {
         setAuthError("E-mail inválido.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setAuthError("O login por e-mail/senha não está ativado no console do Firebase.");
+      } else if (err.code === 'auth/weak-password') {
+        setAuthError("A senha é muito fraca.");
       } else {
-        setAuthError("Ocorreu um erro ao processar sua solicitação.");
+        setAuthError(`Erro: ${err.message || "Ocorreu um erro ao processar sua solicitação."}`);
       }
     } finally {
       setIsAuthLoading(false);
