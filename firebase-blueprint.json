@@ -64,25 +64,12 @@
         "createdAt": { "type": "number" }
       },
       "required": ["id", "name", "uid", "players", "matches", "currentRound", "totalRounds", "tables", "format", "matchFormat", "registrationType", "rankingCriteria", "isFinished", "createdAt"]
-    },
-    "Username": {
-      "title": "Username",
-      "description": "Mapping of username to UID to ensure uniqueness.",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" }
-      },
-      "required": ["uid"]
     }
   },
   "firestore": {
     "/tournaments/{tournamentId}": {
       "schema": "Tournament",
       "description": "Collection of tournaments."
-    },
-    "/usernames/{username}": {
-      "schema": "Username",
-      "description": "Collection of unique usernames."
     }
   }
 }

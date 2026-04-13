@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && rm -rf dist && mv out dist",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next dist"
   },
   "dependencies": {
     "@eslint/eslintrc": "^3.3.5",

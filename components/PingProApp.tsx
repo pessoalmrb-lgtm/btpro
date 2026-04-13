@@ -149,7 +149,7 @@ export default function PingProApp() {
   
   // Auth Form State
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -247,8 +247,8 @@ export default function PingProApp() {
     setAuthError(null);
     setIsAuthLoading(true);
 
-    if (username.length < 3) {
-      setAuthError("O nome de usuário deve ter pelo menos 3 caracteres.");
+    if (!email.includes('@')) {
+      setAuthError("Por favor, insira um e-mail válido.");
       setIsAuthLoading(false);
       return;
     }
@@ -259,30 +259,20 @@ export default function PingProApp() {
       return;
     }
 
-    const email = `${username.toLowerCase()}@beachpro.app`;
-
     try {
       if (authMode === 'REGISTER') {
-        // Check if username is taken
-        const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
-        if (usernameDoc.exists()) {
-          setAuthError("Este nome de usuário já está em uso.");
-          setIsAuthLoading(false);
-          return;
-        }
-
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // Reserve username
-        await setDoc(doc(db, 'usernames', username.toLowerCase()), { uid: userCredential.user.uid });
+        await createUserWithEmailAndPassword(auth, email, password);
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
       console.error("Auth error:", err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setAuthError("Usuário ou senha incorretos.");
+        setAuthError("E-mail ou senha incorretos.");
       } else if (err.code === 'auth/email-already-in-use') {
-        setAuthError("Este usuário já existe.");
+        setAuthError("Este e-mail já está sendo usado.");
+      } else if (err.code === 'auth/invalid-email') {
+        setAuthError("E-mail inválido.");
       } else {
         setAuthError("Ocorreu um erro ao processar sua solicitação.");
       }
@@ -712,31 +702,31 @@ export default function PingProApp() {
                 </p>
               </div>
 
-              <form onSubmit={handleAuth} className="w-full space-y-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Usuário</label>
-                  <input 
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
-                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary"
-                    placeholder="ex: joaosilva"
-                    required
-                  />
-                </div>
+                <form onSubmit={handleAuth} className="w-full space-y-4 bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                    <input 
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary"
+                      placeholder="exemplo@email.com"
+                      required
+                    />
+                  </div>
 
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha (6 dígitos)</label>
-                  <input 
-                    type="password"
-                    maxLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary tracking-[0.5em]"
-                    placeholder="••••••"
-                    required
-                  />
-                </div>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha (6 dígitos)</label>
+                    <input 
+                      type="password"
+                      maxLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-primary focus:outline-none transition-all font-bold text-primary tracking-[0.5em]"
+                      placeholder="••••••"
+                      required
+                    />
+                  </div>
 
                 {authError && (
                   <div className="p-4 bg-error/10 text-error rounded-xl text-xs font-bold flex items-center gap-2">
