@@ -64,12 +64,28 @@
         "createdAt": { "type": "number" }
       },
       "required": ["id", "name", "uid", "players", "matches", "currentRound", "totalRounds", "tables", "format", "matchFormat", "registrationType", "rankingCriteria", "isFinished", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "subscriptionExpiresAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "isPremium"]
     }
   },
   "firestore": {
     "/tournaments/{tournamentId}": {
       "schema": "Tournament",
       "description": "Collection of tournaments."
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Collection of user profiles."
     }
   }
 }

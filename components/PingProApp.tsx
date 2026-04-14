@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, 
   Plus, 
@@ -17,7 +17,6 @@ import {
   Home,
   BarChart,
   LogOut,
-  LogIn,
   Lock,
   Zap,
   X
@@ -35,7 +34,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
     this.state = { hasError: false, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: Error) {
     return { hasError: true, errorInfo: error.message };
   }
 
@@ -47,7 +46,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
         if (parsed.error && parsed.error.includes("insufficient permissions")) {
           displayMessage = "Erro de permissão no banco de dados. Por favor, verifique se você está logado corretamente.";
         }
-      } catch (e) {
+      } catch {
         // Not a JSON error
       }
 
@@ -212,6 +211,40 @@ export default function PingProApp() {
     return () => unsubscribe();
   }, [user]);
 
+  React.useEffect(() => {
+    if (!user) {
+      setIsPremium(false);
+      return;
+    }
+
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const userData = snapshot.data();
+        setIsPremium(userData.isPremium || false);
+      } else {
+        // Create user profile if it doesn't exist
+        try {
+          await setDoc(userDocRef, {
+            uid: user.uid,
+            email: user.email,
+            isPremium: false,
+            createdAt: Date.now()
+          });
+        } catch (err) {
+          // Ignore permission error if it's just a race condition
+          console.error("Error creating user profile:", err);
+        }
+      }
+    }, (err) => {
+      // If it's a permission error, it might be because the doc doesn't exist yet
+      // and the rules are strict. But onSnapshot should work if we have read access.
+      console.error("Error syncing user profile:", err);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
   // --- History Management ---
   React.useEffect(() => {
     // Set initial state if not present
@@ -280,20 +313,21 @@ export default function PingProApp() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-    } catch (err: any) {
-      console.error("Auth error:", err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+    } catch (err) {
+      const error = err as { code?: string; message?: string };
+      console.error("Auth error:", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         setAuthError("E-mail ou senha incorretos.");
-      } else if (err.code === 'auth/email-already-in-use') {
+      } else if (error.code === 'auth/email-already-in-use') {
         setAuthError("Este e-mail já está sendo usado.");
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (error.code === 'auth/invalid-email') {
         setAuthError("E-mail inválido.");
-      } else if (err.code === 'auth/operation-not-allowed') {
+      } else if (error.code === 'auth/operation-not-allowed') {
         setAuthError("O login por e-mail/senha não está ativado no console do Firebase.");
-      } else if (err.code === 'auth/weak-password') {
+      } else if (error.code === 'auth/weak-password') {
         setAuthError("A senha é muito fraca.");
       } else {
-        setAuthError(`Erro: ${err.message || "Ocorreu um erro ao processar sua solicitação."}`);
+        setAuthError(`Erro: ${error.message || "Ocorreu um erro ao processar sua solicitação."}`);
       }
     } finally {
       setIsAuthLoading(false);
@@ -305,13 +339,14 @@ export default function PingProApp() {
     setIsAuthLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      console.error("Google login error:", err);
-      if (err.code === 'auth/popup-blocked') {
+    } catch (err) {
+      const error = err as { code?: string };
+      console.error("Google login error:", error);
+      if (error.code === 'auth/popup-blocked') {
         setAuthError("O popup de login foi bloqueado pelo seu navegador.");
-      } else if (err.code === 'auth/cancelled-popup-request') {
+      } else if (error.code === 'auth/cancelled-popup-request') {
         // User closed the popup, ignore
-      } else if (err.code === 'auth/unauthorized-domain') {
+      } else if (error.code === 'auth/unauthorized-domain') {
         setAuthError("Este domínio não está autorizado no Firebase Console. Adicione este domínio às 'Authorized Domains' nas configurações de Autenticação do Firebase.");
       } else {
         setAuthError("Erro ao tentar entrar com o Google. Verifique se os popups estão permitidos.");

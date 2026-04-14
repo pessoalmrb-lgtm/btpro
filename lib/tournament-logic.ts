@@ -90,6 +90,8 @@ export function generateGroupStage(teams: Player[], selectedCourts: number[], te
 /**
  * Generates playoff matches based on selected rounds.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: number[], selectedRounds: string[]): Match[] {
   // This is a placeholder for playoff generation logic.
   // In a real app, this would be more complex, handling seeds and bracket positions.

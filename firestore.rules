@@ -42,6 +42,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == resource.data.uid;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "pamonhashouse@gmail.com" && request.auth.token.email_verified == true));
+    }
+
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
@@ -85,6 +91,15 @@ service cloud.firestore {
                       request.resource.data.createdAt == resource.data.createdAt;
       
       allow delete: if isDocOwner();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && 
+                      hasRequiredFields(['uid', 'email', 'isPremium']) &&
+                      request.resource.data.isPremium == false;
+      allow update: if isOwner(userId) && 
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email']) || isAdmin());
     }
 
     // Default deny
