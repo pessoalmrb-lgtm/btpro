@@ -6,7 +6,6 @@ const nextConfig = {
     unoptimized: true,
   },
   trailingSlash: true,
-  transpilePackages: ['lucide-react', 'framer-motion', 'canvas-confetti'],
 };
 
 export default nextConfig;

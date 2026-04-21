@@ -303,6 +303,51 @@ export default function PingProApp() {
   const [tournamentViewRound, setTournamentViewRound] = useState<number | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
+  // --- Navigation Helper ---
+  const navigateTo = (newStep: AppStep, options: { 
+    tournamentId?: string | null, 
+    matchHistory?: boolean, 
+    replace?: boolean,
+    tab?: 'MATCHES' | 'RANKING' | 'ROUNDS',
+    round?: number | null
+  } = {}) => {
+    const nextStep = newStep;
+    const nextTournamentId = options.tournamentId !== undefined ? options.tournamentId : activeTournamentId;
+    const nextMatchHistory = options.matchHistory !== undefined ? options.matchHistory : showMatchHistory;
+    const nextTab = options.tab !== undefined ? options.tab : tournamentTab;
+    const nextRound = options.round !== undefined ? options.round : tournamentViewRound;
+
+    const state = { 
+      step: nextStep, 
+      activeTournamentId: nextTournamentId, 
+      showMatchHistory: nextMatchHistory,
+      tournamentTab: nextTab,
+      tournamentViewRound: nextRound
+    };
+
+    if (options.replace) {
+      window.history.replaceState(state, '');
+    } else {
+      window.history.pushState(state, '');
+    }
+    
+    setStep(nextStep);
+    setActiveTournamentId(nextTournamentId || null);
+    setShowMatchHistory(nextMatchHistory || false);
+    setTournamentTab(nextTab);
+    setTournamentViewRound(nextRound);
+  };
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      setStep('HOME');
+      setActiveTournamentId(null);
+      setShowMatchHistory(false);
+    }
+  };
+
   // --- Helper to get player/team name ---
   const getPlayerName = (id: string | undefined) => {
     if (!id || id.startsWith('TBD')) return 'A Definir';
@@ -433,36 +478,30 @@ export default function PingProApp() {
     const handlePopState = (event: PopStateEvent) => {
       if (event.state) {
         if (event.state.step) setStep(event.state.step);
-        // We use undefined check because null is a valid value for activeTournamentId
-        if ('activeTournamentId' in event.state) {
-          setActiveTournamentId(event.state.activeTournamentId);
-        }
-        if ('showMatchHistory' in event.state) {
-          setShowMatchHistory(event.state.showMatchHistory);
-        }
+        setActiveTournamentId(event.state.activeTournamentId ?? null);
+        setShowMatchHistory(event.state.showMatchHistory ?? false);
+        setTournamentToDelete(event.state.tournamentToDelete ?? null);
+        setShowUpgradeModal(event.state.showUpgradeModal ?? false);
+        setShowLimitPopup(event.state.showLimitPopup ?? false);
+        setCourtWarning(event.state.courtWarning ?? null);
+        if (event.state.tournamentTab) setTournamentTab(event.state.tournamentTab);
+        setTournamentViewRound(event.state.tournamentViewRound ?? null);
       } else {
         setStep('HOME');
         setActiveTournamentId(null);
         setShowMatchHistory(false);
+        setTournamentToDelete(null);
+        setShowUpgradeModal(false);
+        setShowLimitPopup(false);
+        setCourtWarning(null);
+        setTournamentTab('MATCHES');
+        setTournamentViewRound(null);
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-
-  // Sync step, activeTournamentId and showMatchHistory with history
-  React.useEffect(() => {
-    const currentState = window.history.state;
-    const hasChanged = 
-      currentState?.step !== step || 
-      currentState?.activeTournamentId !== activeTournamentId ||
-      currentState?.showMatchHistory !== showMatchHistory;
-    
-    if (hasChanged) {
-      window.history.pushState({ step, activeTournamentId, showMatchHistory }, '');
-    }
-  }, [step, activeTournamentId, showMatchHistory]);
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId);
 
@@ -544,7 +583,7 @@ export default function PingProApp() {
       return;
     }
     setTournamentName('');
-    setStep('TOURNAMENT_NAME');
+    navigateTo('TOURNAMENT_NAME');
   };
 
   const handleNameConfirm = () => {
@@ -553,15 +592,15 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    setStep('PLAYER_COUNT');
+    navigateTo('PLAYER_COUNT');
   };
 
   const handleFormatConfirm = (format: TournamentFormat) => {
     setTournamentFormat(format);
     if (format === 'GROUPS_MATA_MATA' || format === 'GROUPS') {
-      setStep('GROUP_CONFIG');
+      navigateTo('GROUP_CONFIG');
     } else {
-      setStep('MATCH_FORMAT');
+      navigateTo('MATCH_FORMAT');
     }
   };
 
@@ -575,12 +614,12 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    setStep('FORMAT_SELECTION');
+    navigateTo('FORMAT_SELECTION');
   };
 
   const handleMatchFormatConfirm = (format: MatchFormat) => {
     setMatchFormat(format);
-    setStep('RANKING_CRITERIA');
+    navigateTo('RANKING_CRITERIA');
   };
 
   const handleRegistrationTypeConfirm = (type: TeamRegistrationType) => {
@@ -599,7 +638,7 @@ export default function PingProApp() {
       name: ''
     }));
     setPlayers(initialPlayers);
-    setStep('ATHLETE_REGISTRATION');
+    navigateTo('ATHLETE_REGISTRATION');
   };
 
   const handleAthletesConfirm = async () => {
@@ -619,7 +658,7 @@ export default function PingProApp() {
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     
     if (tournamentFormat === 'GROUPS_MATA_MATA' || tournamentFormat === 'GROUPS') {
-      setStep('DRAWING');
+      navigateTo('DRAWING');
       setIsDrawing(true);
       
       setTimeout(() => {
@@ -642,13 +681,13 @@ export default function PingProApp() {
         const groupsCount = Math.ceil(teamsToGroup.length / teamsPerGroup);
         const { groups } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
         setDrawnGroups(groups);
-        setStep('GROUPS_DISPLAY');
+        navigateTo('GROUPS_DISPLAY');
       }, 2000);
       return;
     }
 
     if (isIndividual) {
-      setStep('DRAWING');
+      navigateTo('DRAWING');
       setIsDrawing(true);
       
       setTimeout(async () => {
@@ -678,14 +717,13 @@ export default function PingProApp() {
         try {
           const tournamentData = cleanData({ ...newTournament, uid: user.uid });
           await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
-          setActiveTournamentId(tournamentId);
-          setStep('TOURNAMENT');
+          navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
         }
       }, 2000);
     } else if (registrationType === 'RANDOM_DRAW') {
-      setStep('DRAWING');
+      navigateTo('DRAWING');
       setIsDrawing(true);
       
       const shuffled = [...players].sort(() => Math.random() - 0.5);
@@ -729,8 +767,7 @@ export default function PingProApp() {
         try {
           const tournamentData = cleanData({ ...newTournament, uid: user.uid });
           await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
-          setActiveTournamentId(tournamentId);
-          setStep('TOURNAMENT');
+          navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
         }
@@ -763,8 +800,7 @@ export default function PingProApp() {
       try {
         const tournamentData = cleanData({ ...newTournament, uid: user.uid });
         await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
-        setActiveTournamentId(tournamentId);
-        setStep('TOURNAMENT');
+        navigateTo('TOURNAMENT', { tournamentId, replace: true });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
       }
@@ -777,7 +813,7 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    setStep('TABLE_COUNT');
+    navigateTo('TABLE_COUNT');
   };
 
   const handleTableCountConfirm = () => {
@@ -790,7 +826,7 @@ export default function PingProApp() {
     const isGroupFormat = tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA';
     
     if (isGroupFormat) {
-      setStep('REGISTRATION_TYPE');
+      navigateTo('REGISTRATION_TYPE');
     } else {
       const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
       if (isIndividual) {
@@ -800,9 +836,9 @@ export default function PingProApp() {
           name: ''
         }));
         setPlayers(initialPlayers);
-        setStep('ATHLETE_REGISTRATION');
+        navigateTo('ATHLETE_REGISTRATION');
       } else {
-        setStep('REGISTRATION_TYPE');
+        navigateTo('REGISTRATION_TYPE');
       }
     }
   };
@@ -1018,7 +1054,7 @@ export default function PingProApp() {
     } else {
       try {
         await updateDoc(doc(db, 'tournaments', activeTournament.id), { isFinished: true });
-        setStep('FINISHED');
+        navigateTo('FINISHED');
         const confetti = (await import('canvas-confetti')).default;
         confetti({
           particleCount: 150,
@@ -1062,8 +1098,7 @@ export default function PingProApp() {
   };
 
   const resetApp = () => {
-    setStep('HOME');
-    setActiveTournamentId(null);
+    navigateTo('HOME', { tournamentId: null });
     setPlayers([]);
     setPlayerCount(8);
     setSelectedCourts([]);
@@ -1074,8 +1109,7 @@ export default function PingProApp() {
     try {
       await deleteDoc(doc(db, 'tournaments', id));
       if (activeTournamentId === id) {
-        setActiveTournamentId(null);
-        setStep('HOME');
+        navigateTo('HOME', { tournamentId: null });
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `tournaments/${id}`);
@@ -1274,7 +1308,7 @@ export default function PingProApp() {
                       if (tournaments.length >= 4) {
                         setShowLimitPopup(true);
                       } else {
-                        setStep('TOURNAMENT_NAME');
+                        navigateTo('TOURNAMENT_NAME');
                       }
                     }}
                     className="btn-hero-neon group h-20"
@@ -1321,7 +1355,7 @@ export default function PingProApp() {
                     </div>
                     {tournaments.length > 0 && (
                       <button 
-                        onClick={() => setStep('TOURNAMENTS_LIST')}
+                        onClick={() => navigateTo('TOURNAMENTS_LIST')}
                         className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/5 px-4 py-2 rounded-full border border-primary/10 hover:bg-primary/10 transition-colors"
                       >
                         Ver Todos
@@ -1342,10 +1376,7 @@ export default function PingProApp() {
                             key={t.id}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => {
-                              setActiveTournamentId(t.id);
-                              setTournamentTab('MATCHES');
-                              setTournamentViewRound(null);
-                              setStep(t.isFinished ? 'FINISHED' : 'TOURNAMENT');
+                              navigateTo(t.isFinished ? 'FINISHED' : 'TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
                             }}
                             className="bg-white rounded-[1.5rem] p-4 border border-surface-container shadow-sm hover:shadow-md hover:border-primary/20 transition-all group w-full text-left flex items-center justify-between gap-3"
                           >
@@ -1387,7 +1418,7 @@ export default function PingProApp() {
                         Comece criando um torneio incrível para sua arena agora mesmo.
                       </p>
                       <button 
-                        onClick={() => setStep('TOURNAMENT_NAME')}
+                        onClick={() => navigateTo('TOURNAMENT_NAME')}
                         className="btn-primary py-4 px-10 text-xs"
                       >
                         CRIAR PRIMEIRO TORNEIO
@@ -1443,7 +1474,7 @@ export default function PingProApp() {
 
                 <div className="flex gap-3 pt-4">
                   <button 
-                    onClick={() => setStep('HOME')}
+                    onClick={() => navigateTo('HOME', { tournamentId: null })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     CANCELAR
@@ -1495,7 +1526,7 @@ export default function PingProApp() {
 
                 <div className="w-full flex gap-3 pt-4">
                   <button 
-                    onClick={() => setStep('TOURNAMENT_NAME')}
+                    onClick={goBack}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1573,7 +1604,7 @@ export default function PingProApp() {
 
                 <div className="pt-4">
                   <button 
-                    onClick={() => setStep('PLAYER_COUNT')}
+                    onClick={goBack}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1686,13 +1717,13 @@ export default function PingProApp() {
 
                 <div className="flex gap-3 pt-6">
                   <button 
-                    onClick={() => setStep('TABLE_COUNT')}
+                    onClick={goBack}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
                   </button>
                   <button 
-                    onClick={() => setStep('PLAYOFF_CONFIG')}
+                    onClick={() => navigateTo('PLAYOFF_CONFIG')}
                     className="flex-1 py-4 bg-primary text-on-primary rounded-full font-black text-xs uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20"
                   >
                     AVANÇAR
@@ -1781,14 +1812,14 @@ export default function PingProApp() {
                 
                 <div className="flex gap-3 pt-6">
                   <button 
-                    onClick={() => setStep('GROUP_CONFIG')}
+                    onClick={goBack}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
                   </button>
                   <button 
                     onClick={() => {
-                      setStep('MATCH_FORMAT');
+                      navigateTo('MATCH_FORMAT');
                     }}
                     className="flex-1 py-4 bg-primary text-on-primary rounded-full font-black text-xs uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20"
                   >
@@ -1833,7 +1864,7 @@ export default function PingProApp() {
 
                 <div className="pt-6">
                   <button 
-                    onClick={() => setStep('FORMAT_SELECTION')}
+                    onClick={goBack}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1897,7 +1928,7 @@ export default function PingProApp() {
 
                 <div className="pt-6">
                   <button 
-                    onClick={() => setStep('TABLE_COUNT')}
+                    onClick={() => navigateTo('TABLE_COUNT')}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1988,7 +2019,7 @@ export default function PingProApp() {
               )}
               <div className="flex gap-3 pt-4">
                 <button 
-                  onClick={() => setStep('REGISTRATION_TYPE')}
+                  onClick={goBack}
                   className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                 >
                   VOLTAR
@@ -2069,7 +2100,7 @@ export default function PingProApp() {
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button 
-                    onClick={() => setStep('ATHLETE_REGISTRATION')}
+                    onClick={() => navigateTo('ATHLETE_REGISTRATION')}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     REFAZER
@@ -2115,8 +2146,7 @@ export default function PingProApp() {
                       try {
                         const tournamentData = cleanData({ ...newTournament, uid: user.uid });
                         await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
-                        setActiveTournamentId(tournamentId);
-                        setStep('TOURNAMENT');
+                        navigateTo('TOURNAMENT', { tournamentId, replace: true });
                       } catch (err) {
                         handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
                       }
@@ -2192,7 +2222,7 @@ export default function PingProApp() {
 
                 <div className="pt-6 flex gap-3">
                   <button 
-                    onClick={() => setStep('MATCH_FORMAT')}
+                    onClick={goBack}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -2254,7 +2284,7 @@ export default function PingProApp() {
 
                 <div className="w-full flex gap-3 pt-4">
                   <button 
-                    onClick={() => setStep('RANKING_CRITERIA')}
+                    onClick={goBack}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -2350,7 +2380,7 @@ export default function PingProApp() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => setStep('HOME')}
+                      onClick={goBack}
                       className="p-2 -ml-2 text-on-surface-variant/40 hover:text-primary transition-colors flex items-center gap-1 group"
                     >
                       <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
@@ -2394,7 +2424,7 @@ export default function PingProApp() {
               {/* Navigation Tabs - Compact */}
               <div className="flex gap-2 p-1 bg-surface-container-low rounded-full max-w-xs mx-auto">
                 <button 
-                  onClick={() => setTournamentTab('MATCHES')}
+                  onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES' })}
                   className={cn(
                     "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
                     tournamentTab === 'MATCHES' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
@@ -2403,7 +2433,7 @@ export default function PingProApp() {
                   Partidas
                 </button>
                 <button 
-                  onClick={() => setTournamentTab('RANKING')}
+                  onClick={() => navigateTo('TOURNAMENT', { tab: 'RANKING' })}
                   className={cn(
                     "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
                     tournamentTab === 'RANKING' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
@@ -2412,7 +2442,7 @@ export default function PingProApp() {
                   Ranking
                 </button>
                 <button 
-                  onClick={() => setTournamentTab('ROUNDS')}
+                  onClick={() => navigateTo('TOURNAMENT', { tab: 'ROUNDS' })}
                   className={cn(
                     "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
                     tournamentTab === 'ROUNDS' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
@@ -2565,7 +2595,14 @@ export default function PingProApp() {
                         <>
                           {currentViewRound === activeTournament.currentRound && allPlayedInView && (
                             <button 
-                              onClick={nextRound}
+                              onClick={() => {
+                                const availableRounds = Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b);
+                                const currentIndex = availableRounds.indexOf(activeTournament.currentRound);
+                                const nextRoundNum = currentIndex !== -1 && currentIndex < availableRounds.length - 1 ? availableRounds[currentIndex + 1] : activeTournament.currentRound;
+                                
+                                nextRound();
+                                navigateTo('TOURNAMENT', { round: nextRoundNum });
+                              }}
                               className="btn-primary w-full shadow-xl shadow-primary/20 flex items-center justify-center gap-3 py-6"
                             >
                               <span className="text-xs font-black uppercase tracking-widest">
@@ -2577,7 +2614,14 @@ export default function PingProApp() {
                           
                           {currentViewRound > Math.min(...activeTournament.matches.map(m => m.round)) && (
                             <button 
-                              onClick={prevRound}
+                              onClick={() => {
+                                const availableRounds = Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b);
+                                const currentIndex = availableRounds.indexOf(activeTournament.currentRound);
+                                const prevRoundNum = currentIndex > 0 ? availableRounds[currentIndex - 1] : activeTournament.currentRound;
+
+                                prevRound();
+                                navigateTo('TOURNAMENT', { round: prevRoundNum });
+                              }}
                               className="btn-outline w-full hover:bg-surface-container py-4 flex items-center justify-center gap-3"
                             >
                               <ChevronLeft size={16} className="text-on-surface-variant/40" />
@@ -2907,7 +2951,6 @@ export default function PingProApp() {
                 <button 
                   onClick={() => {
                     deleteTournament(activeTournament.id);
-                    setStep('HOME');
                   }}
                   className="w-full py-5 bg-primary text-on-primary rounded-full font-black text-sm uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-3"
                 >
@@ -3060,10 +3103,7 @@ export default function PingProApp() {
                               <div className="flex gap-2 mb-2">
                                 <button 
                                   onClick={() => {
-                                    setActiveTournamentId(t.id);
-                                    setTournamentTab('MATCHES');
-                                    setTournamentViewRound(null);
-                                    setStep('TOURNAMENT');
+                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
                                   }}
                                   className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
                                 >
@@ -3072,10 +3112,7 @@ export default function PingProApp() {
                                 </button>
                                 <button 
                                   onClick={() => {
-                                    setActiveTournamentId(t.id);
-                                    setTournamentTab('ROUNDS');
-                                    setTournamentViewRound(null);
-                                    setStep('TOURNAMENT');
+                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'ROUNDS', round: null });
                                   }}
                                   className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
                                 >
@@ -3084,10 +3121,7 @@ export default function PingProApp() {
                                 </button>
                                 <button 
                                   onClick={() => {
-                                    setActiveTournamentId(t.id);
-                                    setTournamentTab('RANKING');
-                                    setTournamentViewRound(null);
-                                    setStep('TOURNAMENT');
+                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'RANKING', round: null });
                                   }}
                                   className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
                                 >
@@ -3097,10 +3131,7 @@ export default function PingProApp() {
                               </div>
                               <button 
                                 onClick={() => {
-                                  setActiveTournamentId(t.id);
-                                  setTournamentTab('MATCHES');
-                                  setTournamentViewRound(null);
-                                  setStep(t.isFinished ? 'FINISHED' : 'TOURNAMENT');
+                                  navigateTo(t.isFinished ? 'FINISHED' : 'TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
                                 }}
                                 className="w-full py-3 border-2 border-black rounded-full font-black text-[10px] text-black hover:bg-black/5 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
                               >
@@ -3263,7 +3294,7 @@ export default function PingProApp() {
 
     <BottomNav 
       activeStep={step} 
-      setStep={setStep} 
+      setStep={navigateTo} 
       isVisible={!isKeyboardVisible && user !== null} 
       resetApp={resetApp}
     />
