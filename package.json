@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && rm -rf dist && mv out dist",
-    "lint": "eslint .",
+    "build": "rm -rf .next out dist && next build && cp -r out dist",
+    "lint": "eslint . --ignore-pattern out --ignore-pattern dist",
     "clean": "rm -rf .next dist out"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
     "firebase": "^11.3.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.454.0",
+    "motion": "^12.38.0",
     "next": "14.2.23",
     "postcss": "^8.5.6",
     "react": "18.2.0",
