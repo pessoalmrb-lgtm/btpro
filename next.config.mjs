@@ -6,9 +6,6 @@ const nextConfig = {
     unoptimized: true,
   },
   trailingSlash: true,
-  experimental: {
-    esmExternals: 'loose',
-  },
   transpilePackages: ['lucide-react', 'framer-motion', 'canvas-confetti'],
 };
 
