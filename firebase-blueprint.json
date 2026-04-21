@@ -60,6 +60,8 @@
         "matchFormat": { "type": "string" },
         "registrationType": { "type": "string" },
         "rankingCriteria": { "type": "array", "items": { "type": "string" } },
+        "teamsPerGroup": { "type": "number" },
+        "playoffRounds": { "type": "array", "items": { "type": "string" } },
         "isFinished": { "type": "boolean" },
         "createdAt": { "type": "number" }
       },

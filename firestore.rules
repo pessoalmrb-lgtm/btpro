@@ -26,52 +26,68 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // ===============================================================
     // Helper Functions
     // ===============================================================
     
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.uid;
+      return isSignedIn() && request.auth.uid == resource.data.uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "pamonhashouse@gmail.com" && request.auth.token.email_verified == true));
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "pamonhashouse@gmail.com" && request.auth.token.email_verified == true)
+      );
     }
 
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
+    // Validation Blueprint for Tournament
     function isValidTournament(data) {
-      return hasRequiredFields(['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt']) &&
-             hasOnlyAllowedFields(['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt']) &&
+      let requiredFields = ['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt'];
+      let optionalFields = ['teamsPerGroup', 'playoffRounds'];
+      
+      return data.keys().hasAll(requiredFields) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.uid is string &&
              data.players is list && data.players.size() <= 100 &&
-             data.matches is list && data.matches.size() <= 500 &&
+             data.matches is list && data.matches.size() <= 1000 &&
              data.currentRound is int &&
              data.totalRounds is int &&
-             data.tables is list && data.tables.size() <= 20 &&
+             data.tables is list && data.tables.size() <= 50 &&
              data.format is string &&
              data.matchFormat is string &&
              data.registrationType is string &&
              data.rankingCriteria is list && data.rankingCriteria.size() <= 10 &&
              data.isFinished is bool &&
-             data.createdAt is int;
+             data.createdAt is int &&
+             (!data.keys().contains('teamsPerGroup') || data.teamsPerGroup is int) &&
+             (!data.keys().contains('playoffRounds') || data.playoffRounds is list);
     }
 
     // ===============================================================
@@ -79,32 +95,35 @@ service cloud.firestore {
     // ===============================================================
 
     match /tournaments/{tournamentId} {
-      allow read: if isDocOwner();
+      allow read: if isDocOwner() || isAdmin();
       
-      allow create: if isAuthenticated() && 
-                      isValidTournament(request.resource.data) && 
-                      request.resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && 
+                      isValidId(tournamentId) &&
+                      isValidTournament(incoming()) && 
+                      incoming().uid == request.auth.uid &&
+                      incoming().createdAt == request.time.toMillis();
       
-      allow update: if isDocOwner() && 
-                      isValidTournament(request.resource.data) && 
-                      request.resource.data.uid == resource.data.uid &&
-                      request.resource.data.createdAt == resource.data.createdAt;
+      allow update: if (isDocOwner() || isAdmin()) && 
+                      isValidTournament(incoming()) && 
+                      incoming().uid == existing().uid &&
+                      incoming().createdAt == existing().createdAt;
       
-      allow delete: if isDocOwner();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
+      
       allow create: if isOwner(userId) && 
-                      hasRequiredFields(['uid', 'email', 'isPremium']) &&
-                      request.resource.data.isPremium == false;
-      allow update: if isOwner(userId) && 
-                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email']) || isAdmin());
-    }
-
-    // Default deny
-    match /{path=**} {
-      allow read, write: if false;
+                      isValidId(userId) &&
+                      incoming().keys().hasAll(['uid', 'email', 'isPremium']) &&
+                      incoming().uid == request.auth.uid &&
+                      incoming().isPremium == false;
+                      
+      allow update: if isOwner(userId) && (
+        // Only allow updating email by self, or anything by admin
+        incoming().diff(existing()).affectedKeys().hasOnly(['email']) || isAdmin()
+      );
     }
   }
 }

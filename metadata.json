@@ -1,5 +1,1 @@
-{
-  "name": "BeachPró",
-  "description": "Aplicativo moderno e intuitivo para gerenciamento de torneios de Beach Tennis, com suporte a sistemas de grupos e todos-contra-todos.",
-  "requestFramePermissions": []
-}
+{"name":"BeachPro","description":"Aplicativo moderno e intuitivo para gerenciamento de torneios de Beach Tennis, com suporte a sistemas de grupos e todos-contra-todos.","requestFramePermissions":[]}

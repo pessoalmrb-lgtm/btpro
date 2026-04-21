@@ -54,7 +54,7 @@ export type MatchFormat =
 
 export type TeamRegistrationType = 'RANDOM_DRAW' | 'DEFINED_TEAMS';
 
-export type RankingCriterion = 'WINS' | 'GAME_BALANCE' | 'HEAD_TO_HEAD' | 'GAMES_WON';
+export type RankingCriterion = 'WINS' | 'GAME_BALANCE' | 'HEAD_TO_HEAD' | 'GAMES_WON' | 'SET_BALANCE';
 
 export type PlayoffRound = 'ROUND_OF_16' | 'QUARTER_FINALS' | 'SEMI_FINALS' | 'FINAL';
 
@@ -62,6 +62,7 @@ export type TournamentState = {
   id: string;
   name: string;
   players: Player[];
+  athleteCount: number;
   matches: Match[];
   currentRound: number;
   totalRounds: number;
@@ -93,4 +94,6 @@ export type AppStep =
   | 'TOURNAMENT' 
   | 'FINISHED'
   | 'ALL_ROUNDS'
-  | 'DASHBOARD';
+  | 'DASHBOARD'
+  | 'PROFILE'
+  | 'TOURNAMENTS_LIST';

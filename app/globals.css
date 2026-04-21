@@ -1,51 +1,156 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-sans);
-  --font-display: var(--font-display);
-  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   
-  --color-primary: #0f172a; /* Navy Blue */
-  --color-secondary: #000000; /* Black */
-  --color-accent: #bef264; /* Lime Green */
+  --color-primary: #005f99;
+  --color-primary-dim: #004a77;
+  --color-primary-container: #e1f5fe;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #001d33;
+  
+  --color-secondary: #e2ff00;
+  --color-secondary-dim: #c5de00;
+  --color-secondary-container: #f4ffcc;
+  --color-on-secondary: #000000;
+  
+  --color-accent: #e2ff00;
+
+  --color-tertiary: #cafd00;
+  --color-tertiary-dim: #b8e600;
+  --color-tertiary-container: #f4ffcc;
+  --color-on-tertiary: #000000;
+  --color-on-tertiary-container: #263300;
+  
   --color-surface: #ffffff;
-  --color-background: #f8fafc;
-  --color-error: #ef4444;
+  --color-surface-dim: #f0f3f5;
+  --color-surface-bright: #ffffff;
+  --color-on-surface: #001d33;
+  --color-on-surface-variant: #42474e;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f8f9fa;
+  --color-surface-container: #f0f3f5;
+  --color-surface-container-high: #e9ecef;
+  --color-surface-container-highest: #dee2e6;
+  
+  --color-outline: #757778;
+  --color-outline-variant: #abadae;
+  
+  --color-error: #b31b25;
+  --color-error-container: #fb5151;
+  --color-on-error: #ffefee;
+  --color-on-error-container: #570008;
+  
+  --radius-lg: 2.5rem;
+  --radius-xl: 4rem;
 }
 
 @layer base {
   body {
-    @apply font-sans bg-background text-secondary selection:bg-primary/30;
-    background-image: 
-      radial-gradient(circle at 2px 2px, rgba(15, 23, 42, 0.02) 1px, transparent 0);
-    background-size: 32px 32px;
-    /* Prevent layout shift when keyboard opens */
+    @apply font-sans bg-surface text-on-surface selection:bg-primary/30;
     min-height: -webkit-fill-available;
   }
-  html {
-    scroll-padding-top: 2rem;
-    scroll-padding-bottom: 50vh;
-    height: -webkit-fill-available;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-bold tracking-tight;
-  }
+}
+
+.arena-hero-bg {
+  background: linear-gradient(180deg, #006eb5 0%, #004a8c 40%, #003a6e 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.arena-hero-bg::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 300px;
+  height: 300px;
+  background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 10C110 50 150 60 190 70C150 80 110 90 100 130C90 90 50 80 10 70C50 60 90 50 100 10Z' fill='white' fill-opacity='0.1'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.15;
+  pointer-events: none;
+  animation: float 20s infinite linear;
+}
+
+@keyframes float {
+  from { transform: rotate(0deg) translate(20px) rotate(0deg); }
+  to { transform: rotate(360deg) translate(20px) rotate(-360deg); }
+}
+
+.brand-glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.5rem 1.5rem;
+  border-radius: 1rem;
+}
+
+.wave-container {
+  background: #f8fafc;
+  border-radius: 3.5rem 3.5rem 0 0;
+  margin-top: -3.5rem;
+  position: relative;
+  z-index: 10;
+  min-height: 65vh;
+  box-shadow: 0 -15px 40px -20px rgba(0, 0, 0, 0.15);
+}
+
+.brand-text {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+}
+
+.btn-hero-neon {
+  @apply w-full flex items-center justify-between p-2 rounded-full transition-all duration-300;
+  background: linear-gradient(135deg, #e2ff00 0%, #c5de00 100%);
+  box-shadow: 0 15px 30px -10px rgba(226, 255, 0, 0.4);
+}
+
+.btn-hero-neon:active {
+  @apply scale-[0.97];
+  box-shadow: 0 5px 15px -5px rgba(226, 255, 0, 0.3);
+}
+
+.btn-hero-glass {
+  @apply w-full flex items-center justify-between p-2 rounded-full transition-all duration-300 border border-primary/10;
+  background: linear-gradient(135deg, rgba(231, 245, 255, 0.5) 0%, rgba(204, 233, 255, 0.3) 100%);
+  backdrop-filter: blur(10px);
+}
+
+.btn-hero-glass:active {
+  @apply scale-[0.97] bg-primary/5;
+}
+
+.bottom-nav-glass {
+  @apply bg-white/90 backdrop-blur-md border border-surface-container shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.08)];
+}
+
+.kinetic-gradient {
+  background: linear-gradient(135deg, #005f99 0%, #005387 100%);
 }
 
 .glass-card {
-  @apply bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden;
+  @apply bg-surface-container-lowest border border-surface-container-highest/50 shadow-sm rounded-xl overflow-hidden;
 }
 
 .btn-primary {
-  @apply relative overflow-hidden bg-primary text-white px-4 md:px-8 py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg shadow-md hover:bg-primary/90 hover:-translate-y-0.5 transition-all active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+  background: linear-gradient(135deg, #005f99 0%, #005387 100%);
+  @apply text-on-primary py-4 px-8 rounded-full font-black font-display tracking-wide uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all duration-200 flex items-center justify-center;
 }
 
 .btn-outline {
-  @apply border-2 border-slate-200 text-slate-600 px-4 md:px-8 py-3 md:py-4 rounded-2xl font-bold text-base md:text-lg hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center;
+  @apply bg-surface-container-low hover:bg-surface-container-high text-on-surface py-4 px-8 rounded-full font-bold font-display flex items-center justify-center gap-3 transition-all active:scale-95;
 }
 
 .input-field {
-  @apply w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50/50 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 outline-none transition-all font-medium;
+  @apply w-full px-6 py-4 rounded-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary-container text-on-surface placeholder:text-outline-variant font-medium transition-all outline-none;
 }
 
 .score-display {
