@@ -208,31 +208,45 @@ export function generateGroupStage(
 export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: number[], selectedRounds: PlayoffRound[]): Match[] {
   const matches: Match[] = [];
   const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-  
-  // Filter and sort rounds to follow the order
   const rounds = roundsOrder.filter(r => selectedRounds.includes(r));
   
-  // Start with the first round in the selection
+  const numRounds = rounds.length;
+  if (numRounds === 0) return [];
+
+  // Determine starting teams (if any)
   let currentTeams = [...qualifiedTeams];
   
+  // Create all matches for all rounds
   rounds.forEach((roundType, roundIdx) => {
-    const numMatches = Math.pow(2, rounds.length - 1 - roundIdx);
+    // numMatches is (initial slots) / 2^(roundIdx + 1)
+    // Wait, the bracket size is determined by the FIRST round.
+    const firstRoundSize = Math.pow(2, numRounds);
+    const numMatches = Math.pow(2, numRounds - 1 - roundIdx);
+    
     for (let i = 0; i < numMatches; i++) {
-      const p1 = currentTeams[i * 2] || { id: `TBD-${roundType}-${i}-1`, name: 'A Definir' };
-      const p2 = currentTeams[i * 2 + 1] || { id: `TBD-${roundType}-${i}-2`, name: 'A Definir' };
+      let p1Id = `TBD-${roundType}-${i}-1`;
+      let p2Id = `TBD-${roundType}-${i}-2`;
+
+      // If it's the first round and we have qualified teams, place them
+      if (roundIdx === 0 && currentTeams.length > 0) {
+        const team1 = currentTeams[i * 2];
+        const team2 = currentTeams[i * 2 + 1];
+        if (team1) p1Id = team1.id;
+        if (team2) p2Id = team2.id;
+      }
       
       const courtIndex = i % selectedCourts.length;
       const table = selectedCourts[courtIndex];
       
       matches.push({
         id: `playoff-${roundType}-${i}`,
-        player1Id: p1.id,
-        player2Id: p2.id,
+        player1Id: p1Id,
+        player2Id: p2Id,
         table,
         sets: [],
         currentSet: { player1: 0, player2: 0 },
         isCompleted: false,
-        round: 100 + roundsOrder.indexOf(roundType) // Use fixed index from roundsOrder for consistent labeling
+        round: 100 + roundsOrder.indexOf(roundType)
       });
     }
   });
