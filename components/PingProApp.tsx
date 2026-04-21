@@ -592,15 +592,15 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    navigateTo('PLAYER_COUNT');
+    navigateTo('PLAYER_COUNT', { replace: true });
   };
 
   const handleFormatConfirm = (format: TournamentFormat) => {
     setTournamentFormat(format);
     if (format === 'GROUPS_MATA_MATA' || format === 'GROUPS') {
-      navigateTo('GROUP_CONFIG');
+      navigateTo('GROUP_CONFIG', { replace: true });
     } else {
-      navigateTo('MATCH_FORMAT');
+      navigateTo('MATCH_FORMAT', { replace: true });
     }
   };
 
@@ -614,12 +614,12 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    navigateTo('FORMAT_SELECTION');
+    navigateTo('FORMAT_SELECTION', { replace: true });
   };
 
   const handleMatchFormatConfirm = (format: MatchFormat) => {
     setMatchFormat(format);
-    navigateTo('RANKING_CRITERIA');
+    navigateTo('RANKING_CRITERIA', { replace: true });
   };
 
   const handleRegistrationTypeConfirm = (type: TeamRegistrationType) => {
@@ -638,7 +638,7 @@ export default function PingProApp() {
       name: ''
     }));
     setPlayers(initialPlayers);
-    navigateTo('ATHLETE_REGISTRATION');
+    navigateTo('ATHLETE_REGISTRATION', { replace: true });
   };
 
   const handleAthletesConfirm = async () => {
@@ -658,7 +658,7 @@ export default function PingProApp() {
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     
     if (tournamentFormat === 'GROUPS_MATA_MATA' || tournamentFormat === 'GROUPS') {
-      navigateTo('DRAWING');
+      navigateTo('DRAWING', { replace: true });
       setIsDrawing(true);
       
       setTimeout(() => {
@@ -681,13 +681,13 @@ export default function PingProApp() {
         const groupsCount = Math.ceil(teamsToGroup.length / teamsPerGroup);
         const { groups } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
         setDrawnGroups(groups);
-        navigateTo('GROUPS_DISPLAY');
+        navigateTo('GROUPS_DISPLAY', { replace: true });
       }, 2000);
       return;
     }
 
     if (isIndividual) {
-      navigateTo('DRAWING');
+      navigateTo('DRAWING', { replace: true });
       setIsDrawing(true);
       
       setTimeout(async () => {
@@ -723,7 +723,7 @@ export default function PingProApp() {
         }
       }, 2000);
     } else if (registrationType === 'RANDOM_DRAW') {
-      navigateTo('DRAWING');
+      navigateTo('DRAWING', { replace: true });
       setIsDrawing(true);
       
       const shuffled = [...players].sort(() => Math.random() - 0.5);
@@ -813,7 +813,7 @@ export default function PingProApp() {
       return;
     }
     setError(null);
-    navigateTo('TABLE_COUNT');
+    navigateTo('TABLE_COUNT', { replace: true });
   };
 
   const handleTableCountConfirm = () => {
@@ -826,7 +826,7 @@ export default function PingProApp() {
     const isGroupFormat = tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA';
     
     if (isGroupFormat) {
-      navigateTo('REGISTRATION_TYPE');
+      navigateTo('REGISTRATION_TYPE', { replace: true });
     } else {
       const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
       if (isIndividual) {
@@ -836,9 +836,9 @@ export default function PingProApp() {
           name: ''
         }));
         setPlayers(initialPlayers);
-        navigateTo('ATHLETE_REGISTRATION');
+        navigateTo('ATHLETE_REGISTRATION', { replace: true });
       } else {
-        navigateTo('REGISTRATION_TYPE');
+        navigateTo('REGISTRATION_TYPE', { replace: true });
       }
     }
   };
@@ -1526,7 +1526,7 @@ export default function PingProApp() {
 
                 <div className="w-full flex gap-3 pt-4">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('TOURNAMENT_NAME', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1604,7 +1604,7 @@ export default function PingProApp() {
 
                 <div className="pt-4">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('PLAYER_COUNT', { replace: true })}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1717,13 +1717,13 @@ export default function PingProApp() {
 
                 <div className="flex gap-3 pt-6">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('FORMAT_SELECTION', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
                   </button>
                   <button 
-                    onClick={() => navigateTo('PLAYOFF_CONFIG')}
+                    onClick={() => navigateTo('PLAYOFF_CONFIG', { replace: true })}
                     className="flex-1 py-4 bg-primary text-on-primary rounded-full font-black text-xs uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20"
                   >
                     AVANÇAR
@@ -1812,14 +1812,14 @@ export default function PingProApp() {
                 
                 <div className="flex gap-3 pt-6">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('GROUP_CONFIG', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
                   </button>
                   <button 
                     onClick={() => {
-                      navigateTo('MATCH_FORMAT');
+                      navigateTo('MATCH_FORMAT', { replace: true });
                     }}
                     className="flex-1 py-4 bg-primary text-on-primary rounded-full font-black text-xs uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20"
                   >
@@ -1864,7 +1864,7 @@ export default function PingProApp() {
 
                 <div className="pt-6">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('FORMAT_SELECTION', { replace: true })}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -1928,7 +1928,7 @@ export default function PingProApp() {
 
                 <div className="pt-6">
                   <button 
-                    onClick={() => navigateTo('TABLE_COUNT')}
+                    onClick={() => navigateTo('TABLE_COUNT', { replace: true })}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -2019,7 +2019,7 @@ export default function PingProApp() {
               )}
               <div className="flex gap-3 pt-4">
                 <button 
-                  onClick={goBack}
+                  onClick={() => navigateTo('REGISTRATION_TYPE', { replace: true })}
                   className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                 >
                   VOLTAR
@@ -2100,7 +2100,7 @@ export default function PingProApp() {
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button 
-                    onClick={() => navigateTo('ATHLETE_REGISTRATION')}
+                    onClick={() => navigateTo('ATHLETE_REGISTRATION', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     REFAZER
@@ -2222,7 +2222,7 @@ export default function PingProApp() {
 
                 <div className="pt-6 flex gap-3">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('MATCH_FORMAT', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -2284,7 +2284,7 @@ export default function PingProApp() {
 
                 <div className="w-full flex gap-3 pt-4">
                   <button 
-                    onClick={goBack}
+                    onClick={() => navigateTo('RANKING_CRITERIA', { replace: true })}
                     className="flex-1 py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
                   >
                     VOLTAR
@@ -2380,7 +2380,7 @@ export default function PingProApp() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={goBack}
+                      onClick={() => navigateTo('HOME', { tournamentId: null })}
                       className="p-2 -ml-2 text-on-surface-variant/40 hover:text-primary transition-colors flex items-center gap-1 group"
                     >
                       <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
