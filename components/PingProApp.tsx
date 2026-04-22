@@ -2332,10 +2332,10 @@ export default function PingProApp() {
                 </div>
 
                 {/* Tournament Hero Card */}
-                <div className="arena-hero-bg rounded-[3.5rem] p-6 sm:p-8 min-h-[300px] flex flex-col justify-between shadow-2xl mb-4 relative overflow-hidden group transition-all duration-500 hover:shadow-primary/40">
+                <div className="arena-hero-bg rounded-[3rem] p-4 sm:p-6 min-h-[160px] flex flex-col justify-between shadow-2xl mb-4 relative overflow-hidden group transition-all duration-500 hover:shadow-primary/40">
                   {/* Illustrations (Simplified) */}
-                  <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden rounded-[3.5rem]">
-                    <div className="absolute bottom-0 right-0 w-64 h-64 -mr-16 -mb-16">
+                  <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden rounded-[3rem]">
+                    <div className="absolute bottom-0 right-0 w-48 h-48 -mr-12 -mb-12">
                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-white">
                          <path d="M160 180L160 100M120 180L120 100M120 110H160" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                          <circle cx="140" cy="80" r="15" stroke="currentColor" strokeWidth="2" />
@@ -2345,9 +2345,9 @@ export default function PingProApp() {
                   </div>
 
                   <div className="flex justify-between items-start relative z-10 w-full gap-4">
-                    <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 shrink-0">
-                       <Sparkles size={14} className="text-secondary" />
-                       <span className="text-[10px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
+                    <div className="bg-white/10 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 shrink-0">
+                       <Sparkles size={12} className="text-secondary" />
+                       <span className="text-[9px] font-black text-white uppercase tracking-widest truncate max-w-[100px]">
                          {(() => {
                             const formats: { [key: string]: string } = {
                               'REI_DA_QUADRA': 'REI DA QUADRA',
@@ -2369,27 +2369,27 @@ export default function PingProApp() {
 
                     <button 
                       onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="group flex items-center gap-1.5 border border-red-500/20 bg-black/10 backdrop-blur-md px-3 py-1.5 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm shrink-0"
+                      className="group flex items-center gap-1.5 border border-red-500/20 bg-black/10 backdrop-blur-md px-2.5 py-1 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm shrink-0"
                     >
-                      <X size={12} className="bg-red-500 text-white rounded-full p-0.5" />
-                      <span className="text-[9px] font-black uppercase tracking-widest">Encerrar</span>
+                      <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
+                      <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
                     </button>
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-center relative z-10 py-6">
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-black text-white italic tracking-tighter uppercase leading-tight drop-shadow-md break-words max-w-full">
+                  <div className="flex-1 flex flex-col justify-center relative z-10 py-1">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-black text-white italic tracking-tighter uppercase leading-tight drop-shadow-md break-words max-w-full">
                       {activeTournament.name}
                     </h1>
                   </div>
 
                   <div className="flex items-center relative z-10">
-                    <div className="bg-white/5 backdrop-blur-md border border-white/10 p-1 rounded-full flex items-center shadow-xl">
-                      <div className="bg-primary/30 px-4 py-2 rounded-full flex items-center gap-2.5 border border-white/5">
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 p-0.5 rounded-full flex items-center shadow-xl">
+                      <div className="bg-primary/30 px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/5">
                         <div className="relative">
-                          <History size={14} className="text-secondary" />
-                          <div className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                          <History size={12} className="text-secondary" />
+                          <div className="absolute -top-1 -right-1 w-1 h-1 bg-red-500 rounded-full animate-pulse" />
                         </div>
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                        <span className="text-[9px] font-black text-white uppercase tracking-widest">
                           {activeTournament.currentRound >= 100 ? (
                             (() => {
                               const types: { [key: number]: string } = {
@@ -2407,8 +2407,8 @@ export default function PingProApp() {
                       </div>
                       
                       {activeTournament.currentRound < 100 && (
-                        <div className="px-4">
-                          <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">
+                        <div className="px-3">
+                          <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">
                             DE <span className="text-white/60">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
                           </span>
                         </div>
