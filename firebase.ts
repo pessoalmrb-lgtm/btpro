@@ -1,7 +1,7 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer } from 'firebase/firestore';
 import { firebaseConfig } from './firebase-applet-config';
 
@@ -20,20 +20,17 @@ export const db = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(),
 
 export const googleProvider = typeof window !== 'undefined' ? new GoogleAuthProvider() : null as any;
 
-// Test connection
-async function testConnection() {
+// Test connection helper
+export async function testConnection() {
   if (typeof window === 'undefined') return;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const dbInstance = getFirestore(getFirebaseApp(), firebaseConfig.firestoreDatabaseId);
+    await getDocFromServer(doc(dbInstance, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration.");
     }
   }
-}
-
-if (typeof window !== 'undefined') {
-  testConnection();
 }
 
 export const OperationType = {
@@ -113,6 +110,11 @@ export {
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
+  updateProfile,
+  updateEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   collection, 
   query, 
   where, 

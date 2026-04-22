@@ -1,11 +1,33 @@
+import React from 'react';
+
 export default function NotFound() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4 font-sans text-center">
-      <h1 className="text-6xl font-black text-primary mb-2 italic tracking-tighter">404</h1>
-      <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mb-8">Página não encontrada</p>
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      padding: '1rem', 
+      backgroundColor: '#f8fafc', 
+      textAlign: 'center', 
+      fontFamily: 'sans-serif' 
+    }}>
+      <h1 style={{ fontSize: '4rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>404</h1>
+      <p style={{ color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem', marginBottom: '2rem' }}>Página não encontrada</p>
       <a 
         href="/" 
-        className="px-8 py-4 bg-primary text-on-primary rounded-full font-black text-[10px] uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20"
+        style={{ 
+          padding: '1rem 2rem', 
+          backgroundColor: '#0f172a', 
+          color: 'white', 
+          borderRadius: '9999px', 
+          fontWeight: 900, 
+          fontSize: '0.75rem', 
+          textTransform: 'uppercase', 
+          letterSpacing: '0.1em', 
+          textDecoration: 'none' 
+        }}
       >
         Voltar ao início
       </a>

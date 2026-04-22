@@ -64,6 +64,8 @@ export type TournamentState = {
   players: Player[];
   athleteCount: number;
   matches: Match[];
+  matches_group_stage?: Match[];
+  matches_knockout_stage?: Match[];
   currentRound: number;
   totalRounds: number;
   tables: number[];
@@ -96,4 +98,5 @@ export type AppStep =
   | 'ALL_ROUNDS'
   | 'DASHBOARD'
   | 'PROFILE'
+  | 'EDIT_PROFILE'
   | 'TOURNAMENTS_LIST';

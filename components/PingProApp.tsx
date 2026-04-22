@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
   Minus, 
@@ -29,241 +29,26 @@ import {
   Lightbulb,
   ArrowRightLeft,
   Sparkles,
+  Camera,
+  Eye,
+  EyeOff,
   Trophy as TrophyIcon,
   User as UserIcon
 } from 'lucide-react';
 import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound } from '../types';
-import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs } from '../lib/tournament-logic';
+import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, canIncrementScore } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData } from '../firebase';
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData } from '../firebase';
 import type { User } from '../firebase';
 
-// --- Error Boundary ---
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, errorInfo: string | null }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, errorInfo: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, errorInfo: error.message };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      let displayMessage = "Ocorreu um erro inesperado.";
-      try {
-        const errorStr = String(this.state.errorInfo || "");
-        if (errorStr.startsWith("{")) {
-          const parsed = JSON.parse(errorStr);
-          if (parsed && typeof parsed === 'object' && parsed.error && parsed.error.includes("insufficient permissions")) {
-            displayMessage = "Erro de permissão no banco de dados. Por favor, verifique se você está logado corretamente.";
-          }
-        }
-      } catch (e) {
-        // Not a JSON error
-      }
-
-      return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-          <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl text-center">
-            <AlertCircle size={48} className="text-error mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-primary mb-2">Ops! Algo deu errado</h2>
-            <p className="text-slate-500 mb-6">{displayMessage}</p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="btn-primary w-full py-3"
-            >
-              Recarregar Aplicativo
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-const Header = ({ resetApp, user }: { resetApp: () => void, user: User | null }) => {
-  const [showMenu, setShowMenu] = useState(false);
-
-  return (
-    <div className="w-full flex justify-between items-center py-6">
-      <button 
-        onClick={resetApp}
-        className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-primary uppercase tracking-widest hover:bg-primary/5 rounded-full transition-all"
-      >
-        Meus Torneios
-      </button>
-      
-      <div className="relative">
-        <button 
-          onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-primary uppercase tracking-widest hover:bg-primary/5 rounded-full transition-all"
-        >
-          Perfil
-        </button>
-
-        <AnimatePresence>
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <motion.div 
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute right-0 top-full mt-2 w-64 bg-white border border-surface-container shadow-2xl rounded-2xl p-4 z-50"
-              >
-                <div className="space-y-4">
-                  {user ? (
-                    <>
-                      <div className="flex items-center gap-3 pb-3 border-b border-surface-container">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border border-primary/20">
-                          {user.photoURL ? (
-                            <div className="relative w-full h-full">
-                              <Image src={user.photoURL} alt="Profile" fill className="object-cover" referrerPolicy="no-referrer" />
-                            </div>
-                          ) : (
-                            <span className="text-primary font-black text-xs">{user.email?.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Atleta</p>
-                          <p className="text-xs font-bold text-primary truncate overflow-hidden text-ellipsis">{user.email}</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => signOut(auth)}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-error/5 text-error rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-error/10 transition-all"
-                      >
-                        <LogOut size={14} />
-                        Sair
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-xs font-bold text-on-surface-variant mb-4">Você não está logado</p>
-                      <button 
-                        onClick={() => window.location.reload()}
-                        className="w-full py-3 bg-primary text-on-primary rounded-xl font-black text-[10px] uppercase tracking-widest"
-                      >
-                        Fazer Login
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-};
-
-const StepContainer = ({ children, title, subtitle, currentStep }: { children: React.ReactNode, title: string, subtitle?: string, currentStep?: number }) => {
-  const totalSteps = 8;
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-xl mx-auto px-4 py-4 flex flex-col justify-center min-h-[calc(100dvh-120px)]"
-    >
-      {currentStep && (
-        <div className="flex gap-1 mb-8 max-w-[200px]">
-          {Array.from({ length: totalSteps }).map((_, i) => (
-            <div 
-              key={i} 
-              className={cn(
-                "h-1 rounded-full transition-all duration-500",
-                i + 1 <= currentStep ? "bg-primary flex-1" : "bg-surface-container-highest w-2"
-              )}
-            />
-          ))}
-        </div>
-      )}
-      <div className="flex items-start gap-4 mb-8">
-        <div className="w-1.5 h-10 bg-tertiary rounded-full mt-1 shrink-0 shadow-sm shadow-tertiary/20" />
-        <div className="min-w-0">
-          <h2 className="text-3xl font-display font-black text-primary uppercase leading-tight italic tracking-tight break-words">
-            {title}
-          </h2>
-          {subtitle && (
-            <p className="text-[10px] font-black text-on-surface-variant/70 uppercase tracking-widest mt-1">
-              {subtitle}
-            </p>
-          )}
-        </div>
-      </div>
-      {children}
-    </motion.div>
-  );
-};
-
-const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { activeStep: AppStep, setStep: (s: AppStep) => void, isVisible: boolean, resetApp: () => void }) => {
-  if (!isVisible) return null;
-
-  return (
-    <motion.nav 
-      initial={{ y: 100 }}
-      animate={{ y: 0 }}
-      exit={{ y: 100 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] bottom-nav-glass rounded-full px-6 py-1 flex items-center justify-between z-[200] h-16"
-    >
-      <button 
-        onClick={resetApp}
-        className={cn(
-          "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'HOME' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
-        )}
-      >
-        <div className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'HOME' ? "bg-primary/10" : ""
-        )}>
-          <Home size={20} className={activeStep === 'HOME' ? "fill-primary/10" : ""} />
-        </div>
-        <span className="text-[8px] font-black uppercase tracking-widest">Início</span>
-      </button>
-      
-      <button 
-        onClick={() => setStep('TOURNAMENTS_LIST')}
-        className={cn(
-          "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'TOURNAMENTS_LIST' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
-        )}
-      >
-        <div className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'TOURNAMENTS_LIST' ? "bg-primary/10" : ""
-        )}>
-          <TrophyIcon size={20} className={activeStep === 'TOURNAMENTS_LIST' ? "fill-primary/10" : ""} />
-        </div>
-        <span className="text-[8px] font-black uppercase tracking-widest">Torneios</span>
-      </button>
-      
-      <button 
-        onClick={() => setStep('PROFILE')}
-        className={cn(
-          "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'PROFILE' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
-        )}
-      >
-        <div className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'PROFILE' ? "bg-primary/10" : ""
-        )}>
-          <UserIcon size={20} className={activeStep === 'PROFILE' ? "fill-primary/10" : ""} />
-        </div>
-        <span className="text-[8px] font-black uppercase tracking-widest">Perfil</span>
-      </button>
-    </motion.nav>
-  );
-};
+import { ErrorBoundary } from './ErrorBoundary';
+import { Header } from './Header';
+import { StepContainer } from './StepContainer';
+import { BottomNav } from './BottomNav';
 
 export default function PingProApp() {
+
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [step, setStep] = useState<AppStep>('HOME');
@@ -277,6 +62,7 @@ export default function PingProApp() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Creation Flow State
@@ -302,6 +88,18 @@ export default function PingProApp() {
   const [tournamentTab, setTournamentTab] = useState<'MATCHES' | 'RANKING' | 'ROUNDS'>('MATCHES');
   const [tournamentViewRound, setTournamentViewRound] = useState<number | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // --- Profile Editing State ---
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showReauthModal, setShowReauthModal] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [isProfileUpdating, setIsProfileUpdating] = useState(false);
+  const [snackMessage, setSnackMessage] = useState<string | null>(null);
+
+  const activeTournament = tournaments.find(t => t.id === activeTournamentId);
 
   // --- Navigation Helper ---
   const navigateTo = (newStep: AppStep, options: { 
@@ -444,16 +242,20 @@ export default function PingProApp() {
       if (snapshot.exists()) {
         const userData = snapshot.data();
         setIsPremium(userData.isPremium || false);
+        setUserProfile(userData);
       } else {
         // Create user profile if it doesn't exist
         try {
           const userData = cleanData({
             uid: user.uid,
             email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
             isPremium: false,
             createdAt: Date.now()
           });
           await setDoc(userDocRef, userData);
+          setUserProfile(userData);
         } catch (err) {
           // Ignore permission error if it's just a race condition
           console.error("Error creating user profile:", err);
@@ -501,9 +303,7 @@ export default function PingProApp() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const activeTournament = tournaments.find(t => t.id === activeTournamentId);
+  }, [activeTournamentId, showMatchHistory, tournamentTab, tournamentViewRound, tournaments]);
 
   // --- Actions ---
 
@@ -552,6 +352,62 @@ export default function PingProApp() {
       }
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async (retryWithReauth = false) => {
+    if (!user) return;
+    setIsProfileUpdating(true);
+    setAuthError(null);
+
+    try {
+      // 1. Reauthentication if needed
+      if (retryWithReauth && reauthPassword) {
+        const credential = EmailAuthProvider.credential(user.email!, reauthPassword);
+        await reauthenticateWithCredential(user, credential);
+        setShowReauthModal(false);
+        setReauthPassword('');
+      }
+
+      // 2. Update Name in Auth Profile
+      if (editName !== user.displayName) {
+        await updateProfile(user, { displayName: editName });
+        // Also update in Firestore
+        await updateDoc(doc(db, 'users', user.uid), { displayName: editName });
+      }
+
+      // 3. Update Email
+      if (editEmail !== user.email) {
+        await updateEmail(user, editEmail);
+        // Also update in Firestore
+        await updateDoc(doc(db, 'users', user.uid), { email: editEmail });
+      }
+
+      // 4. Update Password
+      if (newPassword) {
+        await updatePassword(user, newPassword);
+      }
+
+      setSnackMessage("Dados atualizados com sucesso");
+      setTimeout(() => setSnackMessage(null), 3000);
+      goBack();
+
+    } catch (err: any) {
+      console.error("Profile update error:", err);
+      if (err.code === 'auth/requires-recent-login') {
+        setShowReauthModal(true);
+      } else {
+        const error = err as { code?: string; message?: string };
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+          setAuthError("Senha atual incorreta.");
+        } else if (error.code === 'auth/email-already-in-use') {
+          setAuthError("Este e-mail já está sendo usado.");
+        } else {
+          setAuthError(err.message || "Erro ao atualizar perfil.");
+        }
+      }
+    } finally {
+      setIsProfileUpdating(false);
     }
   };
 
@@ -662,26 +518,35 @@ export default function PingProApp() {
       setIsDrawing(true);
       
       setTimeout(() => {
-        setIsDrawing(false);
-        let teamsToGroup: Player[] = [];
-        if (registrationType === 'RANDOM_DRAW') {
-          const shuffled = [...players].sort(() => Math.random() - 0.5);
-          for (let i = 0; i < shuffled.length; i += 2) {
-            const p1 = shuffled[i];
-            const p2 = shuffled[i+1];
-            teamsToGroup.push({
-              id: `team-${p1.id}-${p2.id}`,
-              name: `${p1.name} / ${p2.name}`
-            });
+        try {
+          setIsDrawing(false);
+          let teamsToGroup: Player[] = [];
+          if (registrationType === 'RANDOM_DRAW') {
+            const shuffled = [...players].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < shuffled.length; i += 2) {
+              const p1 = shuffled[i];
+              const p2 = shuffled[i+1];
+              if (p1 && p2) {
+                teamsToGroup.push({
+                  id: `team-${p1.id}-${p2.id}`,
+                  name: `${p1.name} / ${p2.name}`
+                });
+              }
+            }
+          } else {
+            teamsToGroup = players;
           }
-        } else {
-          teamsToGroup = players;
-        }
 
-        const groupsCount = Math.ceil(teamsToGroup.length / teamsPerGroup);
-        const { groups } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
-        setDrawnGroups(groups);
-        navigateTo('GROUPS_DISPLAY', { replace: true });
+          const groupsCount = Math.ceil(teamsToGroup.length / teamsPerGroup);
+          const { groups } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
+          setDrawnGroups(groups);
+          navigateTo('GROUPS_DISPLAY', { replace: true });
+        } catch (err) {
+          setIsDrawing(false);
+          setError("Erro ao gerar grupos. Verifique os dados.");
+          setStep('PLAYER_COUNT');
+          console.error(err);
+        }
       }, 2000);
       return;
     }
@@ -691,35 +556,47 @@ export default function PingProApp() {
       setIsDrawing(true);
       
       setTimeout(async () => {
-        setIsDrawing(false);
-        
-        const matches = generateIndividualDoubles(players, selectedCourts);
-        const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
-        
-        const tournamentId = `t-${Date.now()}`;
-        const newTournament: TournamentState = {
-          id: tournamentId,
-          name: tournamentName,
-          players: players,
-          athleteCount: playerCount,
-          matches,
-          currentRound: 1,
-          totalRounds,
-          tables: selectedCourts,
-          format: tournamentFormat,
-          matchFormat,
-          registrationType,
-          rankingCriteria,
-          isFinished: false,
-          createdAt: Date.now()
-        };
-        
         try {
+          setIsDrawing(false);
+          
+          const matches = generateIndividualDoubles(players, selectedCourts);
+          const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
+          
+          if (matches.length === 0) {
+            setError("Não foi possível gerar partidas. Verifique o número de atletas selecionados.");
+            setStep('PLAYER_COUNT');
+            return;
+          }
+
+          const tournamentId = `t-${Date.now()}`;
+          const newTournament: TournamentState = {
+            id: tournamentId,
+            name: tournamentName,
+            players: players,
+            athleteCount: playerCount,
+            matches,
+            matches_group_stage: [],
+            matches_knockout_stage: [],
+            currentRound: 1,
+            totalRounds,
+            tables: selectedCourts,
+            format: tournamentFormat,
+            matchFormat,
+            registrationType,
+            rankingCriteria,
+            isFinished: false,
+            createdAt: Date.now()
+          };
+          
           const tournamentData = cleanData({ ...newTournament, uid: user.uid });
           await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
           navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+          setIsDrawing(false);
+          const errorMsg = err instanceof Error ? err.message : "Erro ao salvar torneio.";
+          setError(errorMsg);
+          setStep('PLAYER_COUNT');
+          console.error("Firestore error:", err);
         }
       }, 2000);
     } else if (registrationType === 'RANDOM_DRAW') {
@@ -734,42 +611,48 @@ export default function PingProApp() {
       setDrawnTeams(teams);
 
       setTimeout(async () => {
-        setIsDrawing(false);
-        
-        const finalTeams = teams.map(t => ({
-          id: `team-${t.p1.id}-${t.p2.id}`,
-          name: `${t.p1.name} / ${t.p2.name}`
-        }));
-
-        let matches: Match[] = [];
-        matches = generateRoundRobin(finalTeams, selectedCourts);
-
-        const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
-        
-        const tournamentId = `t-${Date.now()}`;
-        const newTournament: TournamentState = {
-          id: tournamentId,
-          name: tournamentName,
-          players: finalTeams,
-          athleteCount: playerCount,
-          matches,
-          currentRound: 1,
-          totalRounds,
-          tables: selectedCourts,
-          format: tournamentFormat,
-          matchFormat,
-          registrationType,
-          rankingCriteria,
-          isFinished: false,
-          createdAt: Date.now()
-        };
-        
         try {
-          const tournamentData = cleanData({ ...newTournament, uid: user.uid });
-          await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+          setIsDrawing(false);
+          
+          const finalTeams = teams.map(t => ({
+            id: `team-${t.p1.id}-${t.p2.id}`,
+            name: `${t.p1.name} / ${t.p2.name}`
+          }));
+
+          let matches: Match[] = [];
+          matches = generateRoundRobin(finalTeams, selectedCourts);
+
+          const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
+          
+          const tournamentId = `t-${Date.now()}`;
+          const newTournament: TournamentState = {
+            id: tournamentId,
+            name: tournamentName,
+            players: finalTeams,
+            athleteCount: playerCount,
+            matches,
+            matches_group_stage: [],
+            matches_knockout_stage: [],
+            currentRound: 1,
+            totalRounds,
+            tables: selectedCourts,
+            format: tournamentFormat,
+            matchFormat,
+            registrationType,
+            rankingCriteria,
+            isFinished: false,
+            createdAt: Date.now()
+          };
+          
+          const tournamentData2 = cleanData({ ...newTournament, uid: user.uid });
+          await setDoc(doc(db, 'tournaments', tournamentId), tournamentData2);
           navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+          setIsDrawing(false);
+          const errorMsg = err instanceof Error ? err.message : "Erro ao salvar torneio";
+          setError(errorMsg);
+          setStep('PLAYER_COUNT');
+          console.error("Firestore error:", err);
         }
       }, 3000);
     } else {
@@ -786,6 +669,8 @@ export default function PingProApp() {
         players: finalTeams,
         athleteCount: playerCount,
         matches,
+        matches_group_stage: [],
+        matches_knockout_stage: [],
         currentRound: 1,
         totalRounds,
         tables: selectedCourts,
@@ -798,11 +683,15 @@ export default function PingProApp() {
       };
       
       try {
-        const tournamentData = cleanData({ ...newTournament, uid: user.uid });
-        await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+        const tournamentData3 = cleanData({ ...newTournament, uid: user.uid });
+        await setDoc(doc(db, 'tournaments', tournamentId), tournamentData3);
         navigateTo('TOURNAMENT', { tournamentId, replace: true });
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `tournaments/${tournamentId}`);
+        setIsDrawing(false);
+        const errorMsg = err instanceof Error ? err.message : "Erro ao salvar torneio.";
+        setError(errorMsg);
+        setStep('PLAYER_COUNT');
+        console.error("Firestore error:", err);
       }
     }
   };
@@ -858,19 +747,9 @@ export default function PingProApp() {
       
       if (newValue < 0) return m;
 
-      if (activeTournament.matchFormat === '6_GAMES_TIEBREAK') {
-        if (newValue > 7) return m;
-        if (newValue === 7 && otherValue < 5) return m;
-      } else if (activeTournament.matchFormat === '6_GAMES_MAX') {
-        if (newValue > 6) return m;
-      } else if (activeTournament.matchFormat === '5_GAMES_MAX') {
-        if (newValue > 5) return m;
-      } else if (activeTournament.matchFormat === 'SUM_9_GAMES') {
-        if (sum > 9) return m;
-      } else if (activeTournament.matchFormat === 'SUM_7_GAMES') {
-        if (sum > 7) return m;
-      } else if (activeTournament.matchFormat === 'SUM_5_GAMES') {
-        if (sum > 5) return m;
+      // ATENÇÃO: HARD LOCK (TRAVA RÍGIDA)
+      if (value > 0 && !canIncrementScore(currentSet.player1, currentSet.player2, player, activeTournament.matchFormat)) {
+        return m;
       }
 
       if (player === 1) currentSet.player1 = newValue;
@@ -893,8 +772,8 @@ export default function PingProApp() {
     
     const validation = validateSetScore(set.player1, set.player2, activeTournament.matchFormat);
     if (!validation.isValid) {
-      setError(validation.error || "Placar inválido");
-      setTimeout(() => setError(null), 3000);
+      setError(validation.error || "Placar inválido para este formato de disputa");
+      setTimeout(() => setError(null), 4000);
       return;
     }
 
@@ -961,82 +840,157 @@ export default function PingProApp() {
     const isEndingGroups = isMataMataFormat && hasPlayoffs && activeTournament.currentRound < 100 && (currentIndex === availableRounds.filter(r => r < 100).length - 1);
 
     if (isEndingGroups) {
-      // Transition from Groups to Playoffs
-      const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-      const currentRounds = roundsOrder.filter(r => activeTournament.playoffRounds?.includes(r));
-      const firstPlayoffRound = currentRounds[0];
-      
-      const numPlayoffSlots = Math.pow(2, currentRounds.length); // Total teams in the first playoff round
       const groupIds = Array.from(new Set(activeTournament.matches.map(m => m.groupId).filter((id): id is string => !!id && !id.includes('playoff')))).sort();
       const numGroups = groupIds.length;
       
       if (numGroups > 0) {
         // Collect all ranked teams from all groups
-        const allGroupRankings: { [groupId: string]: Player[] } = {};
+        const groups: {id: string, teams: Player[]}[] = [];
         groupIds.forEach(gid => {
           const groupMatches = activeTournament.matches.filter(m => m.groupId === gid);
           const groupTeamsIds = new Set(groupMatches.flatMap(m => [m.player1Id, m.player2Id]));
           const groupPlayers = activeTournament.players.filter(p => groupTeamsIds.has(p.id));
-          allGroupRankings[gid] = calculateRankings(groupPlayers, groupMatches, activeTournament.rankingCriteria);
+          groups.push({ id: gid, teams: groupPlayers });
         });
 
-        // Seed teams cross-group (A1 vs D2, B1 vs C2, etc.)
-        const seededTeams: (Player | null)[] = Array(numPlayoffSlots).fill(null);
+        // 1. Calculate Qualified Teams using the logic requested
+        const qualifiedTeams = getKnockoutQualifiedTeams(
+          activeTournament.players,
+          activeTournament.matches,
+          activeTournament.rankingCriteria,
+          groups
+        );
+
+        // 2. Generate Knockout Stage Matches
+        const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
+        const selectedPlayoffRounds = activeTournament.playoffRounds || [];
+        const currentKnockoutRounds = roundsOrder.filter(r => selectedPlayoffRounds.includes(r));
         
-        // Simple but effective seeding for 2, 4 or 8 groups
-        if (numGroups === 2) {
-          seededTeams[0] = allGroupRankings[groupIds[0]][0]; // A1
-          seededTeams[1] = allGroupRankings[groupIds[1]][1]; // B2
-          seededTeams[2] = allGroupRankings[groupIds[1]][0]; // B1
-          seededTeams[3] = allGroupRankings[groupIds[0]][1]; // A2
-        } else if (numGroups === 4) {
-          seededTeams[0] = allGroupRankings[groupIds[0]][0]; // A1
-          seededTeams[1] = allGroupRankings[groupIds[3]][1]; // D2
-          seededTeams[2] = allGroupRankings[groupIds[1]][0]; // B1
-          seededTeams[3] = allGroupRankings[groupIds[2]][1]; // C2
-          seededTeams[4] = allGroupRankings[groupIds[2]][0]; // C1
-          seededTeams[5] = allGroupRankings[groupIds[1]][1]; // B2
-          seededTeams[6] = allGroupRankings[groupIds[3]][0]; // D1
-          seededTeams[7] = allGroupRankings[groupIds[0]][1]; // A2
-        } else {
-          // Fallback: simple top qualifiers
-          const qualifiersPerGroup = Math.floor(numPlayoffSlots / numGroups);
-          let flatQualifiers: Player[] = [];
-          for (let i = 0; i < qualifiersPerGroup; i++) {
-            groupIds.forEach(gid => {
-              if (allGroupRankings[gid][i]) flatQualifiers.push(allGroupRankings[gid][i]);
-            });
-          }
-          flatQualifiers.slice(0, numPlayoffSlots).forEach((team, idx) => { seededTeams[idx] = team; });
+        if (currentKnockoutRounds.length === 0) {
+           // No playoffs, finish
+           try {
+             await updateDoc(doc(db, 'tournaments', activeTournament.id), { isFinished: true });
+             navigateTo('FINISHED');
+             const confetti = (await import('canvas-confetti')).default;
+             confetti({
+               particleCount: 150,
+               spread: 70,
+               origin: { y: 0.6 },
+               colors: ['#0f172a', '#bef264', '#000000']
+             });
+           } catch (err) {
+             handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+           }
+           return;
         }
 
-        // Fill first round matches
-        const newMatches = activeTournament.matches.map(m => {
-          if (m.id.startsWith(`playoff-${firstPlayoffRound}-`)) {
-            const idx = parseInt(m.id.split('-')[2]);
-            const p1 = seededTeams[idx * 2];
-            const p2 = seededTeams[idx * 2 + 1];
-            
-            // Only update if we have a team OR if it's currently a TBD
-            return {
-              ...m,
-              player1Id: p1?.id || m.player1Id,
-              player2Id: p2?.id || m.player2Id
-            };
-          }
-          return m;
-        });
+        // Seeding logic for specific scenarios
+        let knockoutMatches: Match[] = [];
+        const firstRound = currentKnockoutRounds[0];
+
+        if (numGroups === 2 && firstRound === 'SEMI_FINALS' && qualifiedTeams.length === 4) {
+          // Scenario A: 2 groups of 4
+          // SF1: 1º A x 2º B
+          // SF2: 1º B x 2º A
+          const getRanked = (gid: string, rank: number) => {
+             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
+             const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
+             return rankings[rank - 1];
+          };
+
+          const p1 = getRanked('A', 1);
+          const p2 = getRanked('B', 2);
+          const p3 = getRanked('B', 1);
+          const p4 = getRanked('A', 2);
+
+          knockoutMatches.push({
+            id: 'playoff-SEMI_FINALS-0',
+            player1Id: p1?.id || 'TBD',
+            player2Id: p2?.id || 'TBD',
+            table: selectedCourts[0] || 1,
+            sets: [],
+            currentSet: { player1: 0, player2: 0 },
+            isCompleted: false,
+            round: 102
+          });
+          knockoutMatches.push({
+            id: 'playoff-SEMI_FINALS-1',
+            player1Id: p3?.id || 'TBD',
+            player2Id: p4?.id || 'TBD',
+            table: selectedCourts[1] || selectedCourts[0] || 2,
+            sets: [],
+            currentSet: { player1: 0, player2: 0 },
+            isCompleted: false,
+            round: 102
+          });
+
+          // Generate Final as TBD
+          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
+          knockoutMatches = [...knockoutMatches, ...finalMatches];
+
+        } else if (numGroups === 4 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
+          // Scenario B & C: 4 groups of 3 or 4
+          // Q1: 1º Grupo A x 2º Grupo C
+          // Q2: 1º Grupo B x 2º Grupo D
+          // Q3: 1º Grupo C x 2º Grupo A
+          // Q4: 1º Grupo D x 2º Grupo B
+          const getRanked = (gid: string, rank: number) => {
+             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
+             const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
+             return rankings[rank - 1];
+          };
+
+          const p1 = getRanked('A', 1);
+          const p2 = getRanked('C', 2);
+          const p3 = getRanked('B', 1);
+          const p4 = getRanked('D', 2);
+          const p5 = getRanked('C', 1);
+          const p6 = getRanked('A', 2);
+          const p7 = getRanked('D', 1);
+          const p8 = getRanked('B', 2);
+
+          const qMatches = [
+            { t1: p1, t2: p2, id: 'playoff-QUARTER_FINALS-0' },
+            { t1: p3, t2: p4, id: 'playoff-QUARTER_FINALS-1' },
+            { t1: p5, t2: p6, id: 'playoff-QUARTER_FINALS-2' },
+            { t1: p7, t2: p8, id: 'playoff-QUARTER_FINALS-3' },
+          ];
+
+          qMatches.forEach((qm, idx) => {
+            const table = selectedCourts[idx % selectedCourts.length];
+            knockoutMatches.push({
+              id: qm.id,
+              player1Id: qm.t1?.id || 'TBD',
+              player2Id: qm.t2?.id || 'TBD',
+              table,
+              sets: [],
+              currentSet: { player1: 0, player2: 0 },
+              isCompleted: false,
+              round: 101 // QUARTER_FINALS (100 + idx 1)
+            });
+          });
+
+          // Generate remaining rounds (Semi and Final) as TBDs
+          const semiMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
+          knockoutMatches = [...knockoutMatches, ...semiMatches, ...finalMatches];
+
+        } else {
+          // General Seeding Logic
+          knockoutMatches = generatePlayoffs(qualifiedTeams, selectedCourts, currentKnockoutRounds);
+        }
+
+        const nextRoundNum = 100 + roundsOrder.indexOf(firstRound);
 
         try {
-          // Transition from Groups to Playoffs
-          const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-          const firstPlayoffRound = roundsOrder.filter(r => activeTournament.playoffRounds?.includes(r))[0];
-          const firstPlayoffRoundIdx = roundsOrder.indexOf(firstPlayoffRound);
-
           await updateDoc(doc(db, 'tournaments', activeTournament.id), { 
-            matches: newMatches,
-            currentRound: 100 + firstPlayoffRoundIdx // Jump to the correct first playoff round
+            matches: [...activeTournament.matches, ...knockoutMatches],
+            matches_knockout_stage: knockoutMatches,
+            currentRound: nextRoundNum
           });
+          navigateTo('TOURNAMENT', { round: nextRoundNum });
         } catch (err) {
           handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
         }
@@ -1281,8 +1235,14 @@ export default function PingProApp() {
               <div className="arena-hero-bg pt-4 pb-16 px-8 flex flex-col items-center text-center">
                 <div className="w-full flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20">
-                      <UserIcon size={20} />
+                    <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden">
+                      {(userProfile?.photoURL || user?.photoURL) ? (
+                        <div className="relative w-full h-full">
+                          <Image src={userProfile?.photoURL || user?.photoURL} alt="Profile" fill className="object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                      ) : (
+                        <UserIcon size={20} />
+                      )}
                     </div>
                     <div className="text-left">
                       <p className="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">Bem-vindo</p>
@@ -1623,15 +1583,15 @@ export default function PingProApp() {
             >
               <div className="space-y-6">
                 <div className="bg-primary/5 rounded-[2rem] p-6 border border-primary/10 flex gap-4">
-                  <div className="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
-                    <Zap size={20} />
+                  <div className="w-10 h-10 rounded-2xl bg-secondary-container flex items-center justify-center text-on-secondary-container shrink-0">
+                    <Users size={20} />
                   </div>
                   <div>
-                    <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Sugestão Técnica</h4>
+                    <h4 className="text-[10px] font-black text-on-secondary-container uppercase tracking-widest mb-1">Logística de Quadras</h4>
                     <p className="text-[10px] font-black text-on-surface-variant uppercase tracking-tight leading-relaxed">
-                      {playerCount / 2 <= 8 ? 'Grupos de 4 duplas garantem um torneio equilibrado e dinâmico.' : 
-                       playerCount / 2 <= 16 ? 'Dividir em 4 grupos de 4 é excelente para o fluxo das quadras.' :
-                       'Muitos atletas? Grupos menores (3) aceleram a fase classificatória.'}
+                      {teamsPerGroup === 4 ? 
+                        "Dica: Para grupos de 4 duplas, recomendamos reservar ao menos 2 quadras por grupo para evitar filas e agilizar o torneio." : 
+                        "Organize seu torneio definindo o tamanho dos grupos para equilibrar tempo de jogo e descanso."}
                     </p>
                   </div>
                 </div>
@@ -2114,13 +2074,7 @@ export default function PingProApp() {
                       const groupsCount = drawnGroups.length;
                       const { matches: groupMatches } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
                       
-                      // Add playoffs if selected
-                      let playoffMatches: Match[] = [];
-                      if (playoffRounds.length > 0) {
-                        playoffMatches = generatePlayoffs([], selectedCourts, playoffRounds);
-                      }
-                      
-                      const matches = [...groupMatches, ...playoffMatches];
+                      const matches = groupMatches;
                       const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
                       
                       const tournamentId = `t-${Date.now()}`;
@@ -2130,6 +2084,8 @@ export default function PingProApp() {
                         players: teamsToGroup,
                         athleteCount: playerCount,
                         matches,
+                        matches_group_stage: groupMatches,
+                        matches_knockout_stage: [],
                         currentRound: 1,
                         totalRounds,
                         tables: selectedCourts,
@@ -2345,27 +2301,28 @@ export default function PingProApp() {
               key="tournament"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-2xl mx-auto space-y-6 pt-2 px-2"
+              className="w-full max-w-2xl mx-auto pt-2"
             >
-              {/* Compact Tournament Switcher Extra */}
-              <div className="space-y-1.5 -mx-1 mb-4">
-                <span className="text-[8px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em] ml-3">
-                  ACESSO RÁPIDO AOS SEUS TORNEIOS ATIVOS
-                </span>
-                <div className="arena-hero-bg p-3 rounded-[2rem] shadow-xl shadow-primary/20 overflow-hidden relative">
-                  {/* Decorative background flare */}
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-3xl -mr-16 -mt-16 rounded-full pointer-events-none" />
+              <div className="px-4 space-y-6">
+                {/* Acesso Rápido Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-on-surface-variant/50">
+                    <Zap size={14} className="text-secondary fill-secondary" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.1em]">
+                      ACESSO RÁPIDO AOS SEUS TORNEIOS ATIVOS
+                    </span>
+                  </div>
                   
-                  <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 relative z-10">
+                  <div className="bg-surface-container-low/50 border border-surface-container rounded-full p-1.5 flex gap-1 shadow-sm">
                     {tournaments.filter(t => !t.isFinished).map(t => (
                       <button
                         key={t.id}
                         onClick={() => setActiveTournamentId(t.id)}
                         className={cn(
-                          "flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95",
+                          "flex-1 py-3 px-4 rounded-full text-[10px] font-black uppercase tracking-wider transition-all",
                           t.id === activeTournament.id 
-                            ? "bg-secondary text-on-secondary shadow-lg shadow-black/10 scale-105" 
-                            : "bg-white/10 text-white/80 border border-white/5 hover:bg-white/20"
+                            ? "bg-secondary text-primary shadow-lg shadow-primary/5" 
+                            : "text-on-surface-variant hover:bg-surface-container"
                         )}
                       >
                         {t.name}
@@ -2373,86 +2330,150 @@ export default function PingProApp() {
                     ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Tournament Hero Info */}
-              <section className="mb-4">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => navigateTo('HOME', { tournamentId: null })}
-                      className="p-2 -ml-2 text-on-surface-variant/40 hover:text-primary transition-colors flex items-center gap-1 group"
-                    >
-                      <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-                      <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Início</span>
-                    </button>
+                {/* Tournament Hero Card */}
+                <div className="arena-hero-bg rounded-[3.5rem] p-6 sm:p-8 min-h-[300px] flex flex-col justify-between shadow-2xl mb-4 relative overflow-hidden group transition-all duration-500 hover:shadow-primary/40">
+                  {/* Illustrations (Simplified) */}
+                  <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden rounded-[3.5rem]">
+                    <div className="absolute bottom-0 right-0 w-64 h-64 -mr-16 -mb-16">
+                       <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-white">
+                         <path d="M160 180L160 100M120 180L120 100M120 110H160" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                         <circle cx="140" cy="80" r="15" stroke="currentColor" strokeWidth="2" />
+                         <path d="M10 180C10 180 30 110 50 110C70 110 90 180 90 180" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" />
+                       </svg>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-start">
-                    <h1 className="text-3xl font-extrabold text-on-surface tracking-tighter font-display break-words leading-tight flex-1 mr-4 italic">
-                      {activeTournament.name}
-                    </h1>
+
+                  <div className="flex justify-between items-start relative z-10 w-full gap-4">
+                    <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 shrink-0">
+                       <Sparkles size={14} className="text-secondary" />
+                       <span className="text-[10px] font-black text-white uppercase tracking-widest truncate max-w-[120px]">
+                         {(() => {
+                            const formats: { [key: string]: string } = {
+                              'REI_DA_QUADRA': 'REI DA QUADRA',
+                              'SUPER_8_INDIVIDUAL': 'SUPER 8 IND',
+                              'SUPER_6_INDIVIDUAL': 'SUPER 6 IND',
+                              'SUPER_4_FIXED': 'SUPER 4 DUPLAS',
+                              'SUPER_10_INDIVIDUAL': 'SUPER 10 IND',
+                              'SUPER_12_INDIVIDUAL': 'SUPER 12 IND',
+                              'SUPER_6_FIXED': 'SUPER 6 DUPLAS',
+                              'SUPER_8_FIXED': 'SUPER_ 8 DUPLAS',
+                              'SUPER_10_FIXED': 'SUPER 10 DUPLAS',
+                              'SUPER_12_FIXED': 'SUPER 12 DUPLAS',
+                              'GROUPS_MATA_MATA': 'GRUPOS + MATA-MATA',
+                            };
+                            return formats[activeTournament.format] || 'TORNEIO';
+                         })()}
+                       </span>
+                    </div>
+
                     <button 
                       onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="text-[9px] font-black text-red-500/40 uppercase tracking-widest hover:text-red-500 transition-colors border border-red-500/20 px-3 py-1.5 rounded-full mt-1 shrink-0"
+                      className="group flex items-center gap-1.5 border border-red-500/20 bg-black/10 backdrop-blur-md px-3 py-1.5 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm shrink-0"
                     >
-                      Encerrar
+                      <X size={12} className="bg-red-500 text-white rounded-full p-0.5" />
+                      <span className="text-[9px] font-black uppercase tracking-widest">Encerrar</span>
                     </button>
                   </div>
-                  
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex items-center bg-primary rounded-full px-4 py-1.5 border border-primary shadow-lg shadow-primary/20">
-                      <span className="text-[10px] font-black text-on-primary uppercase tracking-widest">
-                        {activeTournament.currentRound >= 100 ? (
-                          (() => {
-                            const types: { [key: number]: string } = {
-                              100: 'Oitavas de Final',
-                              101: 'Quartas de Final',
-                              102: 'Semi-Final',
-                              103: 'Final'
-                            };
-                            return types[activeTournament.currentRound] || `Fase ${activeTournament.currentRound}`;
-                          })()
-                        ) : (
-                          <>RODADA <span className="text-secondary">{activeTournament.currentRound}</span> DE <span className="text-secondary">{Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds}</span></>
-                        )}
-                      </span>
+
+                  <div className="flex-1 flex flex-col justify-center relative z-10 py-6">
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-black text-white italic tracking-tighter uppercase leading-tight drop-shadow-md break-words max-w-full">
+                      {activeTournament.name}
+                    </h1>
+                  </div>
+
+                  <div className="flex items-center relative z-10">
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 p-1 rounded-full flex items-center shadow-xl">
+                      <div className="bg-primary/30 px-4 py-2 rounded-full flex items-center gap-2.5 border border-white/5">
+                        <div className="relative">
+                          <History size={14} className="text-secondary" />
+                          <div className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                        </div>
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                          {activeTournament.currentRound >= 100 ? (
+                            (() => {
+                              const types: { [key: number]: string } = {
+                                100: 'OITAVAS',
+                                101: 'QUARTAS',
+                                102: 'SEMI-FINAL',
+                                103: 'FINAL'
+                              };
+                              return types[activeTournament.currentRound] || `FASE ${activeTournament.currentRound}`;
+                            })()
+                          ) : (
+                            <>RODADA <span className="text-secondary">{String(activeTournament.currentRound).padStart(2, '0')}</span></>
+                          )}
+                        </span>
+                      </div>
+                      
+                      {activeTournament.currentRound < 100 && (
+                        <div className="px-4">
+                          <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">
+                            DE <span className="text-white/60">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </section>
 
-              {/* Navigation Tabs - Compact */}
-              <div className="flex gap-2 p-1 bg-surface-container-low rounded-full max-w-xs mx-auto">
-                <button 
-                  onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES' })}
-                  className={cn(
-                    "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
-                    tournamentTab === 'MATCHES' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
-                  )}
-                >
-                  Partidas
-                </button>
-                <button 
-                  onClick={() => navigateTo('TOURNAMENT', { tab: 'RANKING' })}
-                  className={cn(
-                    "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
-                    tournamentTab === 'RANKING' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
-                  )}
-                >
-                  Ranking
-                </button>
-                <button 
-                  onClick={() => navigateTo('TOURNAMENT', { tab: 'ROUNDS' })}
-                  className={cn(
-                    "flex-1 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all",
-                    tournamentTab === 'ROUNDS' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/70 hover:bg-white/50"
-                  )}
-                >
-                  Rodadas
-                </button>
+                {/* Navigation Tabs - New Style */}
+                <div className="bg-white rounded-[2rem] border border-surface-container flex shadow-sm overflow-hidden mb-2">
+                  <button 
+                    onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES' })}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative border-r border-surface-container",
+                      tournamentTab === 'MATCHES' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
+                    )}
+                  >
+                    <LayoutGrid size={20} className={tournamentTab === 'MATCHES' ? "fill-primary/10" : ""} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Partidas</span>
+                    {tournamentTab === 'MATCHES' && <div className="absolute bottom-0 left-4 right-4 h-1 bg-primary rounded-t-full" />}
+                  </button>
+                  <button 
+                    onClick={() => navigateTo('TOURNAMENT', { tab: 'RANKING' })}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative border-r border-surface-container",
+                      tournamentTab === 'RANKING' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
+                    )}
+                  >
+                    <TrophyIcon size={20} className={tournamentTab === 'RANKING' ? "fill-primary/10" : ""} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Ranking</span>
+                    {tournamentTab === 'RANKING' && <div className="absolute bottom-0 left-4 right-4 h-1 bg-primary rounded-t-full" />}
+                  </button>
+                  <button 
+                    onClick={() => navigateTo('TOURNAMENT', { tab: 'ROUNDS' })}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative",
+                      tournamentTab === 'ROUNDS' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
+                    )}
+                  >
+                    <History size={20} className={tournamentTab === 'ROUNDS' ? "fill-primary/10" : ""} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Rodadas</span>
+                    {tournamentTab === 'ROUNDS' && <div className="absolute bottom-0 left-4 right-4 h-1 bg-primary rounded-t-full" />}
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-8">
+              <div className="px-4 space-y-2">
+                <AnimatePresence>
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest p-3 rounded-2xl border border-red-100 flex items-center gap-2">
+                        <AlertCircle size={14} className="shrink-0" />
+                        <span>{error}</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="space-y-4 px-4 pb-32">
                 {tournamentTab === 'MATCHES' && (() => {
                   const currentViewRound = tournamentViewRound ?? activeTournament.currentRound;
                   const matchesByCourt: { [key: number]: Match[] } = {};
@@ -2466,7 +2487,9 @@ export default function PingProApp() {
                   return Object.entries(matchesByCourt).sort(([a], [b]) => Number(a) - Number(b)).map(([court, matches]) => (
                     <section key={court}>
                       <div className="flex items-baseline gap-3 mb-3">
-                        <h2 className="text-xs font-black text-on-surface font-display uppercase tracking-widest">QUADRA {court.padStart(2, '0')}</h2>
+                        <h2 className="text-xs font-black text-on-surface font-display uppercase tracking-widest">
+                          QUADRA {court.padStart(2, '0')}{matches[0]?.groupId ? ` - GRUPO ${matches[0].groupId}` : ''}
+                        </h2>
                         <div className="h-[1px] flex-grow bg-surface-container-highest opacity-50"></div>
                       </div>
                       
@@ -2514,23 +2537,35 @@ export default function PingProApp() {
                                     {/* Score Display (Pill) - Compact */}
                                   <div className="bg-white rounded-full px-4 py-1 flex items-center justify-around gap-2 shadow-inner border border-stone-100/50 mb-4">
                                     {/* Team 1 Area */}
-                                    <div className="flex flex-1 items-center justify-center relative min-h-[3rem]">
-                                      {!match.isCompleted && (
-                                        <div className="absolute left-0 flex flex-col items-center justify-center gap-0.5 h-full">
-                                          <button 
-                                            onClick={() => updateMatchScore(match.id, 1, 1)} 
-                                            className="text-primary hover:scale-110 active:scale-90 transition-all flex items-center justify-center"
-                                          >
-                                            <Plus size={14} />
-                                          </button>
-                                          <button 
-                                            onClick={() => updateMatchScore(match.id, 1, -1)} 
-                                            className="text-on-surface-variant/20 hover:scale-110 active:scale-90 transition-all flex items-center justify-center"
-                                          >
-                                            <Minus size={14} />
-                                          </button>
-                                        </div>
-                                      )}
+                                    <div className="flex flex-1 items-center justify-center relative min-h-[3.5rem]">
+                                      <div className="absolute left-0 flex flex-col items-center justify-center gap-1.5 h-full">
+                                        <button 
+                                          onClick={() => updateMatchScore(match.id, 1, 1)} 
+                                          disabled={match.isCompleted}
+                                          className={cn(
+                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            match.isCompleted 
+                                              ? "bg-slate-100 text-slate-300 opacity-40 cursor-not-allowed shadow-none" 
+                                              : (!canIncrementScore(match.currentSet.player1, match.currentSet.player2, 1, activeTournament.matchFormat)
+                                                ? "bg-primary/50 text-white opacity-60 cursor-pointer shadow-none"
+                                                : "bg-primary text-white hover:bg-primary-dim shadow-primary/20")
+                                          )}
+                                        >
+                                          <Plus size={12} strokeWidth={4} />
+                                        </button>
+                                        <button 
+                                          onClick={() => updateMatchScore(match.id, 1, -1)} 
+                                          disabled={match.isCompleted || match.currentSet.player1 <= 0}
+                                          className={cn(
+                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            (match.isCompleted || match.currentSet.player1 <= 0)
+                                              ? "bg-slate-50 text-slate-200 opacity-40 cursor-not-allowed shadow-none"
+                                              : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                                          )}
+                                        >
+                                          <Minus size={12} strokeWidth={4} />
+                                        </button>
+                                      </div>
                                       <span className="text-3xl font-black text-on-surface font-display tracking-tighter">
                                         {p1Games}
                                       </span>
@@ -2540,26 +2575,38 @@ export default function PingProApp() {
                                     <div className="h-8 w-[1px] bg-surface-container-highest/20"></div>
 
                                     {/* Team 2 Area */}
-                                    <div className="flex flex-1 items-center justify-center relative min-h-[3rem]">
+                                    <div className="flex flex-1 items-center justify-center relative min-h-[3.5rem]">
                                       <span className="text-3xl font-black text-on-surface font-display tracking-tighter">
                                         {p2Games}
                                       </span>
-                                      {!match.isCompleted && (
-                                        <div className="absolute right-0 flex flex-col items-center justify-center gap-0.5 h-full text-right">
-                                          <button 
-                                            onClick={() => updateMatchScore(match.id, 2, 1)} 
-                                            className="text-primary hover:scale-110 active:scale-90 transition-all flex items-center justify-center"
-                                          >
-                                            <Plus size={14} />
-                                          </button>
-                                          <button 
-                                            onClick={() => updateMatchScore(match.id, 2, -1)} 
-                                            className="text-on-surface-variant/20 hover:scale-110 active:scale-90 transition-all flex items-center justify-center"
-                                          >
-                                            <Minus size={14} />
-                                          </button>
-                                        </div>
-                                      )}
+                                      <div className="absolute right-0 flex flex-col items-center justify-center gap-1.5 h-full text-right">
+                                        <button 
+                                          onClick={() => updateMatchScore(match.id, 2, 1)} 
+                                          disabled={match.isCompleted}
+                                          className={cn(
+                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            match.isCompleted 
+                                              ? "bg-slate-100 text-slate-300 opacity-40 cursor-not-allowed shadow-none" 
+                                              : (!canIncrementScore(match.currentSet.player1, match.currentSet.player2, 2, activeTournament.matchFormat)
+                                                ? "bg-primary/50 text-white opacity-60 cursor-pointer shadow-none"
+                                                : "bg-primary text-white hover:bg-primary-dim shadow-primary/20")
+                                          )}
+                                        >
+                                          <Plus size={12} strokeWidth={4} />
+                                        </button>
+                                        <button 
+                                          onClick={() => updateMatchScore(match.id, 2, -1)} 
+                                          disabled={match.isCompleted || match.currentSet.player2 <= 0}
+                                          className={cn(
+                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            (match.isCompleted || match.currentSet.player2 <= 0)
+                                              ? "bg-slate-50 text-slate-200 opacity-40 cursor-not-allowed shadow-none"
+                                              : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                                          )}
+                                        >
+                                          <Minus size={12} strokeWidth={4} />
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
 
@@ -2965,72 +3012,285 @@ export default function PingProApp() {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full"
+              className="w-full pb-32"
             >
-              <div className="arena-hero-bg pt-4 pb-12 px-8 flex flex-col items-center text-center">
-                <div className="relative w-24 h-24 mx-auto mb-4">
-                  <div className="absolute inset-0 bg-white/10 rounded-[2rem] blur-2xl"></div>
-                  {user?.photoURL ? (
-                    <Image 
-                      src={user.photoURL} 
-                      alt={user.displayName || 'User'} 
-                      width={96} 
-                      height={96} 
-                      className="rounded-[2rem] border-4 border-white shadow-xl relative z-10"
-                      referrerPolicy="no-referrer"
+              {/* 1. Cabeçalho do Perfil (Foto e Nome) */}
+              <div className="arena-hero-bg pt-10 pb-16 px-8 flex flex-col items-center text-center relative overflow-hidden">
+                <div className="relative mb-6">
+                  {/* Foto de Perfil Circular */}
+                  <div className="w-28 h-28 rounded-full border-4 border-white shadow-2xl relative z-10 bg-white/20 backdrop-blur-md flex items-center justify-center overflow-hidden">
+                    {(userProfile?.photoURL || user?.photoURL) ? (
+                      <Image 
+                        src={userProfile?.photoURL || user?.photoURL} 
+                        alt={user?.displayName || 'User'} 
+                        fill
+                        className="object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="text-white font-display font-black text-4xl italic">
+                        {user?.email?.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Botão de Upload (Badge) */}
+                    <label htmlFor="avatar-upload" className="absolute bottom-1 right-1 w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white z-20 cursor-pointer hover:scale-110 active:scale-95 transition-all">
+                    <Camera size={18} />
+                    <input 
+                      id="avatar-upload"
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file && user) {
+                          try {
+                            setIsProfileUpdating(true);
+                            
+                            // 1. Compress and convert to Base64
+                            const reader = new FileReader();
+                            reader.readAsDataURL(file);
+                            reader.onload = async (event) => {
+                              const img = new window.Image();
+                              img.src = event.target?.result as string;
+                              img.onload = async () => {
+                                const canvas = document.createElement('canvas');
+                                const MAX_WIDTH = 400;
+                                const MAX_HEIGHT = 400;
+                                let width = img.width;
+                                let height = img.height;
+
+                                if (width > height) {
+                                  if (width > MAX_WIDTH) {
+                                    height *= MAX_WIDTH / width;
+                                    width = MAX_WIDTH;
+                                  }
+                                } else {
+                                  if (height > MAX_HEIGHT) {
+                                    width *= MAX_HEIGHT / height;
+                                    height = MAX_HEIGHT;
+                                  }
+                                }
+
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0, width, height);
+                                
+                                const base64String = canvas.toDataURL('image/jpeg', 0.8);
+
+                                // 1. Update Firestore (Exclusively for Base64 since Auth photoURL has length limits)
+                                await updateDoc(doc(db, 'users', user.uid), { photoURL: base64String });
+
+                                // 2. Update local state
+                                setUserProfile((prev: any) => ({ ...prev, photoURL: base64String }));
+                                
+                                setSnackMessage("Foto atualizada com sucesso");
+                                setTimeout(() => setSnackMessage(null), 3000);
+                                setIsProfileUpdating(false);
+                              };
+                            };
+                          } catch (err) {
+                            console.error("Error uploading image:", err);
+                            setAuthError("Erro ao processar imagem.");
+                            setIsProfileUpdating(false);
+                          }
+                        }
+                      }}
                     />
-                  ) : (
-                    <div className="w-full h-full bg-white/10 rounded-[2rem] flex items-center justify-center text-white relative z-10 border-4 border-white backdrop-blur-md shadow-xl">
-                      <UserIcon size={36} />
-                    </div>
-                  )}
+                  </label>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-display font-black text-white italic uppercase tracking-tighter leading-none mb-2">
-                    {user?.displayName || 'Aventureiro Beach'}
+
+                <div className="relative z-10">
+                  <h2 className="text-3xl font-display font-black text-white italic uppercase tracking-tighter leading-none mb-1">
+                    {user?.displayName || 'Organizador Beach'}
                   </h2>
-                  <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">
+                  <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">
                     {user?.email}
                   </p>
                 </div>
               </div>
 
               <div className="wave-container px-6 pt-10 pb-32">
-                <div className="max-w-2xl mx-auto space-y-8">
-                  <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-sm space-y-6">
-                    <h3 className="text-xs font-black text-primary uppercase tracking-widest border-b border-surface-container pb-4">Configurações da Conta</h3>
-                    
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                            <Zap size={20} />
-                          </div>
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">Plano Atual</span>
-                        </div>
-                        <span className="px-3 py-1 bg-accent text-on-accent rounded-full text-[8px] font-black uppercase tracking-widest">
-                          {isPremium ? 'PREMIUM' : 'FREE'}
-                        </span>
+                <div className="max-w-xl mx-auto space-y-6">
+                  {/* 2. Call to Action de Monetização (DESTAQUE MÁXIMO) */}
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="w-full relative overflow-hidden bg-[#cdf03b] p-6 rounded-[2rem] shadow-xl shadow-secondary/10 group flex items-center justify-between"
+                  >
+                    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative z-10 flex items-center gap-4">
+                      <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-sm">
+                        <Sparkles size={28} className="fill-primary" />
                       </div>
+                      <div className="text-left">
+                        <p className="text-primary font-black text-xs uppercase italic tracking-tighter leading-none mb-1">SEJA BEACH PRÓ PREMIUM</p>
+                        <p className="text-primary/60 text-[8px] font-black uppercase tracking-widest leading-none">crie torneios sem limites</p>
+                      </div>
+                    </div>
+                    <div className="relative z-10 bg-primary/10 p-2 rounded-full text-primary">
+                      <ChevronRight size={20} />
+                    </div>
+                  </motion.button>
 
-                      {!isPremium && (
-                        <button 
-                          onClick={() => setShowUpgradeModal(true)}
-                          className="w-full p-4 bg-primary/5 border-2 border-dashed border-primary/20 rounded-2xl flex items-center justify-between hover:bg-primary/10 transition-all group"
-                        >
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">Fazer Upgrade</span>
-                          <ChevronRight size={18} className="text-primary group-hover:translate-x-1 transition-transform" />
-                        </button>
-                      )}
+                  <div className="bg-white rounded-[2.5rem] p-4 border border-surface-container shadow-sm space-y-1">
+                    <button 
+                      onClick={() => {
+                        setEditName(user?.displayName || '');
+                        setEditEmail(user?.email || '');
+                        setNewPassword('');
+                        setAuthError(null);
+                        navigateTo('EDIT_PROFILE');
+                      }}
+                      className="w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest rounded-2xl transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors">
+                          <Settings size={20} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-on-surface font-black text-xs uppercase tracking-widest leading-none mb-1">Editar Perfil</p>
+                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Nome, e-mail e dados</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={18} className="text-on-surface-variant/20" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => navigateTo('TOURNAMENTS_LIST')}
+                      className="w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest rounded-2xl transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 group-hover:bg-orange-100 transition-colors">
+                          <History size={20} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-on-surface font-black text-xs uppercase tracking-widest leading-none mb-1">Meus Torneios</p>
+                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Histórico completo</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={18} className="text-on-surface-variant/20" />
+                    </button>
+      </div>
+      {/* 4. Rodapé (Ação Destrutiva) */}
+                  <div className="pt-4 flex justify-center">
+                    <button 
+                      onClick={() => signOut(auth)}
+                      className="flex items-center gap-2 px-8 py-4 text-red-500 hover:bg-red-50 rounded-full transition-all group"
+                    >
+                      <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[11px] font-black uppercase tracking-[0.2em]">Sair do Aplicativo</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 'EDIT_PROFILE' && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="w-full pb-32"
+            >
+              <div className="arena-hero-bg pt-6 pb-12 px-8 flex flex-col items-center">
+                <div className="w-full flex items-center justify-between mb-8">
+                  <button 
+                    onClick={() => goBack()}
+                    className="p-3 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20 text-white"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <h1 className="text-2xl font-display font-black text-white italic uppercase tracking-tighter">
+                    Editar Perfil
+                  </h1>
+                  <div className="w-10" /> {/* Spacer */}
+                </div>
+              </div>
+
+              <div className="wave-container px-6 pt-10">
+                <div className="max-w-xl mx-auto space-y-6">
+                  {/* Nome */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest px-1">Nome Completo</label>
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors">
+                        <UserIcon size={20} />
+                      </div>
+                      <input 
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Seu nome"
+                        className="w-full bg-white border border-surface-container rounded-2xl py-4 pl-12 pr-4 text-on-surface font-black text-xs uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
                     </div>
                   </div>
 
+                  {/* Email */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest px-1">E-mail de Acesso</label>
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors">
+                        <Users size={20} />
+                      </div>
+                      <input 
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="seu@e-mail.com"
+                        className="w-full bg-white border border-surface-container rounded-2xl py-4 pl-12 pr-4 text-on-surface font-black text-xs uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Nova Senha */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest px-1">Nova Senha (opcional)</label>
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors">
+                        <Lock size={20} />
+                      </div>
+                      <input 
+                        type={showPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Deixe em branco para não alterar"
+                        className="w-full bg-white border border-surface-container rounded-2xl py-4 pl-12 pr-12 text-on-surface font-black text-xs uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
+                      <button 
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 hover:text-primary transition-colors"
+                      >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {authError && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="p-4 bg-error/10 border border-error/20 rounded-2xl flex items-center gap-3 text-error"
+                    >
+                      <AlertCircle size={18} />
+                      <p className="text-[10px] font-black uppercase tracking-widest">{authError}</p>
+                    </motion.div>
+                  )}
+
                   <button 
-                    onClick={() => signOut(auth)}
-                    className="w-full py-5 bg-red-50 text-red-500 rounded-full font-black text-xs uppercase tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2 border border-red-100"
+                    onClick={() => handleSaveProfile()}
+                    disabled={isProfileUpdating}
+                    className="w-full bg-primary text-on-primary py-5 rounded-[2rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-50"
                   >
-                    <LogOut size={18} />
-                    Sair da Conta
+                    {isProfileUpdating ? (
+                      <RefreshCw size={20} className="animate-spin" />
+                    ) : (
+                      "SALVAR ALTERAÇÕES"
+                    )}
                   </button>
                 </div>
               </div>
@@ -3288,6 +3548,76 @@ export default function PingProApp() {
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+        
+        {/* Reauthentication Modal */}
+        <AnimatePresence>
+          {showReauthModal && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl border border-surface-container"
+              >
+                <div className="bg-primary/5 w-20 h-20 rounded-[2rem] flex items-center justify-center text-primary mb-8 mx-auto shadow-sm">
+                  <Lock size={40} />
+                </div>
+                <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Segurança</h3>
+                <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-8 uppercase tracking-tight leading-relaxed">
+                  Para alterar dados sensíveis, confirme sua <span className="text-primary">senha atual</span> abaixo.
+                </p>
+                <div className="space-y-6">
+                  <input 
+                    type="password"
+                    value={reauthPassword}
+                    onChange={(e) => setReauthPassword(e.target.value)}
+                    placeholder="Sua senha atual"
+                    className="w-full bg-surface-container rounded-2xl py-4 px-6 text-on-surface font-black text-xs uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  />
+                  
+                  {authError && (
+                    <p className="text-[9px] font-black text-error text-center uppercase tracking-widest">{authError}</p>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => handleSaveProfile(true)}
+                      disabled={isProfileUpdating}
+                      className="w-full py-5 bg-primary text-on-primary rounded-full font-black text-xs uppercase tracking-widest hover:bg-primary-dim transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                    >
+                      {isProfileUpdating ? <RefreshCw size={18} className="animate-spin" /> : "CONFIRMAR E SALVAR"}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowReauthModal(false);
+                        setAuthError(null);
+                        setReauthPassword('');
+                      }}
+                      className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
+                    >
+                      CANCELAR
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Global SnackBar */}
+        <AnimatePresence>
+          {snackMessage && (
+            <motion.div 
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] bg-green-500 text-white px-8 py-4 rounded-full shadow-xl shadow-green-500/20 flex items-center gap-3 border border-white/20 whitespace-nowrap"
+            >
+              <CheckCircle2 size={24} />
+              <span className="text-[11px] font-black uppercase tracking-[0.2em]">{snackMessage}</span>
+            </motion.div>
           )}
         </AnimatePresence>
     </div>
