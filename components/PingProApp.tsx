@@ -2546,19 +2546,17 @@ export default function PingProApp() {
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
                                             match.isCompleted 
                                               ? "bg-slate-100 text-slate-300 opacity-40 cursor-not-allowed shadow-none" 
-                                              : (!canIncrementScore(match.currentSet.player1, match.currentSet.player2, 1, activeTournament.matchFormat)
-                                                ? "bg-primary/50 text-white opacity-60 cursor-pointer shadow-none"
-                                                : "bg-primary text-white hover:bg-primary-dim shadow-primary/20")
+                                              : "bg-primary text-white hover:bg-primary-dim shadow-primary/20"
                                           )}
                                         >
                                           <Plus size={12} strokeWidth={4} />
                                         </button>
                                         <button 
                                           onClick={() => updateMatchScore(match.id, 1, -1)} 
-                                          disabled={match.isCompleted || match.currentSet.player1 <= 0}
+                                          disabled={match.isCompleted}
                                           className={cn(
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
-                                            (match.isCompleted || match.currentSet.player1 <= 0)
+                                            match.isCompleted
                                               ? "bg-slate-50 text-slate-200 opacity-40 cursor-not-allowed shadow-none"
                                               : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
                                           )}
@@ -2587,19 +2585,17 @@ export default function PingProApp() {
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
                                             match.isCompleted 
                                               ? "bg-slate-100 text-slate-300 opacity-40 cursor-not-allowed shadow-none" 
-                                              : (!canIncrementScore(match.currentSet.player1, match.currentSet.player2, 2, activeTournament.matchFormat)
-                                                ? "bg-primary/50 text-white opacity-60 cursor-pointer shadow-none"
-                                                : "bg-primary text-white hover:bg-primary-dim shadow-primary/20")
+                                              : "bg-primary text-white hover:bg-primary-dim shadow-primary/20"
                                           )}
                                         >
                                           <Plus size={12} strokeWidth={4} />
                                         </button>
                                         <button 
                                           onClick={() => updateMatchScore(match.id, 2, -1)} 
-                                          disabled={match.isCompleted || match.currentSet.player2 <= 0}
+                                          disabled={match.isCompleted}
                                           className={cn(
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
-                                            (match.isCompleted || match.currentSet.player2 <= 0)
+                                            match.isCompleted
                                               ? "bg-slate-50 text-slate-200 opacity-40 cursor-not-allowed shadow-none"
                                               : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
                                           )}

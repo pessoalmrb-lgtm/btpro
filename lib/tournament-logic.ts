@@ -457,18 +457,17 @@ export function validateSetScore(s1: number, s2: number, format: MatchFormat): {
 export function canIncrementScore(s1: number, s2: number, player: 1 | 2, format: MatchFormat): boolean {
   switch (format) {
     case '6_GAMES_TIEBREAK':
-      // Regra: Máximo 7. O placar só pode subir para 7 se houver empate em 5-5 (atingindo 7-5 ou 7-6).
-      // Se nenhuma dupla chegou a 5, o jogo termina em 6.
+      // Regra: Máximo 7.
+      // Permitir incremento do perdedor até 5 mesmo se o outro já tiver 6.
+      // Só travar o vencedor em 6 se o perdedor tiver menos de 5.
       if (player === 1) {
         if (s1 >= 7 || s2 >= 7) return false;
-        if (s1 === 6) return s2 >= 5; // Só permite 7 se o oponente tiver pelo menos 5
-        if (s2 === 6 && s1 < 5) return false; // Jogo encerrado (ex: 0-6 a 4-6)
-        return s1 < 6;
+        if (s1 === 6) return s2 >= 5; // Só vai para 7 se estiver 6-5 ou 6-6
+        return true; 
       } else {
         if (s2 >= 7 || s1 >= 7) return false;
-        if (s2 === 6) return s1 >= 5; // Só permite 7 se o oponente tiver pelo menos 5
-        if (s1 === 6 && s2 < 5) return false; // Jogo encerrado (ex: 6-0 a 6-4)
-        return s2 < 6;
+        if (s2 === 6) return s1 >= 5; // Só vai para 7 se estiver 5-6 ou 6-6
+        return true;
       }
 
     case '6_GAMES_MAX':
