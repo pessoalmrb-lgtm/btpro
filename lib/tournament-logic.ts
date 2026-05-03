@@ -363,13 +363,131 @@ export function checkPlayoffPossibility(playerCount: number, rounds: PlayoffRoun
  */
 export function generateIndividualDoubles(players: Player[], selectedCourts: number[]): Match[] {
   const n = players.length;
-  // Super format typically requires an even number of players for balance.
   const tempPlayers = [...players];
   if (n % 2 !== 0) {
     tempPlayers.push({ id: 'BYE', name: 'Folga' });
   }
   const numPlayers = tempPlayers.length;
   
+  // Custom fixed matrix for Super 6 (6 players)
+  if (numPlayers === 6) {
+    const matrix = [
+      { r: 1, p1: 0, p1p: 1, p2: 2, p2p: 3 },
+      { r: 2, p1: 0, p1p: 2, p2: 4, p2p: 5 },
+      { r: 3, p1: 0, p1p: 3, p2: 1, p2p: 4 },
+      { r: 4, p1: 1, p1p: 5, p2: 2, p2p: 4 },
+      { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 3 },
+    ];
+
+    return matrix.map((m, idx) => {
+      const table = selectedCourts[idx % selectedCourts.length] || 1;
+      return {
+        id: `super-6-${m.r}-${idx}`,
+        player1Id: tempPlayers[m.p1].id,
+        player1PartnerId: tempPlayers[m.p1p].id,
+        player2Id: tempPlayers[m.p2].id,
+        player2PartnerId: tempPlayers[m.p2p].id,
+        table,
+        sets: [],
+        currentSet: { player1: 0, player2: 0 },
+        isCompleted: false,
+        round: m.r
+      };
+    });
+  }
+
+  // Custom fixed matrix for Super 8 (8 players)
+  if (numPlayers === 8) {
+    const matrix = [
+      // Round 1
+      { r: 1, p1: 0, p1p: 1, p2: 2, p2p: 3 },
+      { r: 1, p1: 4, p1p: 5, p2: 6, p2p: 7 },
+      // Round 2
+      { r: 2, p1: 0, p1p: 2, p2: 5, p2p: 6 },
+      { r: 2, p1: 1, p1p: 3, p2: 4, p2p: 7 },
+      // Round 3
+      { r: 3, p1: 0, p1p: 6, p2: 1, p2p: 7 },
+      { r: 3, p1: 2, p1p: 5, p2: 3, p2p: 4 },
+      // Round 4
+      { r: 4, p1: 0, p1p: 3, p2: 4, p2p: 6 },
+      { r: 4, p1: 1, p1p: 2, p2: 5, p2p: 7 },
+      // Round 5
+      { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 4 },
+      { r: 5, p1: 2, p1p: 6, p2: 3, p2p: 7 },
+      // Round 6
+      { r: 6, p1: 0, p1p: 4, p2: 2, p2p: 7 },
+      { r: 6, p1: 1, p1p: 5, p2: 3, p2p: 6 },
+      // Round 7
+      { r: 7, p1: 0, p1p: 7, p2: 3, p2p: 5 },
+      { r: 7, p1: 1, p1p: 6, p2: 2, p2p: 4 },
+    ];
+
+    return matrix.map((m, idx) => {
+      const table = selectedCourts[idx % selectedCourts.length] || 1;
+      return {
+        id: `super-8-${m.r}-${idx}`,
+        player1Id: tempPlayers[m.p1].id,
+        player1PartnerId: tempPlayers[m.p1p].id,
+        player2Id: tempPlayers[m.p2].id,
+        player2PartnerId: tempPlayers[m.p2p].id,
+        table,
+        sets: [],
+        currentSet: { player1: 0, player2: 0 },
+        isCompleted: false,
+        round: m.r
+      };
+    });
+  }
+
+  // Custom fixed matrix for Super 10 (10 players)
+  if (numPlayers === 10) {
+    const matrix = [
+      // Round 1
+      { r: 1, p1: 0, p1p: 1, p2: 2, p2p: 3 },
+      { r: 1, p1: 4, p1p: 5, p2: 6, p2p: 7 },
+      // Round 2
+      { r: 2, p1: 0, p1p: 2, p2: 4, p2p: 6 },
+      { r: 2, p1: 1, p1p: 3, p2: 5, p2p: 7 },
+      // Round 3
+      { r: 3, p1: 0, p1p: 3, p2: 5, p2p: 8 },
+      { r: 3, p1: 1, p1p: 4, p2: 6, p2p: 9 },
+      // Round 4
+      { r: 4, p1: 0, p1p: 4, p2: 7, p2p: 9 },
+      { r: 4, p1: 2, p1p: 5, p2: 3, p2p: 8 },
+      // Round 5
+      { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 6 },
+      { r: 5, p1: 2, p1p: 7, p2: 4, p2p: 9 },
+      // Round 6
+      { r: 6, p1: 0, p1p: 6, p2: 3, p2p: 9 },
+      { r: 6, p1: 1, p1p: 7, p2: 4, p2p: 8 },
+      // Round 7
+      { r: 7, p1: 0, p1p: 7, p2: 2, p2p: 9 },
+      { r: 7, p1: 1, p1p: 8, p2: 3, p2p: 5 },
+      // Round 8
+      { r: 8, p1: 0, p1p: 8, p2: 1, p2p: 9 },
+      { r: 8, p1: 2, p1p: 4, p2: 3, p2p: 6 },
+      // Round 9
+      { r: 9, p1: 0, p1p: 9, p2: 3, p2p: 7 },
+      { r: 9, p1: 1, p1p: 5, p2: 2, p2p: 8 },
+    ];
+
+    return matrix.map((m, idx) => {
+      const table = selectedCourts[idx % selectedCourts.length] || 1;
+      return {
+        id: `super-10-${m.r}-${idx}`,
+        player1Id: tempPlayers[m.p1].id,
+        player1PartnerId: tempPlayers[m.p1p].id,
+        player2Id: tempPlayers[m.p2].id,
+        player2PartnerId: tempPlayers[m.p2p].id,
+        table,
+        sets: [],
+        currentSet: { player1: 0, player2: 0 },
+        isCompleted: false,
+        round: m.r
+      };
+    });
+  }
+
   const matches: Match[] = [];
   const gamesPlayed: Record<string, number> = {};
   const opponentCount: Record<string, Record<string, number>> = {};
