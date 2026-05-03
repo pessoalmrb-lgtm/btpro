@@ -2,29 +2,38 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer } from 'firebase/firestore';
-import { firebaseConfig } from './firebase-applet-config';
-
+import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, setLogLevel } from 'firebase/firestore';
 // Lazy initialization
-let _app: any = null;
-const getFirebaseApp = () => {
-  if (!_app) _app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  return _app;
+const firebaseConfig = {
+  projectId: "btsuper-d8521",
+  appId: "1:931735521781:web:c8f82a36de098baa9478bc",
+  apiKey: "AIzaSyB8zCvS5ghU_ynW0h4_lv7Gy_kpznhglt0",
+  authDomain: "btsuper-d8521.firebaseapp.com",
+  firestoreDatabaseId: "(default)",
+  storageBucket: "btsuper-d8521.firebasestorage.app",
+  messagingSenderId: "931735521781",
+  measurementId: ""
 };
 
-let _auth: any = null;
+const getFirebaseApp = () => {
+  if (getApps().length === 0) {
+    return initializeApp(firebaseConfig);
+  }
+  return getApp();
+};
+
 export const auth = typeof window !== 'undefined' ? getAuth(getFirebaseApp()) : null as any;
+export const db = typeof window !== 'undefined' ? getFirestore(getFirebaseApp()) : null as any;
 
-let _db: any = null;
-export const db = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(), firebaseConfig.firestoreDatabaseId) : null as any;
-
-export const googleProvider = typeof window !== 'undefined' ? new GoogleAuthProvider() : null as any;
+export const getGoogleProvider = () => {
+  return new GoogleAuthProvider();
+};
 
 // Test connection helper
 export async function testConnection() {
   if (typeof window === 'undefined') return;
   try {
-    const dbInstance = getFirestore(getFirebaseApp(), firebaseConfig.firestoreDatabaseId);
+    const dbInstance = getFirestore(getFirebaseApp(), "(default)");
     await getDocFromServer(doc(dbInstance, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
@@ -65,7 +74,7 @@ export interface FirestoreErrorInfo {
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const currentUser = typeof window !== 'undefined' ? auth?.currentUser : null;
-  const errInfo: FirestoreErrorInfo = {
+  const errInfo: any = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: currentUser?.uid,
@@ -73,7 +82,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: currentUser?.emailVerified,
       isAnonymous: currentUser?.isAnonymous,
       tenantId: currentUser?.tenantId,
-      providerInfo: currentUser?.providerData.map((provider: any) => ({
+      providerInfo: currentUser?.providerData?.map((provider: any) => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,
@@ -83,8 +92,17 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  
+  try {
+    const serialized = JSON.stringify(errInfo);
+    console.error('Firestore Error: ', serialized);
+    throw new Error(serialized);
+  } catch (stringifyError) {
+    const fallbackMessage = `Firestore Error at ${path} during ${operationType}: ${errInfo.error}`;
+    console.error(fallbackMessage);
+    // Use a very simple JSON to avoid recursive issues
+    throw new Error(JSON.stringify({ error: "permission-denied", operationType, path }));
+  }
 }
 
 export function cleanData(data: any): any {
@@ -123,6 +141,8 @@ export {
   setDoc, 
   getDoc, 
   updateDoc, 
-  deleteDoc 
+  deleteDoc,
+  getDocs,
+  or 
 };
 export type { User };

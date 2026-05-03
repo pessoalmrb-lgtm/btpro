@@ -1,4 +1,4 @@
-import { Match, Player, MatchFormat, RankingCriterion, PlayoffRound } from "../types";
+import { Match, Player, MatchFormat, RankingCriterion, PlayoffRound, TournamentState, Ranking } from "../types";
 
 /**
  * Generates a Round Robin schedule using the Circle Method.
@@ -140,18 +140,25 @@ export function getPossibleGroupStructures(totalTeams: number): GroupPossibility
 export function generateGroupStage(
   teams: Player[], 
   selectedCourts: number[], 
-  config: { groupsCount: number, teamsPerGroup: number, type: 'INTRA' | 'INTER' }
+  config: { groupsCount: number, teamsPerGroup: number, type: 'INTRA' | 'INTER' },
+  predefinedGroups?: { id: string, teams: Player[] }[]
 ): { matches: Match[], groups: { id: string, teams: Player[] }[] } {
   // 1. Organize teams into groups
-  const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
-  const groups: { id: string, teams: Player[] }[] = Array.from({ length: config.groupsCount }, (_, i) => ({
-    id: String.fromCharCode(65 + i),
-    teams: []
-  }));
+  let groups: { id: string, teams: Player[] }[] = [];
   
-  shuffledTeams.forEach((team, i) => {
-    groups[i % config.groupsCount].teams.push(team);
-  });
+  if (predefinedGroups && predefinedGroups.length > 0) {
+    groups = predefinedGroups;
+  } else {
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    groups = Array.from({ length: config.groupsCount }, (_, i) => ({
+      id: String.fromCharCode(65 + i),
+      teams: []
+    }));
+    
+    shuffledTeams.forEach((team, i) => {
+      groups[i % config.groupsCount].teams.push(team);
+    });
+  }
 
   // 2. Collect all raw matches needed
   let pendingMatches: { p1: Player, p2: Player, groupId: string }[] = [];
@@ -348,56 +355,129 @@ export function checkPlayoffPossibility(playerCount: number, rounds: PlayoffRoun
   return { possible: true };
 }
 
+/**
+ * Generates an Individual Doubles (Super) schedule.
+ * Goal: Every player partners with every other player exactly once.
+ * For N players, this means N-1 matches per player.
+ * Total matches required = N * (N-1) / 4.
+ */
 export function generateIndividualDoubles(players: Player[], selectedCourts: number[]): Match[] {
   const n = players.length;
-  const isOdd = n % 2 !== 0;
+  // Super format typically requires an even number of players for balance.
   const tempPlayers = [...players];
-  
-  if (isOdd) {
+  if (n % 2 !== 0) {
     tempPlayers.push({ id: 'BYE', name: 'Folga' });
   }
-
   const numPlayers = tempPlayers.length;
-  const numRounds = numPlayers - 1;
-  const matches: Match[] = [];
   
-  const playerIndices = tempPlayers.map((_, i) => i);
+  const matches: Match[] = [];
+  const gamesPlayed: Record<string, number> = {};
+  const opponentCount: Record<string, Record<string, number>> = {};
 
-  for (let round = 1; round <= numRounds; round++) {
-    const roundPairs: {p1: Player, p2: Player}[] = [];
-    
-    for (let i = 0; i < numPlayers / 2; i++) {
-      const p1 = tempPlayers[playerIndices[i]];
-      const p2 = tempPlayers[playerIndices[numPlayers - 1 - i]];
-      
-      if (p1.id !== 'BYE' && p2.id !== 'BYE') {
-        roundPairs.push({ p1, p2 });
-      }
+  tempPlayers.forEach(p => {
+    gamesPlayed[p.id] = 0;
+    opponentCount[p.id] = {};
+  });
+
+  // Generate all possible unique partnerships
+  const allPossiblePairs: [string, string][] = [];
+  for (let i = 0; i < numPlayers; i++) {
+    for (let j = i + 1; j < numPlayers; j++) {
+      allPossiblePairs.push([tempPlayers[i].id, tempPlayers[j].id]);
+    }
+  }
+
+  // Shuffle for variety
+  let remainingPairs = allPossiblePairs.sort(() => Math.random() - 0.5);
+  
+  const maxMatchesPerRound = Math.floor(numPlayers / 4);
+  const maxRounds = numPlayers * 3; // Safety limit
+  
+  for (let r = 1; r <= maxRounds && remainingPairs.length > 0; r++) {
+    const playersUsedThisRound = new Set<string>();
+    let matchesInRound = 0;
+
+    // Try to fill matches for this round
+    for (let i = 0; i < remainingPairs.length && matchesInRound < maxMatchesPerRound; i++) {
+        const pair1 = remainingPairs[i];
+        if (playersUsedThisRound.has(pair1[0]) || playersUsedThisRound.has(pair1[1])) continue;
+
+        // Find another pair that hasn't played this round and shares no players
+        // Optimization: Pick pair2 such that we minimize exposure to previous opponents
+        let bestPair2Idx = -1;
+        let minCombinedOpponentWeight = Infinity;
+
+        for (let j = i + 1; j < remainingPairs.length; j++) {
+          const pair2 = remainingPairs[j];
+          const combined = [...pair1, ...pair2];
+          if (new Set(combined).size === 4 && !combined.some(p => playersUsedThisRound.has(p))) {
+            // Calculate how many times players in pair1 have faced players in pair2
+            let opponentWeight = 0;
+            pair1.forEach(p1 => {
+              pair2.forEach(p2 => {
+                opponentWeight += (opponentCount[p1][p2] || 0);
+              });
+            });
+
+            if (opponentWeight < minCombinedOpponentWeight) {
+              minCombinedOpponentWeight = opponentWeight;
+              bestPair2Idx = j;
+              if (opponentWeight === 0) break; // Perfect match found
+            }
+          }
+        }
+
+        if (bestPair2Idx !== -1) {
+          const pair2 = remainingPairs[bestPair2Idx];
+          
+          // Form the match
+          const table = selectedCourts[matchesInRound % selectedCourts.length] || 1;
+          const isByeMatch = pair1.includes('BYE') || pair2.includes('BYE');
+          
+          if (!isByeMatch) {
+            matches.push({
+              id: `super-${r}-${matchesInRound}-${Math.random().toString(36).substr(2, 5)}`,
+              player1Id: pair1[0],
+              player1PartnerId: pair1[1],
+              player2Id: pair2[0],
+              player2PartnerId: pair2[1],
+              table,
+              sets: [],
+              currentSet: { player1: 0, player2: 0 },
+              isCompleted: false,
+              round: r
+            });
+            matchesInRound++;
+
+            // Update opponent counts
+            pair1.forEach(p1 => {
+              pair2.forEach(p2 => {
+                if (p1 !== 'BYE' && p2 !== 'BYE') {
+                  opponentCount[p1][p2] = (opponentCount[p1][p2] || 0) + 1;
+                  opponentCount[p2][p1] = (opponentCount[p2][p1] || 0) + 1;
+                }
+              });
+            });
+          }
+
+          // Mark players as used
+          pair1.forEach(p => playersUsedThisRound.add(p));
+          pair2.forEach(p => playersUsedThisRound.add(p));
+
+          // Remove these pairs from remaining (remove larger index first)
+          remainingPairs.splice(bestPair2Idx, 1);
+          remainingPairs.splice(i, 1);
+          i--; // Adjust index after splice
+        }
     }
 
-    // Group pairs into matches (2 pairs per match)
-    for (let i = 0; i < Math.floor(roundPairs.length / 2); i++) {
-      const pair1 = roundPairs[i * 2];
-      const pair2 = roundPairs[i * 2 + 1];
-      
-      const table = (selectedCourts.length > 0) ? selectedCourts[i % selectedCourts.length] : 1;
-      
-      matches.push({
-        id: `ind-${round}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-        player1Id: pair1.p1.id,
-        player1PartnerId: pair1.p2.id,
-        player2Id: pair2.p1.id,
-        player2PartnerId: pair2.p2.id,
-        table,
-        sets: [],
-        currentSet: { player1: 0, player2: 0 },
-        isCompleted: false,
-        round
-      });
+    // If no progress made in this round, we might be stuck with impossible pairs.
+    // However, in Super format, some pairs might just not be able to play.
+    // We try to rotate the leading pair to help.
+    if (matchesInRound === 0 && remainingPairs.length > 0) {
+      // Move the first pair to the end to shuffle search order
+      remainingPairs.push(remainingPairs.shift()!);
     }
-
-    // Rotate indices (keep first index fixed)
-    playerIndices.splice(1, 0, playerIndices.pop()!);
   }
 
   return matches;
@@ -570,6 +650,77 @@ export function getKnockoutQualifiedTeams(
   }
 
   return qualifiedTeams;
+}
+
+export interface FinalRankingResult {
+  playerId: string;
+  playerName: string;
+  placement: number;
+  points: number;
+  hadPneu: boolean;
+}
+
+/**
+ * Calculates points for a ranking based on tournament results.
+ */
+export function calculateTournamentPoints(
+  tournament: TournamentState,
+  ranking: Ranking
+): FinalRankingResult[] {
+  const standings = calculateRankings(tournament.players, tournament.matches, tournament.rankingCriteria);
+  const results: FinalRankingResult[] = [];
+
+  const { pneu: pneuPenalty, participation: participationPoints, placementPoints, positionsThatScore } = ranking.pointsConfig;
+
+  const playersWhoSufferedPneu = new Set<string>();
+
+  tournament.matches.forEach(m => {
+    if (!m.isCompleted) return;
+    
+    m.sets.forEach(s => {
+      if (s.player1 === 0 && s.player2 > 0) {
+        playersWhoSufferedPneu.add(m.player1Id);
+        if (m.player1PartnerId) playersWhoSufferedPneu.add(m.player1PartnerId);
+      }
+      if (s.player2 === 0 && s.player1 > 0) {
+        playersWhoSufferedPneu.add(m.player2Id);
+        if (m.player2PartnerId) playersWhoSufferedPneu.add(m.player2PartnerId);
+      }
+    });
+  });
+
+  const officiallyRegisteredIds = new Set((ranking.leagueAthletes || []).filter(a => !a.isManual).map(a => a.id));
+
+  standings.forEach((player, index) => {
+    // Check if the athlete is officially registered in the league (not manual)
+    const isOfficiallyRegistered = officiallyRegisteredIds.has(player.id);
+    
+    const placement = index + 1;
+    let points = 0;
+
+    if (isOfficiallyRegistered) {
+      points += (participationPoints || 0);
+
+      if (placement <= positionsThatScore) {
+        points += (placementPoints[placement] || 0);
+      }
+
+      const hadPneu = playersWhoSufferedPneu.has(player.id);
+      if (hadPneu) {
+        points += (pneuPenalty || 0);
+      }
+    }
+
+    results.push({
+      playerId: player.id,
+      playerName: player.name,
+      placement,
+      points,
+      hadPneu: playersWhoSufferedPneu.has(player.id)
+    });
+  });
+
+  return results;
 }
 
 export function calculateRankings(players: Player[], matches: Match[], criteria: RankingCriterion[] = ['WINS', 'HEAD_TO_HEAD', 'GAME_BALANCE']) {

@@ -119,13 +119,25 @@
 }
 
 .btn-hero-glass {
-  @apply w-full flex items-center justify-between p-2 rounded-full transition-all duration-300 border border-primary/10;
-  background: linear-gradient(135deg, rgba(231, 245, 255, 0.5) 0%, rgba(204, 233, 255, 0.3) 100%);
-  backdrop-filter: blur(10px);
+  @apply w-full flex items-center justify-between p-2 rounded-full transition-all duration-300 border border-white/20;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.2);
+}
+
+.btn-hero-secondary {
+  @apply w-full flex items-center justify-between p-2 rounded-full transition-all duration-300;
+  background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+  box-shadow: 0 15px 30px -10px rgba(0, 210, 255, 0.4);
+}
+
+.btn-hero-secondary:active {
+  @apply scale-[0.97];
+  box-shadow: 0 5px 15px -5px rgba(0, 210, 255, 0.3);
 }
 
 .btn-hero-glass:active {
-  @apply scale-[0.97] bg-primary/5;
+  @apply scale-[0.97] bg-white/20;
 }
 
 .bottom-nav-glass {

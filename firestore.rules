@@ -90,23 +90,80 @@ service cloud.firestore {
              (!data.keys().contains('playoffRounds') || data.playoffRounds is list);
     }
 
+    // Validation Blueprint for Ranking
+    function isValidRanking(data) {
+      let requiredFields = ['id', 'name', 'ownerId', 'adminIds', 'pointsConfig', 'createdAt'];
+      return data.keys().hasAll(requiredFields) &&
+             data.id is string && data.id.size() > 0 &&
+             data.name is string && data.name.size() > 0 &&
+             data.ownerId is string && data.ownerId.size() > 0 &&
+             data.adminIds is list && data.adminIds.size() <= 100 &&
+             (!data.keys().contains('athleteIds') || (data.athleteIds is list && data.athleteIds.size() <= 5000)) &&
+             (!data.keys().contains('leagueAthletes') || (data.leagueAthletes is list && data.leagueAthletes.size() <= 5000)) &&
+             data.pointsConfig is map &&
+             data.createdAt is int;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
+    match /rankings/{rankingId} {
+      allow read: if isSignedIn(); // Rankings can be public or discovered
+      
+      allow create: if isSignedIn() && 
+                      isValidId(rankingId) &&
+                      isValidRanking(incoming()) && 
+                      incoming().ownerId == request.auth.uid;
+      
+        allow update: if isSignedIn() && (
+                        // 1. Admins/Owner can update everything (obeying isValidRanking)
+                        ((request.auth.uid == existing().ownerId || request.auth.uid in existing().adminIds || isAdmin()) && 
+                         isValidRanking(request.resource.data) &&
+                         request.resource.data.ownerId == existing().ownerId) 
+                        ||
+                        // 2. Athletes (including non-admins) can always remove themselves
+                        (isSignedIn() &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['adminIds', 'leagueAthletes', 'athleteIds']) &&
+                         // Security: Must not be in the new athleteIds or adminIds lists
+                         !(request.auth.uid in request.resource.data.get('athleteIds', [])) &&
+                         !(request.auth.uid in request.resource.data.get('adminIds', [])) &&
+                         // Verification: Must have been a member (either in athleteIds, adminIds, or have a player record)
+                         (request.auth.uid in existing().get('athleteIds', []) || 
+                          request.auth.uid in existing().get('adminIds', []) ||
+                          exists(/databases/$(database)/documents/rankings/$(rankingId)/players/$(request.auth.uid))))
+                      );
+      
+      allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /players/{playerId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (
+          // Admin of the ranking or global admin
+          (exists(/databases/$(database)/documents/rankings/$(rankingId)) && 
+           (request.auth.uid in get(/databases/$(database)/documents/rankings/$(rankingId)).data.adminIds ||
+            request.auth.uid == get(/databases/$(database)/documents/rankings/$(rankingId)).data.ownerId)) ||
+          // User deleting their own document when leaving
+          request.auth.uid == playerId ||
+          isAdmin()
+        );
+      }
+    }
+
     match /tournaments/{tournamentId} {
-      allow read: if isDocOwner() || isAdmin();
+      allow read: if isDocOwner() || isAdmin() || 
+                  (isSignedIn() && existing().get('rankingId', null) != null && 
+                   request.auth.uid in get(/databases/$(database)/documents/rankings/$(existing().rankingId)).data.athleteIds);
       
       allow create: if isSignedIn() && 
                       isValidId(tournamentId) &&
                       isValidTournament(incoming()) && 
-                      incoming().uid == request.auth.uid &&
-                      incoming().createdAt == request.time.toMillis();
+                      incoming().uid == request.auth.uid;
       
       allow update: if (isDocOwner() || isAdmin()) && 
-                      isValidTournament(incoming()) && 
-                      incoming().uid == existing().uid &&
-                      incoming().createdAt == existing().createdAt;
+                      isValidTournament(request.resource.data) && 
+                      request.resource.data.uid == existing().uid &&
+                      request.resource.data.createdAt == existing().createdAt;
       
       allow delete: if isDocOwner() || isAdmin();
     }
@@ -117,12 +174,11 @@ service cloud.firestore {
       allow create: if isOwner(userId) && 
                       isValidId(userId) &&
                       incoming().keys().hasAll(['uid', 'email', 'isPremium']) &&
-                      incoming().uid == request.auth.uid &&
-                      incoming().isPremium == false;
+                      incoming().uid == request.auth.uid;
                       
       allow update: if isOwner(userId) && (
-        // Only allow updating email by self, or anything by admin
-        incoming().diff(existing()).affectedKeys().hasOnly(['email']) || isAdmin()
+        // Allow updating specific fields or anything by admin
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'isPremium', 'subscriptionExpiresAt']) || isAdmin()
       );
     }
   }

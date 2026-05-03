@@ -77,6 +77,88 @@ export type TournamentState = {
   playoffRounds?: PlayoffRound[];
   isFinished: boolean;
   createdAt: number;
+  uid?: string;
+  rankingId?: string;
+  championsPhotoUrl?: string;
+  finalResults?: {
+    playerId: string;
+    playerName: string;
+    placement: number;
+    points: number;
+    hadPneu: boolean;
+  }[];
+};
+
+export type PointsConfig = {
+  placementPoints: Record<number, number>; // Rank (1, 2, 3...) -> Points
+  participation: number;
+  pneu: number;
+  positionsThatScore: number; // e.g., Top 3
+};
+
+export type PlayerStats = {
+  id: string;
+  name: string;
+  photo?: string;
+  userTag?: string;
+  totalPoints: number;
+  victories: number;
+  pneus: number;
+  participations: number;
+  tournamentHistory?: {
+    tournamentId: string;
+    tournamentName: string;
+    placement: number;
+    pointsEarned: number;
+    hasPneu: boolean;
+    date: number;
+  }[];
+};
+
+export type LeagueAthlete = {
+  id: string;
+  name: string;
+  email: string;
+  userTag: string;
+  photo?: string;
+  userNumericId?: string;
+  isManual?: boolean;
+};
+
+export type Address = {
+  street: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+};
+
+export type Ranking = {
+  id: string;
+  name: string;
+  description?: string;
+  arenaName?: string;
+  address?: Address;
+  ownerId: string;
+  adminIds: string[];
+  logoUrl?: string;
+  coverUrl?: string;
+  pointsConfig: PointsConfig;
+  leagueAthletes: LeagueAthlete[];
+  athleteIds?: string[];
+  createdAt: number;
+  playerStats?: Record<string, PlayerStats>;
+};
+
+export type UserProfile = {
+  uid: string;
+  email: string;
+  userTag: string;
+  userNumericId: string;
+  displayName: string | null;
+  photoURL: string | null;
+  isPremium: boolean;
+  subscriptionExpiresAt?: number;
+  createdAt: number;
 };
 
 export type AppStep = 
@@ -99,4 +181,7 @@ export type AppStep =
   | 'DASHBOARD'
   | 'PROFILE'
   | 'EDIT_PROFILE'
-  | 'TOURNAMENTS_LIST';
+  | 'TOURNAMENTS_LIST'
+  | 'MY_RANKINGS'
+  | 'CREATE_RANKING'
+  | 'RANKING_DETAILS';

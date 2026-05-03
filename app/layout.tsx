@@ -15,8 +15,14 @@ const epilogue = Epilogue({
 });
 
 export const metadata: Metadata = {
-  title: 'BeachPro - Gestão de Torneios',
+  title: 'Beach Pró - Gestão de Torneios',
   description: 'Aplicativo moderno e intuitivo para gerenciamento de torneios de Beach Tennis.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
+  themeColor: '#0f172a',
 };
 
 export default function RootLayout({
