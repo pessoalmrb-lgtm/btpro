@@ -45,7 +45,7 @@ import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or } from '../firebase';
+import { auth, db, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, testConnection } from '../firebase';
 import { generateUniqueUserTag, generateUniqueNumericId } from '../lib/user-utils';
 import type { User } from '../firebase';
 
@@ -348,6 +348,10 @@ export default function BeachProApp() {
         setStep('HOME');
       }
     });
+
+    // Verify Firestore connection on boot
+    testConnection();
+
     return () => unsubscribe();
   }, []);
 
@@ -703,6 +707,7 @@ export default function BeachProApp() {
       }
     } catch (err) {
       console.error("Search error:", err);
+      handleFirestoreError(err, OperationType.GET, `users-search-${term}`);
       setError("Erro ao buscar atleta.");
     } finally {
       setIsSearching(false);
@@ -1263,7 +1268,6 @@ export default function BeachProApp() {
   const addAdminToRanking = async (rankingId: string, email: string) => {
     if (!user) return;
     try {
-      // Find user by email
       const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase().trim()));
       const snap = await getDocs(q);
       if (snap.empty) {
@@ -1289,6 +1293,7 @@ export default function BeachProApp() {
       setTimeout(() => setSnackMessage(null), 3000);
     } catch (err) {
       console.error("Error adding admin:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `rankings/${rankingId}`);
       setSnackMessage("Erro ao adicionar administrador.");
       setTimeout(() => setSnackMessage(null), 3000);
     }
@@ -1387,6 +1392,7 @@ export default function BeachProApp() {
       navigateTo('MY_RANKINGS', { rankingId: null, replace: true });
     } catch (err) {
       console.error("Delete ranking error:", err);
+      handleFirestoreError(err, OperationType.DELETE, `rankings/${rankingId}`);
       setError("Erro ao excluir liga.");
     }
   };
@@ -1510,57 +1516,79 @@ export default function BeachProApp() {
     const isEndingGroups = isMataMataFormat && hasPlayoffs && activeTournament.currentRound < 100 && (currentIndex === availableRounds.filter(r => r < 100).length - 1);
 
     if (isEndingGroups) {
-      const groupIds = Array.from(new Set(activeTournament.matches.map(m => m.groupId).filter((id): id is string => !!id && !id.includes('playoff')))).sort();
+      const distinctGroupIds = new Set<string>();
+      activeTournament.matches.forEach(m => {
+        if (m.groupId && !m.groupId.includes('playoff')) {
+          // For INTER-GROUP formats (e.g. "AB"), we need to extract both "A" and "B"
+          if (m.groupId.length > 1 && /^[A-Z]+$/.test(m.groupId)) {
+            for (const char of m.groupId) distinctGroupIds.add(char);
+          } else {
+            distinctGroupIds.add(m.groupId);
+          }
+        }
+      });
+
+      const groupIds = Array.from(distinctGroupIds).sort();
       const numGroups = groupIds.length;
+      const isInterGroup = activeTournament.matches.some(m => m.groupId && m.groupId.length > 1 && !m.groupId.includes('playoff'));
       
       if (numGroups > 0) {
         // Collect all ranked teams from all groups
         const groups: {id: string, teams: Player[]}[] = [];
-        groupIds.forEach(gid => {
+        
+        // If it's intergroup, the standings are often calculated within the composite groups (e.g. "AB")
+        // But for qualified teams logic, let's stick to the IDs present in the matches
+        const actualStandingGroupIds = Array.from(new Set(activeTournament.matches.map(m => m.groupId).filter((id): id is string => !!id && !id.includes('playoff')))).sort();
+
+        actualStandingGroupIds.forEach(gid => {
           const groupMatches = activeTournament.matches.filter(m => m.groupId === gid);
           const groupTeamsIds = new Set(groupMatches.flatMap(m => [m.player1Id, m.player2Id]));
           const groupPlayers = activeTournament.players.filter(p => groupTeamsIds.has(p.id));
           groups.push({ id: gid, teams: groupPlayers });
         });
 
-        // 1. Calculate Qualified Teams using the logic requested
-        const qualifiedTeams = getKnockoutQualifiedTeams(
-          activeTournament.players,
-          activeTournament.matches,
-          activeTournament.rankingCriteria,
-          groups
-        );
-
-        // 2. Generate Knockout Stage Matches
         const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
         const selectedPlayoffRounds = activeTournament.playoffRounds || [];
         const currentKnockoutRounds = roundsOrder.filter(r => selectedPlayoffRounds.includes(r));
         
         if (currentKnockoutRounds.length === 0) {
-           // No playoffs, finish
-           await finishTournament();
-           return;
+          await finishTournament();
+          return;
         }
 
-        // Seeding logic for specific scenarios
+        const qualifiedTeams = getKnockoutQualifiedTeams(
+          activeTournament.players,
+          activeTournament.matches,
+          activeTournament.rankingCriteria,
+          groups,
+          currentKnockoutRounds
+        );
+
         let knockoutMatches: Match[] = [];
         const firstRound = currentKnockoutRounds[0];
 
-        if (numGroups === 2 && firstRound === 'SEMI_FINALS' && qualifiedTeams.length === 4) {
-          // Scenario A: 2 groups of 4
-          // SF1: 1º A x 2º B
-          // SF2: 1º B x 2º A
-          const getRanked = (gid: string, rank: number) => {
+        // Scenario A: 2 standing groups (or 1 inter-group pair) -> Semi Finals (4 teams)
+        const isTwoGroupSemi = actualStandingGroupIds.length === 2 && 
+                               firstRound === 'SEMI_FINALS' && 
+                               qualifiedTeams.length === 4;
+
+        if (isTwoGroupSemi) {
+          // SF1: 1º G1 x 2º G2
+          // SF2: 1º G2 x 2º G1
+          const g1Id = actualStandingGroupIds[0];
+          const g2Id = actualStandingGroupIds[1];
+
+          const getRankedFromGroup = (gid: string, rank: number) => {
              const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
              const gTeams = groups.find(g => g.id === gid)?.teams || [];
              const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
              return rankings[rank - 1];
           };
 
-          const p1 = getRanked('A', 1);
-          const p2 = getRanked('B', 2);
-          const p3 = getRanked('B', 1);
-          const p4 = getRanked('A', 2);
+          const p1 = getRankedFromGroup(g1Id, 1);
+          const p2 = getRankedFromGroup(g2Id, 2);
+          const p3 = getRankedFromGroup(g2Id, 1);
+          const p4 = getRankedFromGroup(g1Id, 2);
 
           knockoutMatches.push({
             id: 'playoff-SEMI_FINALS-0',
@@ -1587,27 +1615,27 @@ export default function BeachProApp() {
           const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
           knockoutMatches = [...knockoutMatches, ...finalMatches];
 
-        } else if (numGroups === 4 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
-          // Scenario B & C: 4 groups of 3 or 4
-          // Q1: 1º Grupo A x 2º Grupo C
-          // Q2: 1º Grupo B x 2º Grupo D
-          // Q3: 1º Grupo C x 2º Grupo A
-          // Q4: 1º Grupo D x 2º Grupo B
-          const getRanked = (gid: string, rank: number) => {
+        } else if (actualStandingGroupIds.length === 4 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
+          // Scenario B: 4 standing groups -> Quarter Finals (8 teams)
+          // Q1: 1ºA x 2ºC
+          // Q2: 1ºB x 2ºD
+          // Q3: 1ºC x 2ºA
+          // Q4: 1ºD x 2ºB
+          const getRankedFromGroup = (gid: string, rank: number) => {
              const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
              const gTeams = groups.find(g => g.id === gid)?.teams || [];
              const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
              return rankings[rank - 1];
           };
 
-          const p1 = getRanked('A', 1);
-          const p2 = getRanked('C', 2);
-          const p3 = getRanked('B', 1);
-          const p4 = getRanked('D', 2);
-          const p5 = getRanked('C', 1);
-          const p6 = getRanked('A', 2);
-          const p7 = getRanked('D', 1);
-          const p8 = getRanked('B', 2);
+          const p1 = getRankedFromGroup('A', 1);
+          const p2 = getRankedFromGroup('C', 2);
+          const p3 = getRankedFromGroup('B', 1);
+          const p4 = getRankedFromGroup('D', 2);
+          const p5 = getRankedFromGroup('C', 1);
+          const p6 = getRankedFromGroup('A', 2);
+          const p7 = getRankedFromGroup('D', 1);
+          const p8 = getRankedFromGroup('B', 2);
 
           const qMatches = [
             { t1: p1, t2: p2, id: 'playoff-QUARTER_FINALS-0' },
@@ -1626,15 +1654,65 @@ export default function BeachProApp() {
               sets: [],
               currentSet: { player1: 0, player2: 0 },
               isCompleted: false,
-              round: 101 // QUARTER_FINALS (100 + idx 1)
+              round: 101
             });
           });
 
-          // Generate remaining rounds (Semi and Final) as TBDs
+          // Generate remaining rounds as TBDs
           const semiMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
           const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
           knockoutMatches = [...knockoutMatches, ...semiMatches, ...finalMatches];
 
+        } else if (actualStandingGroupIds.length === 2 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
+          // Scenario INTER-GROUP: 2 composite groups -> Quarter Finals (8 teams)
+          // Taking top 4 from each composite group (often 'AB' and 'CD')
+          // Q1: 1ºG1 x 4ºG2
+          // Q2: 2ºG1 x 3ºG2
+          // Q3: 1ºG2 x 4ºG1
+          // Q4: 2ºG2 x 3ºG1
+          const g1Id = actualStandingGroupIds[0];
+          const g2Id = actualStandingGroupIds[1];
+
+          const getRankedFromGroup = (gid: string, rank: number) => {
+             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
+             const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
+             return rankings[rank - 1];
+          };
+
+          const p1 = getRankedFromGroup(g1Id, 1);
+          const p4_g2 = getRankedFromGroup(g2Id, 4);
+          const p2 = getRankedFromGroup(g1Id, 2);
+          const p3_g2 = getRankedFromGroup(g2Id, 3);
+          const p1_g2 = getRankedFromGroup(g2Id, 1);
+          const p4 = getRankedFromGroup(g1Id, 4);
+          const p2_g2 = getRankedFromGroup(g2Id, 2);
+          const p3 = getRankedFromGroup(g1Id, 3);
+
+          const qMatches = [
+            { t1: p1, t2: p4_g2, id: 'playoff-QUARTER_FINALS-0' },
+            { t1: p2, t2: p3_g2, id: 'playoff-QUARTER_FINALS-1' },
+            { t1: p1_g2, t2: p4, id: 'playoff-QUARTER_FINALS-2' },
+            { t1: p2_g2, t2: p3, id: 'playoff-QUARTER_FINALS-3' },
+          ];
+
+          qMatches.forEach((qm, idx) => {
+            const table = selectedCourts[idx % selectedCourts.length];
+            knockoutMatches.push({
+              id: qm.id,
+              player1Id: qm.t1?.id || 'TBD',
+              player2Id: qm.t2?.id || 'TBD',
+              table,
+              sets: [],
+              currentSet: { player1: 0, player2: 0 },
+              isCompleted: false,
+              round: 101
+            });
+          });
+
+          const semiMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
+          knockoutMatches = [...knockoutMatches, ...semiMatches, ...finalMatches];
         } else {
           // General Seeding Logic
           knockoutMatches = generatePlayoffs(qualifiedTeams, selectedCourts, currentKnockoutRounds);
@@ -1708,6 +1786,25 @@ export default function BeachProApp() {
 
   const deleteTournament = async (id: string) => {
     const tournament = tournaments.find(t => t.id === id);
+    
+    // Se o torneio já estiver finalizado, apenas ocultamos da Home e Lista Global, 
+    // preservando-o para o histórico da liga, conforme solicitado pelo usuário.
+    if (tournament?.isFinished) {
+      try {
+        await updateDoc(doc(db, 'tournaments', id), { isHidden: true });
+        setSnackMessage("Torneio movido para o histórico da liga.");
+        setTimeout(() => setSnackMessage(null), 3000);
+        
+        if (activeTournamentId === id) {
+          navigateTo('HOME', { tournamentId: null });
+        }
+        return;
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tournaments/${id}`);
+        return;
+      }
+    }
+
     if (!tournament) {
       try {
         await deleteDoc(doc(db, 'tournaments', id));
@@ -2026,9 +2123,9 @@ export default function BeachProApp() {
                       </button>
                     )}
                   </div>
-                  {tournaments.length > 0 ? (
+                  {tournaments.filter(t => !t.isHidden).length > 0 ? (
                     <div className="grid gap-5">
-                      {tournaments.map((t) => {
+                      {tournaments.filter(t => !t.isHidden).map((t) => {
                         const totalRegular = t.matches.length > 0 ? Math.max(...t.matches.map(m => m.round).filter(r => r < 100), 0) : 0;
                         const roundLabel = t.currentRound >= 100 ? (() => {
                           const types: { [key: number]: string } = { 100: 'Oitavas', 101: 'Quartas', 102: 'Semi', 103: 'Final' };
@@ -4301,7 +4398,7 @@ export default function BeachProApp() {
                   </div>
                   
                   <div className="bg-surface-container-low/50 border border-surface-container rounded-full p-1.5 flex gap-1 shadow-sm overflow-x-auto no-scrollbar">
-                    {tournaments.map(t => (
+                    {tournaments.filter(t => !t.isHidden).map(t => (
                       <button
                         key={t.id}
                         onClick={() => {
@@ -5408,8 +5505,8 @@ export default function BeachProApp() {
 
               <div className="wave-container px-6 pt-10 pb-32">
                 <div className="max-w-2xl mx-auto space-y-4">
-                  {tournaments.length > 0 ? (
-                    tournaments.sort((a, b) => b.createdAt - a.createdAt).map(t => (
+                  {tournaments.filter(t => !t.isHidden).length > 0 ? (
+                    tournaments.filter(t => !t.isHidden).sort((a, b) => b.createdAt - a.createdAt).map(t => (
                       <div 
                         key={t.id} 
                         className="bg-white rounded-[2rem] p-6 border border-surface-container shadow-sm hover:shadow-md transition-all group"
@@ -5616,8 +5713,8 @@ export default function BeachProApp() {
                 </div>
                 <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Finalizar Torneio?</h3>
                 <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-10 uppercase tracking-tight leading-relaxed">
-                  O que você deseja fazer com este torneio? <br/>
-                  <span className="text-primary italic">&quot;Mantenha aberto&quot; para consultar os resultados depois na Home.</span>
+                  O que você deseja fazer? <br/>
+                  <span className="text-primary italic">&quot;Excluir&quot; removerá das listas (Home e Global) mas manterá os resultados no Histórico da Liga.</span>
                 </p>
                 <div className="flex flex-col gap-3">
                   <button 
@@ -5668,9 +5765,30 @@ export default function BeachProApp() {
                 <div className="bg-red-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-red-500 mb-8 mx-auto shadow-sm">
                   <AlertCircle size={40} />
                 </div>
-                <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Excluir Torneio?</h3>
+                <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">
+                  {(() => {
+                    const t = tournaments.find(x => x.id === tournamentToDelete);
+                    return t?.isFinished ? "Arquivar Torneio?" : "Excluir Torneio?";
+                  })()}
+                </h3>
                 <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-10 uppercase tracking-tight leading-relaxed">
-                  Tem certeza que deseja apagar este torneio? <span className="text-red-500">Esta ação é irreversível e os pontos calculados no ranking serão revertidos.</span>
+                  {(() => {
+                    const t = tournaments.find(x => x.id === tournamentToDelete);
+                    if (t?.isFinished) {
+                      return (
+                        <>
+                          Deseja remover este torneio das listas públicas? <br/>
+                          <span className="text-primary italic">Ele continuará disponível no Histórico da Liga e os pontos serão mantidos.</span>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        Tem certeza que deseja apagar este torneio? <br/>
+                        <span className="text-red-500 font-bold italic">Esta ação é irreversível e os pontos calculados no ranking serão revertidos.</span>
+                      </>
+                    );
+                  })()}
                 </p>
                 <div className="flex flex-col gap-3">
                   <button 
@@ -5680,7 +5798,10 @@ export default function BeachProApp() {
                     }}
                     className="w-full py-5 bg-red-500 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
                   >
-                    SIM, APAGAR E REVERTER PONTOS
+                    {(() => {
+                      const t = tournaments.find(x => x.id === tournamentToDelete);
+                      return t?.isFinished ? "SIM, MOVER PARA O HISTÓRICO" : "SIM, APAGAR DEFINITIVAMENTE";
+                    })()}
                   </button>
                   <button 
                     onClick={() => setTournamentToDelete(null)}

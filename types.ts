@@ -76,6 +76,7 @@ export type TournamentState = {
   teamsPerGroup?: number;
   playoffRounds?: PlayoffRound[];
   isFinished: boolean;
+  isHidden?: boolean;
   createdAt: number;
   uid?: string;
   rankingId?: string;

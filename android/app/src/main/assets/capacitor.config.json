@@ -1,0 +1,8 @@
+{
+	"appId": "com.ligabeachpro.app",
+	"appName": "Liga Beach Pro",
+	"webDir": "out",
+	"server": {
+		"androidScheme": "https"
+	}
+}

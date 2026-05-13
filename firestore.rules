@@ -1,27 +1,3 @@
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: tournaments
-// Document ID: tournamentId
-// Fields:
-//   - id: string (required)
-//   - name: string (required, 1-100 chars)
-//   - uid: string (required, immutable) - Owner's UID
-//   - players: list (required, max 100 items)
-//   - matches: list (required, max 500 items)
-//   - currentRound: number (required)
-//   - totalRounds: number (required)
-//   - tables: list (required, max 20 items)
-//   - format: string (required)
-//   - matchFormat: string (required)
-//   - registrationType: string (required)
-//   - rankingCriteria: list (required, max 10 items)
-//   - isFinished: bool (required)
-//   - createdAt: number (required, immutable)
-//
-// ===============================================================
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -32,154 +8,143 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // Helper Functions
+    // GLOBAL HELPERS
     // ===============================================================
     
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isDocOwner() {
-      return isSignedIn() && request.auth.uid == resource.data.uid;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isAdmin() {
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
       return isSignedIn() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.email == "pamonhashouse@gmail.com" && request.auth.token.email_verified == true)
-      );
+        request.auth.token.email == "pamonhashouse@gmail.com" && 
+        request.auth.token.email_verified == true
+      ); 
+    }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // ===============================================================
+    // ENTITY VALIDATION HELPERS
+    // ===============================================================
+
+    function isValidUser(data) {
+      let req = ['uid', 'email', 'userTag', 'userNumericId', 'isPremium', 'createdAt'];
+      // Use size check to prevent shadow fields
+      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 10) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200 &&
+             data.userTag is string && data.userTag.size() <= 50 &&
+             data.userNumericId is string && data.userNumericId.size() <= 20 &&
+             data.isPremium is bool &&
+             data.createdAt is int;
     }
 
-    // Validation Blueprint for Tournament
-    function isValidTournament(data) {
-      let requiredFields = ['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'createdAt'];
-      let optionalFields = ['teamsPerGroup', 'playoffRounds'];
-      
-      return data.keys().hasAll(requiredFields) &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.uid is string &&
-             data.players is list && data.players.size() <= 100 &&
-             data.matches is list && data.matches.size() <= 1000 &&
-             data.currentRound is int &&
-             data.totalRounds is int &&
-             data.tables is list && data.tables.size() <= 50 &&
-             data.format is string &&
-             data.matchFormat is string &&
-             data.registrationType is string &&
-             data.rankingCriteria is list && data.rankingCriteria.size() <= 10 &&
-             data.isFinished is bool &&
-             data.createdAt is int &&
-             (!data.keys().contains('teamsPerGroup') || data.teamsPerGroup is int) &&
-             (!data.keys().contains('playoffRounds') || data.playoffRounds is list);
-    }
-
-    // Validation Blueprint for Ranking
     function isValidRanking(data) {
-      let requiredFields = ['id', 'name', 'ownerId', 'adminIds', 'pointsConfig', 'createdAt'];
-      return data.keys().hasAll(requiredFields) &&
-             data.id is string && data.id.size() > 0 &&
-             data.name is string && data.name.size() > 0 &&
-             data.ownerId is string && data.ownerId.size() > 0 &&
+      let req = ['id', 'name', 'ownerId', 'adminIds', 'pointsConfig', 'createdAt'];
+      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 15) &&
+             data.id is string && data.id.size() <= 100 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.ownerId is string &&
              data.adminIds is list && data.adminIds.size() <= 100 &&
-             (!data.keys().contains('athleteIds') || (data.athleteIds is list && data.athleteIds.size() <= 5000)) &&
-             (!data.keys().contains('leagueAthletes') || (data.leagueAthletes is list && data.leagueAthletes.size() <= 5000)) &&
              data.pointsConfig is map &&
              data.createdAt is int;
     }
 
+    function isValidTournament(data) {
+      let req = ['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'isFinished', 'createdAt'];
+      return data.keys().hasAll(req) && (data.keys().size() >= 13 && data.keys().size() <= 25) &&
+             data.id is string && data.id.size() <= 100 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.uid is string &&
+             data.players is list && data.players.size() <= 200 &&
+             data.matches is list && data.matches.size() <= 1000 &&
+             data.currentRound is int &&
+             data.totalRounds is int &&
+             data.tables is list && data.tables.size() <= 100 &&
+             data.isFinished is bool &&
+             data.createdAt is int;
+    }
+
     // ===============================================================
-    // Rules
+    // COLLECTION RULES
     // ===============================================================
 
+    match /users/{userId} {
+      // Secure List Queries
+      allow list: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && userId == request.auth.uid && isValidId(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && userId == request.auth.uid && (
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'subscriptionExpiresAt']) &&
+           incoming().isPremium == existing().isPremium)
+        )
+      );
+    }
+
     match /rankings/{rankingId} {
-      allow read: if isSignedIn(); // Rankings can be public or discovered
+      allow read: if isSignedIn();
       
-      allow create: if isSignedIn() && 
-                      isValidId(rankingId) &&
-                      isValidRanking(incoming()) && 
-                      incoming().ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(rankingId) && isValidRanking(incoming()) && incoming().ownerId == request.auth.uid;
       
-        allow update: if isSignedIn() && (
-                        // 1. Admins/Owner can update everything (obeying isValidRanking)
-                        ((request.auth.uid == existing().ownerId || request.auth.uid in existing().adminIds || isAdmin()) && 
-                         isValidRanking(request.resource.data) &&
-                         request.resource.data.ownerId == existing().ownerId) 
-                        ||
-                        // 2. Athletes (including non-admins) can always remove themselves
-                        (isSignedIn() &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['adminIds', 'leagueAthletes', 'athleteIds']) &&
-                         // Security: Must not be in the new athleteIds or adminIds lists
-                         !(request.auth.uid in request.resource.data.get('athleteIds', [])) &&
-                         !(request.auth.uid in request.resource.data.get('adminIds', [])) &&
-                         // Verification: Must have been a member (either in athleteIds, adminIds, or have a player record)
-                         (request.auth.uid in existing().get('athleteIds', []) || 
-                          request.auth.uid in existing().get('adminIds', []) ||
-                          exists(/databases/$(database)/documents/rankings/$(rankingId)/players/$(request.auth.uid))))
-                      );
+      allow update: if isSignedIn() && (
+        (existing().ownerId == request.auth.uid || request.auth.uid in existing().adminIds || isAdmin()) &&
+        isValidRanking(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'arenaName', 'adminIds', 'logoUrl', 'coverUrl', 'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address'])
+        )
+      );
       
       allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
 
       match /players/{playerId} {
         allow read: if isSignedIn();
         allow write: if isSignedIn() && (
-          // Admin of the ranking or global admin
-          (exists(/databases/$(database)/documents/rankings/$(rankingId)) && 
-           (request.auth.uid in get(/databases/$(database)/documents/rankings/$(rankingId)).data.adminIds ||
-            request.auth.uid == get(/databases/$(database)/documents/rankings/$(rankingId)).data.ownerId)) ||
-          // User deleting their own document when leaving
-          request.auth.uid == playerId ||
+          (exists(/databases/$(database)/documents/rankings/$(rankingId)) && (
+            request.auth.uid == get(/databases/$(database)/documents/rankings/$(rankingId)).data.ownerId ||
+            request.auth.uid in get(/databases/$(database)/documents/rankings/$(rankingId)).data.adminIds
+          )) ||
           isAdmin()
         );
       }
     }
 
     match /tournaments/{tournamentId} {
-      allow read: if isDocOwner() || isAdmin() || 
-                  (isSignedIn() && existing().get('rankingId', null) != null && 
-                   request.auth.uid in get(/databases/$(database)/documents/rankings/$(existing().rankingId)).data.athleteIds);
-      
-      allow create: if isSignedIn() && 
-                      isValidId(tournamentId) &&
-                      isValidTournament(incoming()) && 
-                      incoming().uid == request.auth.uid;
-      
-      allow update: if (isDocOwner() || isAdmin()) && 
-                      isValidTournament(request.resource.data) && 
-                      request.resource.data.uid == existing().uid &&
-                      request.resource.data.createdAt == existing().createdAt;
-      
-      allow delete: if isDocOwner() || isAdmin();
-    }
-
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      
-      allow create: if isOwner(userId) && 
-                      isValidId(userId) &&
-                      incoming().keys().hasAll(['uid', 'email', 'isPremium']) &&
-                      incoming().uid == request.auth.uid;
-                      
-      allow update: if isOwner(userId) && (
-        // Allow updating specific fields or anything by admin
-        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'isPremium', 'subscriptionExpiresAt']) || isAdmin()
+      // Secure List Queries
+      allow list: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || 
+        isAdmin() ||
+        (resource.data.get('rankingId', null) != null && request.auth.uid in get(/databases/$(database)/documents/rankings/$(resource.data.rankingId)).data.athleteIds)
       );
+      allow get: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(tournamentId) && isValidTournament(incoming()) && 
+                      incoming().uid == request.auth.uid && (
+                        incoming().get('rankingId', null) == null || 
+                        exists(/databases/$(database)/documents/rankings/$(incoming().rankingId))
+                      );
+      
+      allow update: if isSignedIn() && (
+        (existing().uid == request.auth.uid || isAdmin()) &&
+        isValidTournament(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 
+            'format', 'matchFormat', 'registrationType', 'isFinished', 'isHidden', 
+            'rankingId', 'championsPhotoUrl', 'finalResults', 'matches_group_stage', 
+            'matches_knockout_stage', 'teamsPerGroup', 'playoffRounds'
+          ])
+        )
+      );
+      
+      allow delete: if isSignedIn() && (existing().uid == request.auth.uid || isAdmin());
     }
   }
 }

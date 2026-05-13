@@ -19,27 +19,30 @@ export function generateRoundRobin(teams: Player[], selectedCourts: number[]): M
   
   const teamIndices = tempTeams.map((_, i) => i);
   const courtUsageCount: Record<string, Record<number, number>> = {};
+  const globalTableUsage: Record<number, number> = {};
   
-  // Track usage
   const incUsage = (teamId: string, court: number) => {
+    if (teamId === 'BYE') return;
+    globalTableUsage[court] = (globalTableUsage[court] || 0) + 1;
     if (!courtUsageCount[teamId]) courtUsageCount[teamId] = {};
     courtUsageCount[teamId][court] = (courtUsageCount[teamId][court] || 0) + 1;
   };
 
   const getBestCourt = (t1Id: string, t2Id: string, availableCourts: number[]) => {
-    let bestCourt = availableCourts[0];
-    let minCombinedUsage = Infinity;
+    const scores = availableCourts.map(court => {
+      const u1 = (courtUsageCount[t1Id]?.[court]) || 0;
+      const u2 = (courtUsageCount[t2Id]?.[court]) || 0;
+      
+      // Higher penalty for repeats, biased by individual usage to force rotation
+      const playerUsageScore = Math.pow(10, u1) + Math.pow(10, u2);
+      const globalScore = (globalTableUsage[court] || 0) * 0.1;
+      const tiedRandomScore = Math.random() * 0.01;
+      
+      return { court, totalScore: playerUsageScore + globalScore + tiedRandomScore };
+    });
 
-    for (const court of availableCourts) {
-      const u1 = (courtUsageCount[t1Id] && courtUsageCount[t1Id][court]) || 0;
-      const u2 = (courtUsageCount[t2Id] && courtUsageCount[t2Id][court]) || 0;
-      const combined = u1 + u2;
-      if (combined < minCombinedUsage) {
-        minCombinedUsage = combined;
-        bestCourt = court;
-      }
-    }
-    return bestCourt;
+    scores.sort((a, b) => a.totalScore - b.totalScore);
+    return scores[0].court;
   };
 
   for (let round = 1; round <= numRounds; round++) {
@@ -54,18 +57,18 @@ export function generateRoundRobin(teams: Player[], selectedCourts: number[]): M
       }
     }
 
-    // Assign courts for this round with rotation awareness
-    let availableCourts = [...selectedCourts];
-    roundMatches.forEach((m, idx) => {
-      // If we have more matches than courts, we reuse courts but still try to rotate
-      const courtSelection = availableCourts.length > 0 ? availableCourts : selectedCourts;
+    // Shuffle round matches to avoid systematic bias in court selection
+    const shuffledRoundMatches = [...roundMatches].sort(() => Math.random() - 0.5);
+    let availableCourtsInRound = [...selectedCourts];
+    
+    shuffledRoundMatches.forEach((m, idx) => {
+      const courtSelection = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
       const table = getBestCourt(m.p1.id, m.p2.id, courtSelection);
       
       incUsage(m.p1.id, table);
       incUsage(m.p2.id, table);
       
-      // Remove from available if possible to avoid same-round overlap
-      availableCourts = availableCourts.filter(c => c !== table);
+      availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
 
       matches.push({
         id: `m-${round}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
@@ -79,7 +82,6 @@ export function generateRoundRobin(teams: Player[], selectedCourts: number[]): M
       });
     });
 
-    // Rotate indices (keep first index fixed)
     teamIndices.splice(1, 0, teamIndices.pop()!);
   }
 
@@ -190,61 +192,78 @@ export function generateGroupStage(
   const scheduledMatches: Match[] = [];
   const playerLastPlayedSlot: Record<string, number> = {};
   const playerConsecutiveGames: Record<string, number> = {};
-  const courtGroupPreference: Record<number, string> = {}; 
+  const courtUsageCount: Record<string, Record<number, number>> = {};
+  const globalTableUsage: Record<number, number> = {};
   
-  // Assign initial court preferences to groups (Priority 3)
-  const numCourts = selectedCourts.length;
-  groups.forEach((g, i) => {
-    const court = selectedCourts[i % numCourts];
-    courtGroupPreference[court] = g.id;
-  });
+  const incUsage = (teamId: string, court: number) => {
+    globalTableUsage[court] = (globalTableUsage[court] || 0) + 1;
+    if (!courtUsageCount[teamId]) courtUsageCount[teamId] = {};
+    courtUsageCount[teamId][court] = (courtUsageCount[teamId][court] || 0) + 1;
+  };
+
+  const getBestCourt = (p1Id: string, p2Id: string, availableCourts: number[]) => {
+    const scores = availableCourts.map(court => {
+      const u1 = (courtUsageCount[p1Id]?.[court]) || 0;
+      const u2 = (courtUsageCount[p2Id]?.[court]) || 0;
+      const playerUsageScore = Math.pow(10, u1) + Math.pow(10, u2);
+      const globalScore = (globalTableUsage[court] || 0) * 0.1;
+      const tiedRandomScore = Math.random() * 0.01;
+      
+      return { court, totalScore: playerUsageScore + globalScore + tiedRandomScore };
+    });
+
+    scores.sort((a, b) => a.totalScore - b.totalScore);
+    return scores[0].court;
+  };
 
   let currentSlot = 1;
-  const maxMatchesPerSlot = numCourts;
+  const numCourts = selectedCourts.length;
 
   while (pendingMatches.length > 0) {
     const slotMatches: { match: typeof pendingMatches[0], court: number }[] = [];
     const usedPlayersThisSlot = new Set<string>();
-    const availableCourts = [...selectedCourts];
+    let availableCourtsInSlot = [...selectedCourts];
 
     // Priority 1: Fill all courts. Try to pick matches for each court.
-    for (const court of availableCourts) {
-      if (pendingMatches.length === 0) break;
-
+    while (availableCourtsInSlot.length > 0 && pendingMatches.length > 0) {
       // Filter matches whose players are free
       let candidates = pendingMatches.filter(m => !usedPlayersThisSlot.has(m.p1.id) && !usedPlayersThisSlot.has(m.p2.id));
       
-      if (candidates.length === 0) continue;
+      if (candidates.length === 0) break;
 
       // Respect "Intervalo Justo" (No 3 in a row) - Priority 2
-      // Only filter out if we have other candidates, otherwise we might block the tournament
       const restAwareCandidates = candidates.filter(m => 
         (playerConsecutiveGames[m.p1.id] || 0) < 2 && 
         (playerConsecutiveGames[m.p2.id] || 0) < 2
       );
       
-      const refinedCandidates = restAwareCandidates.length > 0 ? restAwareCandidates : candidates;
+      let finalCandidates = restAwareCandidates.length > 0 ? restAwareCandidates : candidates;
 
-      // Group-Court Preference - Priority 3
-      const preferredGroup = courtGroupPreference[court];
-      const sameGroupCandidates = refinedCandidates.filter(m => m.groupId === preferredGroup);
-      
-      // Round 1 Specific: Try to have different groups in the first slot - Special Rule
-      let finalCandidates = sameGroupCandidates.length > 0 ? sameGroupCandidates : refinedCandidates;
+      // If we are at the start, diversify groups
       if (currentSlot === 1) {
         const usedGroupsThisSlot = new Set(slotMatches.map(sm => sm.match.groupId));
         const diverseGroupCandidates = finalCandidates.filter(m => !usedGroupsThisSlot.has(m.groupId));
         if (diverseGroupCandidates.length > 0) finalCandidates = diverseGroupCandidates;
       }
 
-      // Pick the first candidate (or could be random)
+      // Pick the first candidate
       const selected = finalCandidates[0];
+      
+      // Decide the best court FOR this candidate from available courts in slot
+      const court = getBestCourt(selected.p1.id, selected.p2.id, availableCourtsInSlot);
+      
       slotMatches.push({ match: selected, court });
+      
+      incUsage(selected.p1.id, court);
+      incUsage(selected.p2.id, court);
       
       // Mark players
       usedPlayersThisSlot.add(selected.p1.id);
       usedPlayersThisSlot.add(selected.p2.id);
       
+      // Remove court from available in this slot
+      availableCourtsInSlot = availableCourtsInSlot.filter(c => c !== court);
+
       // Remove from pending
       pendingMatches = pendingMatches.filter(m => m !== selected);
     }
@@ -302,21 +321,43 @@ export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: numbe
   const numRounds = rounds.length;
   if (numRounds === 0) return [];
 
-  // Determine starting teams (if any)
+  // Determining courts with balancing awareness
+  const courtUsageCount: Record<string, Record<number, number>> = {};
+  const globalTableUsage: Record<number, number> = {};
+
+  const incUsage = (id: string, court: number) => {
+    if (!id || id.startsWith('TBD')) return;
+    globalTableUsage[court] = (globalTableUsage[court] || 0) + 1;
+    if (!courtUsageCount[id]) courtUsageCount[id] = {};
+    courtUsageCount[id][court] = (courtUsageCount[id][court] || 0) + 1;
+  };
+
+  const getBestCourt = (p1Id: string, p2Id: string, availableCourts: number[]) => {
+    const scores = availableCourts.map(court => {
+      const u1 = (p1Id && !p1Id.startsWith('TBD')) ? (courtUsageCount[p1Id]?.[court] || 0) : 0;
+      const u2 = (p2Id && !p2Id.startsWith('TBD')) ? (courtUsageCount[p2Id]?.[court] || 0) : 0;
+      const playerUsageScore = Math.pow(10, u1) + Math.pow(10, u2);
+      const globalScore = (globalTableUsage[court] || 0) * 0.1;
+      const tiedRandomScore = Math.random() * 0.01;
+      
+      return { court, totalScore: playerUsageScore + globalScore + tiedRandomScore };
+    });
+
+    scores.sort((a, b) => a.totalScore - b.totalScore);
+    return scores[0].court;
+  };
+
+  // Create matches
   let currentTeams = [...qualifiedTeams];
   
-  // Create all matches for all rounds
   rounds.forEach((roundType, roundIdx) => {
-    // numMatches is (initial slots) / 2^(roundIdx + 1)
-    // Wait, the bracket size is determined by the FIRST round.
-    const firstRoundSize = Math.pow(2, numRounds);
     const numMatches = Math.pow(2, numRounds - 1 - roundIdx);
+    let availableCourtsInRound = [...selectedCourts];
     
     for (let i = 0; i < numMatches; i++) {
       let p1Id = `TBD-${roundType}-${i}-1`;
       let p2Id = `TBD-${roundType}-${i}-2`;
 
-      // If it's the first round and we have qualified teams, place them
       if (roundIdx === 0 && currentTeams.length > 0) {
         const team1 = currentTeams[i * 2];
         const team2 = currentTeams[i * 2 + 1];
@@ -324,8 +365,12 @@ export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: numbe
         if (team2) p2Id = team2.id;
       }
       
-      const courtIndex = i % selectedCourts.length;
-      const table = selectedCourts[courtIndex];
+      const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+      const table = getBestCourt(p1Id, p2Id, courtCandidates);
+      
+      incUsage(p1Id, table);
+      incUsage(p2Id, table);
+      availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
       
       matches.push({
         id: `playoff-${roundType}-${i}`,
@@ -369,6 +414,37 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
   }
   const numPlayers = tempPlayers.length;
   
+  const courtUsageCount: Record<string, Record<number, number>> = {};
+  const globalTableUsage: Record<number, number> = {};
+
+  const incUsage = (pIds: string[], court: number) => {
+    globalTableUsage[court] = (globalTableUsage[court] || 0) + 1;
+    pIds.forEach(id => {
+      if (id === 'BYE') return;
+      if (!courtUsageCount[id]) courtUsageCount[id] = {};
+      courtUsageCount[id][court] = (courtUsageCount[id][court] || 0) + 1;
+    });
+  };
+
+  const getBestCourt = (pIds: string[], availableCourts: number[]) => {
+    const scores = availableCourts.map(court => {
+      let playerUsageScore = 0;
+      pIds.forEach(id => {
+        if (id !== 'BYE') {
+          const usage = (courtUsageCount[id]?.[court] || 0);
+          playerUsageScore += Math.pow(10, usage);
+        }
+      });
+      const globalScore = (globalTableUsage[court] || 0) * 0.1;
+      const tiedRandomScore = Math.random() * 0.01;
+      
+      return { court, totalScore: playerUsageScore + globalScore + tiedRandomScore };
+    });
+
+    scores.sort((a, b) => a.totalScore - b.totalScore);
+    return scores[0].court;
+  };
+
   // Custom fixed matrix for Super 6 (6 players)
   if (numPlayers === 6) {
     const matrix = [
@@ -379,21 +455,34 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
       { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 3 },
     ];
 
-    return matrix.map((m, idx) => {
-      const table = selectedCourts[idx % selectedCourts.length] || 1;
-      return {
-        id: `super-6-${m.r}-${idx}`,
-        player1Id: tempPlayers[m.p1].id,
-        player1PartnerId: tempPlayers[m.p1p].id,
-        player2Id: tempPlayers[m.p2].id,
-        player2PartnerId: tempPlayers[m.p2p].id,
-        table,
-        sets: [],
-        currentSet: { player1: 0, player2: 0 },
-        isCompleted: false,
-        round: m.r
-      };
+    const matches: Match[] = [];
+    const rounds = [1, 2, 3, 4, 5];
+    rounds.forEach(r => {
+      const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
+      let availableCourtsInRound = [...selectedCourts];
+      roundMatches.forEach((m, idx) => {
+        const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(pIds, courtCandidates);
+        
+        incUsage(pIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
+
+        matches.push({
+          id: `super-6-${r}-${idx}`,
+          player1Id: tempPlayers[m.p1].id,
+          player1PartnerId: tempPlayers[m.p1p].id,
+          player2Id: tempPlayers[m.p2].id,
+          player2PartnerId: tempPlayers[m.p2p].id,
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round: r
+        });
+      });
     });
+    return matches;
   }
 
   // Custom fixed matrix for Super 8 (8 players)
@@ -421,22 +510,34 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
       { r: 7, p1: 0, p1p: 7, p2: 3, p2p: 5 },
       { r: 7, p1: 1, p1p: 6, p2: 2, p2p: 4 },
     ];
+    const matches: Match[] = [];
+    const rounds = [1, 2, 3, 4, 5, 6, 7];
+    rounds.forEach(r => {
+      const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
+      let availableCourtsInRound = [...selectedCourts];
+      roundMatches.forEach((m, idx) => {
+        const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(pIds, courtCandidates);
+        
+        incUsage(pIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
 
-    return matrix.map((m, idx) => {
-      const table = selectedCourts[idx % selectedCourts.length] || 1;
-      return {
-        id: `super-8-${m.r}-${idx}`,
-        player1Id: tempPlayers[m.p1].id,
-        player1PartnerId: tempPlayers[m.p1p].id,
-        player2Id: tempPlayers[m.p2].id,
-        player2PartnerId: tempPlayers[m.p2p].id,
-        table,
-        sets: [],
-        currentSet: { player1: 0, player2: 0 },
-        isCompleted: false,
-        round: m.r
-      };
+        matches.push({
+          id: `super-8-${r}-${idx}`,
+          player1Id: tempPlayers[m.p1].id,
+          player1PartnerId: tempPlayers[m.p1p].id,
+          player2Id: tempPlayers[m.p2].id,
+          player2PartnerId: tempPlayers[m.p2p].id,
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round: r
+        });
+      });
     });
+    return matches;
   }
 
   // Custom fixed matrix for Super 10 (10 players)
@@ -470,22 +571,34 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
       { r: 9, p1: 0, p1p: 9, p2: 3, p2p: 7 },
       { r: 9, p1: 1, p1p: 5, p2: 2, p2p: 8 },
     ];
+    const matches: Match[] = [];
+    const rounds = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    rounds.forEach(r => {
+      const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
+      let availableCourtsInRound = [...selectedCourts];
+      roundMatches.forEach((m, idx) => {
+        const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(pIds, courtCandidates);
+        
+        incUsage(pIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
 
-    return matrix.map((m, idx) => {
-      const table = selectedCourts[idx % selectedCourts.length] || 1;
-      return {
-        id: `super-10-${m.r}-${idx}`,
-        player1Id: tempPlayers[m.p1].id,
-        player1PartnerId: tempPlayers[m.p1p].id,
-        player2Id: tempPlayers[m.p2].id,
-        player2PartnerId: tempPlayers[m.p2p].id,
-        table,
-        sets: [],
-        currentSet: { player1: 0, player2: 0 },
-        isCompleted: false,
-        round: m.r
-      };
+        matches.push({
+          id: `super-10-${r}-${idx}`,
+          player1Id: tempPlayers[m.p1].id,
+          player1PartnerId: tempPlayers[m.p1p].id,
+          player2Id: tempPlayers[m.p2].id,
+          player2PartnerId: tempPlayers[m.p2p].id,
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round: r
+        });
+      });
     });
+    return matches;
   }
 
   const matches: Match[] = [];
@@ -514,6 +627,7 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
   for (let r = 1; r <= maxRounds && remainingPairs.length > 0; r++) {
     const playersUsedThisRound = new Set<string>();
     let matchesInRound = 0;
+    let availableCourtsInRound = [...selectedCourts];
 
     // Try to fill matches for this round
     for (let i = 0; i < remainingPairs.length && matchesInRound < maxMatchesPerRound; i++) {
@@ -521,7 +635,6 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
         if (playersUsedThisRound.has(pair1[0]) || playersUsedThisRound.has(pair1[1])) continue;
 
         // Find another pair that hasn't played this round and shares no players
-        // Optimization: Pick pair2 such that we minimize exposure to previous opponents
         let bestPair2Idx = -1;
         let minCombinedOpponentWeight = Infinity;
 
@@ -529,7 +642,6 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
           const pair2 = remainingPairs[j];
           const combined = [...pair1, ...pair2];
           if (new Set(combined).size === 4 && !combined.some(p => playersUsedThisRound.has(p))) {
-            // Calculate how many times players in pair1 have faced players in pair2
             let opponentWeight = 0;
             pair1.forEach(p1 => {
               pair2.forEach(p2 => {
@@ -540,16 +652,18 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
             if (opponentWeight < minCombinedOpponentWeight) {
               minCombinedOpponentWeight = opponentWeight;
               bestPair2Idx = j;
-              if (opponentWeight === 0) break; // Perfect match found
+              if (opponentWeight === 0) break;
             }
           }
         }
 
         if (bestPair2Idx !== -1) {
           const pair2 = remainingPairs[bestPair2Idx];
+          const pIds = [...pair1, ...pair2];
           
-          // Form the match
-          const table = selectedCourts[matchesInRound % selectedCourts.length] || 1;
+          const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+          const table = getBestCourt(pIds, courtCandidates);
+          
           const isByeMatch = pair1.includes('BYE') || pair2.includes('BYE');
           
           if (!isByeMatch) {
@@ -566,6 +680,9 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
               round: r
             });
             matchesInRound++;
+            
+            incUsage(pIds, table);
+            availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
 
             // Update opponent counts
             pair1.forEach(p1 => {
@@ -582,18 +699,13 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
           pair1.forEach(p => playersUsedThisRound.add(p));
           pair2.forEach(p => playersUsedThisRound.add(p));
 
-          // Remove these pairs from remaining (remove larger index first)
           remainingPairs.splice(bestPair2Idx, 1);
           remainingPairs.splice(i, 1);
-          i--; // Adjust index after splice
+          i--;
         }
     }
 
-    // If no progress made in this round, we might be stuck with impossible pairs.
-    // However, in Super format, some pairs might just not be able to play.
-    // We try to rotate the leading pair to help.
     if (matchesInRound === 0 && remainingPairs.length > 0) {
-      // Move the first pair to the end to shuffle search order
       remainingPairs.push(remainingPairs.shift()!);
     }
   }
@@ -716,7 +828,8 @@ export function getKnockoutQualifiedTeams(
   players: Player[], 
   matches: Match[], 
   criteria: RankingCriterion[], 
-  groups: { id: string, teams: Player[] }[]
+  groups: { id: string, teams: Player[] }[],
+  selectedRounds: PlayoffRound[]
 ): Player[] {
   const allGroupRankings: { groupId: string, rankings: any[] }[] = [];
   
@@ -727,47 +840,60 @@ export function getKnockoutQualifiedTeams(
   });
 
   const qualifiedTeams: Player[] = [];
-  const targetKnockoutSize = [2, 4, 8, 16, 32].find(size => size >= groups.length * 2) || 8;
   
-  // Rule: Top 2 from each group always advance if possible
+  // Decide target size based on chosen rounds
+  const targetKnockoutSize = selectedRounds.includes('ROUND_OF_16') ? 16 :
+                            selectedRounds.includes('QUARTER_FINALS') ? 8 :
+                            selectedRounds.includes('SEMI_FINALS') ? 4 :
+                            selectedRounds.includes('FINAL') ? 2 : 0;
+  
+  if (targetKnockoutSize === 0) return [];
+
+  // How many we should take from each group initially
+  const perGroup = Math.max(1, Math.floor(targetKnockoutSize / groups.length));
+  
+  // Rule: Top N from each group advance
   allGroupRankings.forEach(gr => {
-    gr.rankings.slice(0, 2).forEach(team => {
+    gr.rankings.slice(0, perGroup).forEach(team => {
       qualifiedTeams.push({ id: team.id, name: team.name });
     });
   });
 
-  // If we need more teams (e.g. 10 teams Scenario D: 3 groups, need 8 teams, got 6)
+  // If we still need more teams to fill the bracket (indices for remaining slots)
+  // We pick the best remaining teams across all groups
   if (qualifiedTeams.length < targetKnockoutSize) {
     const remainingNeeded = targetKnockoutSize - qualifiedTeams.length;
-    const thirdPlaces: any[] = [];
+    const candidates: any[] = [];
+    
     allGroupRankings.forEach(gr => {
-      if (gr.rankings[2]) {
-        thirdPlaces.push({ ...gr.rankings[2], groupId: gr.groupId });
-      }
+      // Pick teams that haven't qualified yet
+      gr.rankings.slice(perGroup).forEach(team => {
+        candidates.push({ ...team, groupId: gr.groupId });
+      });
     });
 
-    // Sort third places by criteria (wins, game balance, etc.)
-    const sortedThirdPlaces = thirdPlaces.sort((a, b) => {
+    // Sort candidates by criteria
+    const sortedCandidates = candidates.sort((a, b) => {
       for (const criterion of criteria) {
         if (criterion === 'WINS') {
           if (b.wins !== a.wins) return b.wins - a.wins;
         }
+        if (criterion === 'SET_BALANCE') {
+          if (b.setBalance !== a.setBalance) return b.setBalance - a.setBalance;
+        }
         if (criterion === 'GAME_BALANCE') {
           if (b.gameBalance !== a.gameBalance) return b.gameBalance - a.gameBalance;
-        }
-        if (criterion === 'SET_BALANCE') {
-          if (b.setBalance !== a.setBalance ) return b.setBalance - a.setBalance;
         }
       }
       return 0;
     });
 
-    sortedThirdPlaces.slice(0, remainingNeeded).forEach(team => {
+    sortedCandidates.slice(0, remainingNeeded).forEach(team => {
       qualifiedTeams.push({ id: team.id, name: team.name });
     });
   }
 
-  return qualifiedTeams;
+  return qualifiedTeams.slice(0, targetKnockoutSize);
 }
 
 export interface FinalRankingResult {
@@ -811,10 +937,16 @@ export function calculateTournamentPoints(
 
   standings.forEach((player, index) => {
     // Check if the athlete is officially registered in the league (not manual)
-    const isOfficiallyRegistered = officiallyRegisteredIds.has(player.id);
+    const playerIds = player.id.startsWith('team-') 
+      ? player.id.replace('team-', '').split('-') 
+      : [player.id];
+      
+    const isOfficiallyRegistered = playerIds.some(id => officiallyRegisteredIds.has(id));
     
     const placement = index + 1;
     let points = 0;
+
+    const hadPneu = playerIds.some(pid => playersWhoSufferedPneu.has(pid));
 
     if (isOfficiallyRegistered) {
       points += (participationPoints || 0);
@@ -823,7 +955,6 @@ export function calculateTournamentPoints(
         points += (placementPoints[placement] || 0);
       }
 
-      const hadPneu = playersWhoSufferedPneu.has(player.id);
       if (hadPneu) {
         points += (pneuPenalty || 0);
       }
@@ -834,7 +965,7 @@ export function calculateTournamentPoints(
       playerName: player.name,
       placement,
       points,
-      hadPneu: playersWhoSufferedPneu.has(player.id)
+      hadPneu
     });
   });
 

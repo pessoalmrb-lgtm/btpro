@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Standard user profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "userTag": { "type": "string" },
+        "userNumericId": { "type": "string" },
+        "displayName": { "type": ["string", "null"] },
+        "photoURL": { "type": ["string", "null"] },
+        "isPremium": { "type": "boolean" },
+        "subscriptionExpiresAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "userTag", "userNumericId", "isPremium", "createdAt"]
+    },
+    "Ranking": {
+      "title": "League Ranking",
+      "description": "A league with athletes and points configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "arenaName": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "adminIds": { "type": "array", "items": { "type": "string" } },
+        "logoUrl": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "pointsConfig": { "type": "object" },
+        "leagueAthletes": { "type": "array" },
+        "athleteIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "ownerId", "adminIds", "pointsConfig", "createdAt"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A tournament session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "uid": { "type": "string" },
+        "rankingId": { "type": "string" },
+        "players": { "type": "array" },
+        "matches": { "type": "array" },
+        "currentRound": { "type": "number" },
+        "totalRounds": { "type": "number" },
+        "tables": { "type": "array", "items": { "type": "number" } },
+        "format": { "type": "string" },
+        "matchFormat": { "type": "string" },
+        "registrationType": { "type": "string" },
+        "isFinished": { "type": "boolean" },
+        "isHidden": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "uid", "players", "matches", "currentRound", "totalRounds", "tables", "format", "matchFormat", "registrationType", "isFinished", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "rankings/{rankingId}": {
+      "schema": "Ranking",
+      "description": "League rankings"
+    },
+    "rankings/{rankingId}/players/{playerId}": {
+      "schema": "object",
+      "description": "Redundant or stats records for players in a ranking"
+    },
+    "tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Tournament records"
+    }
+  }
+}
