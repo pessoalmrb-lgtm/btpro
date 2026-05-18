@@ -1,19 +1,22 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, setLogLevel } from 'firebase/firestore';
-// Lazy initialization
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, writeBatch } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+// As variáveis NEXT_PUBLIC_ são seguras para o browser — não contêm segredos.
+// Os valores reais ficam em .env.local (não commitado no git).
 const firebaseConfig = {
-  projectId: "btsuper-d8521",
-  appId: "1:931735521781:web:c8f82a36de098baa9478bc",
-  apiKey: "AIzaSyB8zCvS5ghU_ynW0h4_lv7Gy_kpznhglt0",
-  authDomain: "btsuper-d8521.firebaseapp.com",
-  firestoreDatabaseId: "(default)",
-  storageBucket: "btsuper-d8521.firebasestorage.app",
-  messagingSenderId: "931735521781",
-  measurementId: ""
+  apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId:         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket:     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+const firestoreDatabaseId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || '(default)';
 
 const getFirebaseApp = () => {
   if (getApps().length === 0) {
@@ -22,55 +25,82 @@ const getFirebaseApp = () => {
   return getApp();
 };
 
-export const auth = typeof window !== 'undefined' ? getAuth(getFirebaseApp()) : null as any;
-export const db = typeof window !== 'undefined' ? getFirestore(getFirebaseApp()) : null as any;
+export const auth    = typeof window !== 'undefined' ? getAuth(getFirebaseApp())                              : null as any;
+export const db      = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(), firestoreDatabaseId)   : null as any;
+export const storage = typeof window !== 'undefined' ? getStorage(getFirebaseApp())                          : null as any;
 
-export const getGoogleProvider = () => {
-  return new GoogleAuthProvider();
-};
+export const getGoogleProvider = () => new GoogleAuthProvider();
 
-// Test connection helper
+// ─── Firebase Storage helpers ────────────────────────────────────────────────
+
+/**
+ * Comprime uma imagem (canvas → Blob) e faz upload para o Firebase Storage.
+ * Retorna a URL pública de download.
+ */
+export async function uploadImageToStorage(
+  file: File,
+  path: string,
+  maxDim = 800,
+  quality = 0.7
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Falha ao ler o arquivo'));
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onerror = () => reject(new Error('Falha ao carregar imagem'));
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+
+        if (width > height && width > maxDim) { height *= maxDim / width; width = maxDim; }
+        else if (height > maxDim)             { width *= maxDim / height; height = maxDim; }
+
+        canvas.width  = Math.round(width);
+        canvas.height = Math.round(height);
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) { reject(new Error('Falha ao converter imagem')); return; }
+          try {
+            const storageRef = ref(storage, path);
+            await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
+            const url = await getDownloadURL(storageRef);
+            resolve(url);
+          } catch (err) {
+            reject(err);
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Test connection ─────────────────────────────────────────────────────────
 export async function testConnection() {
   if (typeof window === 'undefined') return;
   try {
-    const dbInstance = getFirestore(getFirebaseApp(), "(default)");
-    await getDocFromServer(doc(dbInstance, 'test', 'connection'));
+    await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
+      console.error('Please check your Firebase configuration.');
     }
   }
 }
 
+// ─── Error handling ──────────────────────────────────────────────────────────
 export const OperationType = {
   CREATE: 'create',
   UPDATE: 'update',
   DELETE: 'delete',
-  LIST: 'list',
-  GET: 'get',
-  WRITE: 'write',
+  LIST:   'list',
+  GET:    'get',
+  WRITE:  'write',
 } as const;
 
 export type OperationType = typeof OperationType[keyof typeof OperationType];
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const currentUser = typeof window !== 'undefined' ? auth?.currentUser : null;
@@ -78,71 +108,53 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: currentUser?.uid,
-      email: currentUser?.email,
-      emailVerified: currentUser?.emailVerified,
-      isAnonymous: currentUser?.isAnonymous,
-      tenantId: currentUser?.tenantId,
-      providerInfo: currentUser?.providerData?.map((provider: any) => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      email:  currentUser?.email,
     },
     operationType,
-    path
-  }
-  
-  try {
-    const serialized = JSON.stringify(errInfo);
-    console.error('Firestore Error: ', serialized);
-    throw new Error(serialized);
-  } catch (stringifyError) {
-    const fallbackMessage = `Firestore Error at ${path} during ${operationType}: ${errInfo.error}`;
-    console.error(fallbackMessage);
-    // Use a very simple JSON to avoid recursive issues
-    throw new Error(JSON.stringify({ error: "permission-denied", operationType, path }));
-  }
+    path,
+  };
+  const serialized = JSON.stringify(errInfo);
+  console.error('Firestore Error:', serialized);
+  throw new Error(serialized);
 }
 
 export function cleanData(data: any): any {
   if (data === null || data === undefined) return null;
-  if (Array.isArray(data)) {
-    return data.map(item => cleanData(item));
-  }
+  if (Array.isArray(data))   return data.map(item => cleanData(item));
   if (typeof data === 'object') {
     const cleaned: any = {};
     for (const key in data) {
-      if (data[key] !== undefined) {
-        cleaned[key] = cleanData(data[key]);
-      }
+      if (data[key] !== undefined) cleaned[key] = cleanData(data[key]);
     }
     return cleaned;
   }
   return data;
 }
 
-export { 
-  signInWithPopup, 
-  signOut, 
-  onAuthStateChanged, 
-  createUserWithEmailAndPassword, 
+// ─── Re-exports ──────────────────────────────────────────────────────────────
+export {
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile,
   updateEmail,
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
   deleteDoc,
   getDocs,
-  or 
+  writeBatch,
+  or,
 };
 export type { User };

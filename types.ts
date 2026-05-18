@@ -19,6 +19,7 @@ export type Match = {
   currentSet: SetScore;
   winnerId?: string;
   isCompleted: boolean;
+  restingPlayerIds?: string[]; // Super format: players resting this round
   round: number;
   groupId?: string; // For group stage
 };
@@ -146,6 +147,7 @@ export type Ranking = {
   pointsConfig: PointsConfig;
   leagueAthletes: LeagueAthlete[];
   athleteIds?: string[];
+  leagueCode?: string;
   createdAt: number;
   playerStats?: Record<string, PlayerStats>;
 };
@@ -185,4 +187,5 @@ export type AppStep =
   | 'TOURNAMENTS_LIST'
   | 'MY_RANKINGS'
   | 'CREATE_RANKING'
-  | 'RANKING_DETAILS';
+  | 'RANKING_DETAILS'
+  | 'FIND_LEAGUES';

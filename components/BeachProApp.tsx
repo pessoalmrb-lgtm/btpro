@@ -39,13 +39,15 @@ import {
   Trophy as TrophyIcon,
   User as UserIcon,
   MapPin,
-  ClipboardList
+  ClipboardList,
+  Search,
+  Copy
 } from 'lucide-react';
 import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, testConnection } from '../firebase';
+import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, testConnection, uploadImageToStorage } from '../firebase';
 import { generateUniqueUserTag, generateUniqueNumericId } from '../lib/user-utils';
 import type { User } from '../firebase';
 
@@ -55,10 +57,24 @@ import { StepContainer } from './StepContainer';
 import { BottomNav } from './BottomNav';
 import { PremiumUpgrade } from './PremiumUpgrade';
 
+// ─── Premium Badge ──────────────────────────────────────────────────────────
+const PremiumBadge = ({ size = 14 }: { size?: number }) => (
+  <div
+    style={{ width: size, height: size }}
+    className="absolute -bottom-0.5 -right-0.5 bg-amber-400 rounded-full flex items-center justify-center shadow-md border border-white z-10"
+    title="Usuário Premium"
+  >
+    <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 10 10" fill="none">
+      <path d="M5 1L6.2 3.8L9 4.1L7 6L7.6 9L5 7.5L2.4 9L3 6L1 4.1L3.8 3.8L5 1Z" fill="#1e293b" />
+    </svg>
+  </div>
+);
+
 export default function BeachProApp() {
 
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
   const [step, setStep] = useState<AppStep>('HOME');
   const [tournaments, setTournaments] = useState<TournamentState[]>([]);
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
@@ -70,6 +86,7 @@ export default function BeachProApp() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -98,53 +115,28 @@ export default function BeachProApp() {
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
   const [leagueToDelete, setLeagueToDelete] = useState<string | null>(null);
   const [leagueToExit, setLeagueToExit] = useState<string | null>(null);
+  const [leagueDeleteStep, setLeagueDeleteStep] = useState<1|2>(1);
+  const [leagueExitStep, setLeagueExitStep] = useState<1|2>(1);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const handleRankingPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeRanking) return;
 
+    setSnackMessage("Enviando foto...");
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        
-        // Use a temporary image to compress
-        const img = document.createElement('img');
-        img.src = base64;
-        img.onload = async () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          const maxDim = 800;
-          if (width > height && width > maxDim) {
-            height *= maxDim / width;
-            width = maxDim;
-          } else if (height > maxDim) {
-            width *= maxDim / height;
-            height = maxDim;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-          
-          await updateDoc(doc(db, 'rankings', activeRanking.id), {
-            logoUrl: compressedBase64,
-            coverUrl: compressedBase64
-          });
-          
-          setSnackMessage("Foto da liga atualizada!");
-          setTimeout(() => setSnackMessage(null), 3000);
-        };
-      };
-      reader.readAsDataURL(file);
+      const path = `rankings/${activeRanking.id}/cover.jpg`;
+      const url  = await uploadImageToStorage(file, path, 800, 0.7);
+
+      await updateDoc(doc(db, 'rankings', activeRanking.id), {
+        logoUrl:  url,
+        coverUrl: url,
+      });
+
+      setSnackMessage("Foto da liga atualizada!");
+      setTimeout(() => setSnackMessage(null), 3000);
     } catch (error) {
-      console.error("Error uploading photo:", error);
+      console.error('Error uploading ranking photo:', error);
       setSnackMessage("Erro ao atualizar foto.");
       setTimeout(() => setSnackMessage(null), 3000);
     }
@@ -155,6 +147,9 @@ export default function BeachProApp() {
 
   // --- Profile Editing State ---
   const [editName, setEditName] = useState('');
+  const [editTag, setEditTag] = useState('');
+  const [tagError, setTagError] = useState<string | null>(null);
+  const [isCheckingTag, setIsCheckingTag] = useState(false);
   const [editLogoUrl, setEditLogoUrl] = useState('');
   const [editCoverUrl, setEditCoverUrl] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -198,6 +193,16 @@ export default function BeachProApp() {
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
   const [athleteToRemove, setAthleteToRemove] = useState<string | null>(null);
   const [showDuplicatePopup, setShowDuplicatePopup] = useState(false);
+  const [showManualAthletePopup, setShowManualAthletePopup] = useState(false);
+  const [showLowCourtsPopup, setShowLowCourtsPopup] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
+  const [requestSent, setRequestSent] = useState<string | null>(null);
+  const [showPendingPopup, setShowPendingPopup] = useState(false);
+  const [leagueSearchTerm, setLeagueSearchTerm] = useState('');
+  const [leagueSearchResults, setLeagueSearchResults] = useState<any[]>([]);
+  const [isSearchingLeague, setIsSearchingLeague] = useState(false);
+  const [leagueSearchError, setLeagueSearchError] = useState<string | null>(null);
+  const [joiningLeagueId, setJoiningLeagueId] = useState<string | null>(null);
   const [showHistoryDetail, setShowHistoryDetail] = useState<string | null>(null);
   const [historyDetailTab, setHistoryDetailTab] = useState<'RESULTS' | 'MATCHES'>('RESULTS');
 
@@ -347,6 +352,8 @@ export default function BeachProApp() {
       if (!u) {
         setStep('HOME');
       }
+      // Garante tempo mínimo de exibição do splash
+      setTimeout(() => setSplashDone(true), 2500);
     });
 
     // Verify Firestore connection on boot
@@ -465,7 +472,7 @@ export default function BeachProApp() {
       } else {
         // Create user profile if it doesn't exist
         try {
-          const userTag = await generateUniqueUserTag(db);
+          const userTag = await generateUniqueUserTag(db, user.displayName || user.email?.split('@')[0]);
           const userNumericId = await generateUniqueNumericId(db);
           const userData = cleanData({
             uid: user.uid,
@@ -596,8 +603,14 @@ export default function BeachProApp() {
       // 2. Update Name in Auth Profile
       if (editName !== user.displayName) {
         await updateProfile(user, { displayName: editName });
-        // Also update in Firestore
         await updateDoc(doc(db, 'users', user.uid), { displayName: editName });
+      }
+
+      // 2b. Update userTag
+      const cleanTag = editTag.trim();
+      if (cleanTag && cleanTag !== userProfile?.userTag && cleanTag.replace('@','').length >= 3 && !tagError) {
+        await updateDoc(doc(db, 'users', user.uid), { userTag: cleanTag });
+        setUserProfile((prev: any) => ({ ...prev, userTag: cleanTag }));
       }
 
       // 3. Update Email
@@ -738,10 +751,10 @@ export default function BeachProApp() {
       }
 
       if (searchResult.isManual) {
-        if (!confirm("AVISO: Este atleta não possui cadastro oficial no Beach Pró. Ele poderá participar do torneio, mas seus resultados NÃO contarão pontos para o ranking geral da liga. Deseja adicionar assim mesmo?")) {
-           setIsAddingAthlete(false);
-           return;
-        }
+        // Abre modal de confirmação em vez de confirm() nativo (não funciona em WebView)
+        setIsAddingAthlete(false);
+        setShowManualAthletePopup(true);
+        return;
       }
 
       const newAthlete: LeagueAthlete = {
@@ -790,6 +803,21 @@ export default function BeachProApp() {
       setEditCoverUrl(activeRanking.coverUrl || '');
     }
   }, [activeRankingId, rankings, activeRanking]); // Added rankings and activeRanking to sync on update
+
+  // Load pending join requests whenever the active league changes (admin only)
+  useEffect(() => {
+    if (!activeRanking || !user) return;
+    const isAdmin = activeRanking.ownerId === user.uid || activeRanking.adminIds?.includes(user.uid);
+    if (!isAdmin) return;
+
+    getDocs(collection(db, 'rankings', activeRanking.id, 'pendingRequests')).then(snap => {
+      const pending = snap.docs
+        .map(d => ({ ...d.data(), uid: d.id }))
+        .filter((r: any) => r.status === 'pending');
+      setPendingRequests(prev => ({ ...prev, [activeRanking.id]: pending }));
+      if (pending.length > 0) setShowPendingPopup(true);
+    }).catch(() => {});
+  }, [activeRanking?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateRankingGeneral = async () => {
     if (!activeRanking) return;
@@ -1129,15 +1157,8 @@ export default function BeachProApp() {
     navigateTo('TABLE_COUNT', { replace: true });
   };
 
-  const handleTableCountConfirm = () => {
-    if (selectedCourts.length === 0) {
-      setError("Selecione pelo menos uma quadra.");
-      return;
-    }
-    setError(null);
-
+  const proceedFromTableCount = () => {
     const isGroupFormat = tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA';
-    
     if (isGroupFormat) {
       navigateTo('REGISTRATION_TYPE', { replace: true });
     } else {
@@ -1156,65 +1177,123 @@ export default function BeachProApp() {
     }
   };
 
+  const getIdealCourts = (): number => {
+    const n = players.length || playerCount;
+    const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
+    const teams = isIndividual ? n : Math.floor(n / 2);
+    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 1;
+    if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 2;
+    if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return 2;
+    if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return 3;
+    if (tournamentFormat === 'REI_DA_QUADRA')       return Math.max(1, Math.floor(n / 4));
+    if (tournamentFormat === 'ROUND_ROBIN')         return Math.min(Math.max(1, Math.floor(teams / 2)), 4);
+    if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') return Math.min(Math.max(2, Math.floor(teams / 4)), 6);
+    if (tournamentFormat === 'MATA_MATA')           return Math.min(Math.max(1, Math.floor(teams / 2)), 4);
+    return 2;
+  };
+
+  const getFormatDisplayName = (): string => {
+    const names: Record<string, string> = {
+      'SUPER_6_INDIVIDUAL': 'Super 6 Individual',
+      'SUPER_8_INDIVIDUAL': 'Super 8 Individual',
+      'SUPER_10_INDIVIDUAL': 'Super 10 Individual',
+      'SUPER_12_INDIVIDUAL': 'Super 12 Individual',
+      'REI_DA_QUADRA': 'Rei da Quadra',
+      'ROUND_ROBIN': 'Round Robin',
+      'GROUPS': 'Fase de Grupos',
+      'GROUPS_MATA_MATA': 'Grupos + Mata-Mata',
+      'MATA_MATA': 'Mata-Mata',
+    };
+    return names[tournamentFormat] || tournamentFormat;
+  };
+
+  const handleTableCountConfirm = () => {
+    if (selectedCourts.length === 0) {
+      setError("Selecione pelo menos uma quadra.");
+      return;
+    }
+    setError(null);
+
+    const ideal = getIdealCourts();
+    if (selectedCourts.length < ideal) {
+      setShowLowCourtsPopup(true);
+      return;
+    }
+
+    proceedFromTableCount();
+  };
+
   const finishTournament = async () => {
     if (!activeTournament) return;
 
     try {
       let finalResults: FinalRankingResult[] = [];
-      
+      const batch = writeBatch(db);
+
       // If linked to a ranking, calculate points
       if (activeTournament.rankingId) {
         const ranking = rankings.find(r => r.id === activeTournament.rankingId);
         if (ranking) {
           finalResults = calculateTournamentPoints(activeTournament, ranking);
-          
-          // Update Ranking Stats
+
+          // Build a map: individualId → stats update (avoid duplicate athlete entries)
+          const statsMap = new Map<string, any>();
+
           for (const res of finalResults) {
-            // Check if this result is for a team
-            const playerIds = res.playerId.startsWith('team-') 
-              ? res.playerId.replace('team-', '').split('-') 
+            const playerIds = res.playerId.startsWith('team-')
+              ? res.playerId.replace('team-', '').split('-')
               : [res.playerId];
 
             for (const individualId of playerIds) {
-              // Skip non-registered athletes for ranking statistics
               const athlete = ranking.leagueAthletes?.find(a => a.id === individualId);
               if (!athlete || athlete.isManual) continue;
 
-              const playerRef = doc(db, `rankings/${ranking.id}/players`, individualId);
               const currentStats = rankingStats.find(s => s.id === individualId);
-              
-              const newStats = {
-                id: individualId,
-                name: athlete.name,
-                photo: athlete.photo || null,
-                userTag: athlete.userTag || null,
-                totalPoints: (currentStats?.totalPoints || 0) + res.points,
-                victories: (currentStats?.victories || 0) + (res.placement === 1 ? 1 : 0),
-                pneus: (currentStats?.pneus || 0) + (res.hadPneu ? 1 : 0),
-                participations: (currentStats?.participations || 0) + 1,
-                tournamentHistory: [
-                  ...(currentStats?.tournamentHistory || []),
-                  {
-                    tournamentId: activeTournament.id,
-                    tournamentName: activeTournament.name,
-                    placement: res.placement,
-                    pointsEarned: res.points,
-                    hasPneu: res.hadPneu,
-                    date: Date.now()
-                  }
-                ]
+              const base = statsMap.get(individualId) || {
+                id:            individualId,
+                name:          athlete.name,
+                photo:         athlete.photo  || null,
+                userTag:       athlete.userTag || null,
+                totalPoints:   currentStats?.totalPoints   || 0,
+                victories:     currentStats?.victories     || 0,
+                pneus:         currentStats?.pneus         || 0,
+                participations: currentStats?.participations || 0,
+                tournamentHistory: [...(currentStats?.tournamentHistory || [])],
               };
-              
-              await setDoc(playerRef, cleanData(newStats));
+
+              base.totalPoints    += res.points;
+              base.victories      += res.placement === 1 ? 1 : 0;
+              base.pneus          += res.hadPneu   ? 1 : 0;
+              base.participations += 1;
+              base.tournamentHistory.push({
+                tournamentId:   activeTournament.id,
+                tournamentName: activeTournament.name,
+                placement:      res.placement,
+                pointsEarned:   res.points,
+                hasPneu:        res.hadPneu,
+                date:           Date.now(),
+              });
+
+              statsMap.set(individualId, base);
             }
           }
+
+          // Add all player updates to the batch
+          statsMap.forEach((newStats, individualId) => {
+            const playerRef = doc(db, `rankings/${ranking.id}/players`, individualId);
+            batch.set(playerRef, cleanData(newStats));
+          });
         }
       }
 
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), { 
-        isFinished: true,
-        finalResults: finalResults.length > 0 ? finalResults : null
+      // Mark tournament as finished in the same batch
+      const tournamentRef = doc(db, 'tournaments', activeTournament.id);
+      batch.update(tournamentRef, {
+        isFinished:   true,
+        finalResults: finalResults.length > 0 ? finalResults : null,
       });
+
+      await batch.commit();
 
       navigateTo('FINISHED');
       const confetti = (await import('canvas-confetti')).default;
@@ -1222,10 +1301,10 @@ export default function BeachProApp() {
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ['#0f172a', '#bef264', '#000000']
+        colors: ['#0f172a', '#bef264', '#000000'],
       });
     } catch (err) {
-      console.error("Error finishing tournament:", err);
+      console.error('Error finishing tournament:', err);
       handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
     }
   };
@@ -1315,7 +1394,7 @@ export default function BeachProApp() {
   const createRanking = async () => {
     if (!user || isCreatingRanking) return;
 
-    if (!isPremium && rankings.length >= 1) {
+    if (!isPremium) {
       setUpgradeReason('RANKING_LIMIT');
       setShowUpgradeModal(true);
       return;
@@ -1331,6 +1410,16 @@ export default function BeachProApp() {
 
     try {
       const rankingId = `ranking-${Date.now()}`;
+
+      // Gera código único da liga (6 chars maiúsculos ex: BT4X9K)
+      const generateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+      let leagueCode = generateCode();
+      for (let i = 0; i < 5; i++) {
+        const q = query(collection(db, 'rankings'), where('leagueCode', '==', leagueCode));
+        const snap = await getDocs(q);
+        if (snap.empty) break;
+        leagueCode = generateCode();
+      }
       
       // Owner should be an official athlete by default
       const ownerAthlete: LeagueAthlete = {
@@ -1358,8 +1447,9 @@ export default function BeachProApp() {
         },
         leagueAthletes: [ownerAthlete],
         athleteIds: [user.uid],
-        logoUrl: "/capa-padrao.png", 
-        coverUrl: "/capa-padrao.png", // Brand-aligned sports background
+        logoUrl: "/capa-padrao.png",
+        coverUrl: "/capa-padrao.png",
+        leagueCode,
         createdAt: Date.now()
       };
 
@@ -1450,6 +1540,12 @@ export default function BeachProApp() {
     if (!validation.isValid) {
       setError(validation.error || "Placar inválido para este formato de disputa");
       setTimeout(() => setError(null), 4000);
+      return;
+    }
+
+    // Bloqueia empate em mata-mata (nunca pode ter vencedor em placar igual)
+    if (set.player1 === set.player2 && match.id.startsWith('playoff-')) {
+      setError("Placar empatado não é válido em mata-mata. Corrija o resultado antes de confirmar.");
       return;
     }
 
@@ -1817,46 +1913,85 @@ export default function BeachProApp() {
     }
 
     try {
-      console.log(`Deleting tournament ${id} and reverting points...`);
+      const batch = writeBatch(db);
       const rankingId = tournament.rankingId;
+
       if (rankingId) {
         const ranking = rankings.find(r => r.id === rankingId);
         if (ranking) {
-          // Revert points from each player
           const results = tournament.finalResults || [];
+
+          // Collect unique player IDs to fetch their current stats once
+          const individualIds = new Set<string>();
           for (const res of results) {
-            const playerIds = res.playerId.startsWith('team-') 
-              ? res.playerId.replace('team-', '').split('-') 
+            const ids = res.playerId.startsWith('team-')
+              ? res.playerId.replace('team-', '').split('-')
+              : [res.playerId];
+            ids.forEach(id => individualIds.add(id));
+          }
+
+          // Fetch all player stats in parallel (no sequential awaits)
+          const statsDocs = await Promise.all(
+            Array.from(individualIds).map(uid =>
+              getDoc(doc(db, `rankings/${rankingId}/players`, uid))
+            )
+          );
+          const currentStatsMap = new Map<string, PlayerStats>();
+          statsDocs.forEach(snap => {
+            if (snap.exists()) currentStatsMap.set(snap.id, snap.data() as PlayerStats);
+          });
+
+          // Build a delta map to accumulate per-player changes
+          const deltaMap = new Map<string, { points: number; victories: number; pneus: number; participations: number }>();
+          for (const res of results) {
+            const ids = res.playerId.startsWith('team-')
+              ? res.playerId.replace('team-', '').split('-')
               : [res.playerId];
 
-            for (const individualId of playerIds) {
-              const playerStatsRef = doc(db, `rankings/${rankingId}/players`, individualId);
-              const currentStats = (await getDoc(playerStatsRef)).data() as PlayerStats | undefined;
-              
-              if (currentStats) {
-                const updatedStats: PlayerStats = {
-                  ...currentStats,
-                  totalPoints: Math.max(0, (currentStats.totalPoints || 0) - res.points),
-                  victories: Math.max(0, (currentStats.victories || 0) - (tournament.matches.filter(m => (m.player1Id === res.playerId || m.player2Id === res.playerId) && m.winnerId === res.playerId).length)),
-                  participations: Math.max(0, (currentStats.participations || 0) - 1),
-                  pneus: Math.max(0, (currentStats.pneus || 0) - (res.hadPneu ? 1 : 0))
-                };
-                await setDoc(playerStatsRef, updatedStats);
-              }
+            for (const individualId of ids) {
+              const athlete = ranking.leagueAthletes?.find(a => a.id === individualId);
+              if (!athlete || athlete.isManual) continue;
+
+              const delta = deltaMap.get(individualId) || { points: 0, victories: 0, pneus: 0, participations: 0 };
+              delta.points        += res.points;
+              delta.victories     += res.placement === 1 ? 1 : 0;  // FIX: use placement, not match count
+              delta.pneus         += res.hadPneu   ? 1 : 0;
+              delta.participations += 1;
+              deltaMap.set(individualId, delta);
             }
           }
+
+          // Add batch updates for each player
+          deltaMap.forEach((delta, individualId) => {
+            const current = currentStatsMap.get(individualId);
+            if (!current) return;
+            const playerRef = doc(db, `rankings/${rankingId}/players`, individualId);
+            const updatedStats: PlayerStats = {
+              ...current,
+              totalPoints:    Math.max(0, (current.totalPoints    || 0) - delta.points),
+              victories:      Math.max(0, (current.victories      || 0) - delta.victories),
+              pneus:          Math.max(0, (current.pneus          || 0) - delta.pneus),
+              participations: Math.max(0, (current.participations || 0) - delta.participations),
+              tournamentHistory: (current.tournamentHistory || []).filter(
+                h => h.tournamentId !== id
+              ),
+            };
+            batch.set(playerRef, cleanData(updatedStats));
+          });
         }
       }
 
-      await deleteDoc(doc(db, 'tournaments', id));
+      batch.delete(doc(db, 'tournaments', id));
+      await batch.commit();
+
       setSnackMessage("Torneio excluído com sucesso.");
       setTimeout(() => setSnackMessage(null), 3000);
-      
+
       if (activeTournamentId === id) {
         navigateTo('HOME', { tournamentId: null });
       }
     } catch (err) {
-      console.error("Error deleting tournament:", err);
+      console.error('Error deleting tournament:', err);
       handleFirestoreError(err, OperationType.DELETE, `tournaments/${id}`);
     }
   };
@@ -1877,18 +2012,56 @@ export default function BeachProApp() {
       )}>
         <div className="w-full flex-grow">
           <AnimatePresence mode="wait">
-            {!isAuthReady && (
-              <motion.div 
+            {(!isAuthReady || !splashDone) && (
+              <motion.div
                 key="loading"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col items-center justify-center py-20"
+                className="fixed inset-0 bg-[#0a1628] flex flex-col items-center justify-center z-[999]"
               >
-              <RefreshCw size={48} className="animate-spin text-primary mb-4" />
-              <p className="text-slate-500 font-medium">Carregando...</p>
-            </motion.div>
-          )}
+                {/* Raios animados ao fundo */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.6 }}
+                  animate={{ opacity: [0, 0.15, 0.08], scale: [0.6, 1.4, 1.2] }}
+                  transition={{ duration: 1.2, ease: "easeOut" }}
+                  className="absolute w-72 h-72 rounded-full"
+                  style={{ background: 'radial-gradient(circle, #bef264 0%, transparent 70%)' }}
+                />
+
+                {/* Logo real */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.7, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}
+                  className="relative"
+                >
+                  <Image
+                    src="/logo2.png"
+                    alt="Beach Pró"
+                    width={340}
+                    height={192}
+                    priority
+                    className="object-contain drop-shadow-2xl"
+                  />
+                </motion.div>
+
+                {/* Barra de progresso */}
+                <motion.div
+                  className="absolute bottom-16 w-32 h-0.5 bg-white/10 rounded-full overflow-hidden"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1, duration: 0.3 }}
+                >
+                  <motion.div
+                    className="h-full bg-[#bef264] rounded-full"
+                    initial={{ width: '0%' }}
+                    animate={{ width: '100%' }}
+                    transition={{ delay: 1, duration: 0.8, ease: "easeInOut" }}
+                  />
+                </motion.div>
+              </motion.div>
+            )}
           {isAuthReady && !user && (
             <motion.div 
               key="login"
@@ -1899,14 +2072,14 @@ export default function BeachProApp() {
             >
               <div className="arena-hero-bg pt-12 pb-20 px-8 flex flex-col items-center text-center">
                 <div className="mb-8">
-                  <div className="brand-glass inline-block mb-4">
-                    <h1 className="brand-text text-white text-4xl md:text-5xl leading-none">
-                      BEACH<span className="text-accent">PRÓ</span>
-                    </h1>
-                  </div>
-                  <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">
-                    O play na palma da mão!
-                  </p>
+                  <Image
+                    src="/logo2.png"
+                    alt="Beach Pró"
+                    width={340}
+                    height={192}
+                    priority
+                    className="object-contain drop-shadow-xl w-full max-w-[340px]"
+                  />
                 </div>
 
                 <div className="text-center space-y-2 max-w-xs mx-auto">
@@ -1956,7 +2129,27 @@ export default function BeachProApp() {
                         <div className="space-y-2">
                           <div className="flex justify-between items-center px-4">
                             <label className="text-[9px] font-black font-display uppercase tracking-widest text-on-surface-variant">Senha</label>
-                            <button type="button" className="text-[9px] font-black text-primary hover:text-primary-dim transition-colors uppercase tracking-widest">Esqueceu?</button>
+                            <button
+                              type="button"
+                              className="text-[9px] font-black text-primary hover:text-primary-dim transition-colors uppercase tracking-widest disabled:opacity-40"
+                              disabled={!email.includes('@')}
+                              onClick={async () => {
+                                if (!email.includes('@')) {
+                                  setAuthError("Digite seu e-mail acima antes de redefinir a senha.");
+                                  return;
+                                }
+                                try {
+                                  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+                                  setForgotPasswordSent(true);
+                                  setAuthError(null);
+                                  setTimeout(() => setForgotPasswordSent(false), 8000);
+                                } catch (err: any) {
+                                  setAuthError("Não foi possível enviar o e-mail. Verifique o endereço.");
+                                }
+                              }}
+                            >
+                              {forgotPasswordSent ? "✓ E-mail enviado!" : "Esqueceu?"}
+                            </button>
                           </div>
                           <input 
                             type="password"
@@ -1976,6 +2169,27 @@ export default function BeachProApp() {
                           >
                             <AlertCircle size={16} />
                             {authError}
+                          </motion.div>
+                        )}
+
+                        {forgotPasswordSent && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shrink-0">
+                                <CheckCircle2 size={16} className="text-white" />
+                              </div>
+                              <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">
+                                E-mail enviado com sucesso!
+                              </p>
+                            </div>
+                            <p className="text-[9px] font-black text-emerald-700 leading-relaxed pl-11">
+                              Verifique sua caixa de entrada. Caso não encontre, confira a pasta de <span className="underline">Spam</span> ou <span className="underline">Lixo Eletrônico</span>.
+                            </p>
                           </motion.div>
                         )}
 
@@ -2036,7 +2250,7 @@ export default function BeachProApp() {
               <div className="arena-hero-bg pt-4 pb-16 px-8 flex flex-col items-center text-center">
                 <div className="w-full flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden">
+                    <div className="relative w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden">
                       {(userProfile?.photoURL || user?.photoURL) ? (
                         <div className="relative w-full h-full">
                           <Image src={userProfile?.photoURL || user?.photoURL} alt="Profile" fill className="object-cover" referrerPolicy="no-referrer" />
@@ -2044,6 +2258,7 @@ export default function BeachProApp() {
                       ) : (
                         <UserIcon size={20} />
                       )}
+                      {isPremium && <PremiumBadge size={16} />}
                     </div>
                     <div className="text-left">
                       <p className="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">Bem-vindo</p>
@@ -2053,14 +2268,14 @@ export default function BeachProApp() {
                 </div>
 
                 <div className="mb-6">
-                  <div className="brand-glass inline-block mb-4">
-                    <h1 className="brand-text text-white text-4xl md:text-5xl leading-none">
-                      BEACH<span className="text-accent">PRÓ</span>
-                    </h1>
-                  </div>
-                  <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">
-                    O play na palma da mão!
-                  </p>
+                  <Image
+                    src="/logo2.png"
+                    alt="Beach Pró"
+                    width={340}
+                    height={192}
+                    priority
+                    className="object-contain drop-shadow-xl w-full max-w-[340px]"
+                  />
                 </div>
                 
                 <div className="flex flex-col w-full gap-4 max-w-[340px]">
@@ -2225,21 +2440,36 @@ export default function BeachProApp() {
 
               <div className="wave-container px-6 pt-10 pb-32">
                 <div className="max-w-2xl mx-auto space-y-4">
-                  <button 
-                    onClick={() => {
-                      if (!isPremium && rankings.length >= 1) {
-                        setUpgradeReason('RANKING_LIMIT');
-                        setShowUpgradeModal(true);
-                        return;
-                      }
-                      resetRankingForm();
-                      navigateTo('CREATE_RANKING', { rankingId: null });
-                    }}
-                    className="w-full py-5 bg-primary text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:bg-primary-dim transition-all mb-6"
-                  >
-                    <Plus size={18} strokeWidth={3} />
-                    NOVA LIGA
-                  </button>
+                  <div className="flex flex-col gap-3 mb-6">
+                    <button
+                      onClick={() => {
+                        if (!isPremium) {
+                          setUpgradeReason('RANKING_LIMIT');
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        resetRankingForm();
+                        navigateTo('CREATE_RANKING', { rankingId: null });
+                      }}
+                      className="w-full py-5 bg-primary text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary-dim transition-all"
+                    >
+                      <Plus size={18} strokeWidth={3} />
+                      NOVA LIGA
+                      {!isPremium && <Lock size={14} className="opacity-60" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setLeagueSearchTerm('');
+                        setLeagueSearchResults([]);
+                        setLeagueSearchError(null);
+                        navigateTo('FIND_LEAGUES');
+                      }}
+                      className="w-full py-5 bg-white border-2 border-primary text-primary rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-primary/5 transition-all"
+                    >
+                      <Search size={18} />
+                      ENCONTRAR LIGAS
+                    </button>
+                  </div>
 
                   {rankings.length > 0 ? (
                     rankings.map((r, idx) => (
@@ -2303,6 +2533,176 @@ export default function BeachProApp() {
             </div>
           </motion.div>
         )}
+
+          {step === 'FIND_LEAGUES' && (
+            <motion.div
+              key="find-leagues"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="w-full min-h-screen bg-[#004a8c]"
+            >
+              <div className="arena-hero-bg pt-4 pb-12 px-8 flex flex-col items-center text-center relative">
+                <button onClick={goBack} className="absolute left-6 top-6 p-3 bg-white/10 rounded-2xl text-white backdrop-blur-sm border border-white/20 active:scale-95 transition-all">
+                  <ChevronLeft size={20} />
+                </button>
+                <div className="mb-2 mt-8">
+                  <div className="p-3 bg-white/10 rounded-2xl mb-4 inline-block backdrop-blur-sm border border-white/20">
+                    <Search size={24} className="text-white" />
+                  </div>
+                  <h1 className="text-4xl font-display font-black text-white italic uppercase tracking-tighter leading-none mb-2">
+                    Encontrar Liga
+                  </h1>
+                  <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">
+                    Digite o código de 6 letras da liga
+                  </p>
+                </div>
+              </div>
+
+              <div className="wave-container px-6 pt-10 pb-32">
+                <div className="max-w-2xl mx-auto space-y-6">
+
+                  {/* Search box — código apenas */}
+                  <div className="bg-white rounded-[2rem] p-6 border border-surface-container shadow-xl">
+                    <h3 className="text-[10px] font-black text-on-surface uppercase tracking-widest mb-4">Código da Liga</h3>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Ex: BT4X9K"
+                        maxLength={6}
+                        className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-black outline-none focus:ring-2 focus:ring-primary/20 uppercase tracking-widest text-center"
+                        value={leagueSearchTerm}
+                        onChange={(e) => {
+                          setLeagueSearchTerm(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                          setLeagueSearchResults([]);
+                          setLeagueSearchError(null);
+                          setRequestSent(null);
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('btn-buscar-liga')?.click(); }}
+                      />
+                      <button
+                        id="btn-buscar-liga"
+                        disabled={leagueSearchTerm.length !== 6 || isSearchingLeague}
+                        onClick={async () => {
+                          const term = leagueSearchTerm.trim().toUpperCase();
+                          if (term.length !== 6) { setLeagueSearchError('O código deve ter exatamente 6 caracteres.'); return; }
+                          setIsSearchingLeague(true);
+                          setLeagueSearchResults([]);
+                          setLeagueSearchError(null);
+                          setRequestSent(null);
+                          try {
+                            const qCode = query(collection(db, 'rankings'), where('leagueCode', '==', term));
+                            const snapCode = await getDocs(qCode);
+                            if (!snapCode.empty) {
+                              setLeagueSearchResults(snapCode.docs.map(d => ({ ...d.data(), id: d.id })));
+                            } else {
+                              setLeagueSearchError('Nenhuma liga encontrada com este código.');
+                            }
+                          } catch { setLeagueSearchError('Erro ao buscar. Tente novamente.'); }
+                          finally { setIsSearchingLeague(false); }
+                        }}
+                        className="bg-primary text-white px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-primary/20 flex items-center gap-2 disabled:opacity-40"
+                      >
+                        {isSearchingLeague ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />}
+                        BUSCAR
+                      </button>
+                    </div>
+                    {leagueSearchError && (
+                      <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mt-3 px-1">{leagueSearchError}</p>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="bg-primary/10 rounded-2xl p-5 border border-primary/20 flex gap-3">
+                    <Info size={18} className="text-primary shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-black text-primary uppercase tracking-tight leading-relaxed">
+                      Peça o código de 6 letras ao administrador da liga. Ele fica na aba "A Liga", no card de código.
+                    </p>
+                  </div>
+
+                  {/* Feedback de solicitação enviada */}
+                  {requestSent && (
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                      className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex gap-3 items-start"
+                    >
+                      <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-1">Solicitação enviada!</p>
+                        <p className="text-[9px] font-black text-emerald-700 leading-relaxed uppercase tracking-tight">
+                          Aguarde o administrador de <span className="font-black">{requestSent}</span> aprovar sua entrada.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Resultado da busca */}
+                  {leagueSearchResults.map((league: any) => {
+                    const alreadyMember = rankings.some(r => r.id === league.id);
+                    const isOwner = league.ownerId === user?.uid;
+                    const memberCount = league.leagueAthletes?.length || 0;
+                    const atLimit = !isPremium && rankings.filter(r => r.ownerId !== user?.uid).length >= 2;
+                    return (
+                      <div key={league.id} className="bg-white rounded-[2rem] p-6 border border-surface-container shadow-xl">
+                        <div className="flex items-center gap-4 mb-5">
+                          <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary overflow-hidden relative shrink-0">
+                            {league.coverUrl && !league.coverUrl.startsWith('data:') ? (
+                              <Image src={league.coverUrl} alt={league.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                            ) : <LayoutGrid size={24} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-black text-on-surface uppercase italic truncate">{league.name}</h4>
+                            {league.arenaName && <p className="text-[9px] font-black text-on-surface-variant/50 uppercase tracking-widest truncate">{league.arenaName}</p>}
+                            <p className="text-[9px] font-black text-primary uppercase tracking-widest mt-1">{memberCount} atletas</p>
+                          </div>
+                        </div>
+
+                        {alreadyMember ? (
+                          <div className="w-full py-3 bg-emerald-50 text-emerald-600 rounded-2xl font-black text-[10px] uppercase tracking-widest text-center border border-emerald-100">✓ VOCÊ JÁ FAZ PARTE DESTA LIGA</div>
+                        ) : isOwner ? (
+                          <div className="w-full py-3 bg-primary/5 text-primary rounded-2xl font-black text-[10px] uppercase tracking-widest text-center border border-primary/10">VOCÊ É O ADMINISTRADOR DESTA LIGA</div>
+                        ) : requestSent ? (
+                          <div className="w-full py-3 bg-amber-50 text-amber-700 rounded-2xl font-black text-[10px] uppercase tracking-widest text-center border border-amber-100">⏳ SOLICITAÇÃO ENVIADA — AGUARDANDO APROVAÇÃO</div>
+                        ) : atLimit ? (
+                          <button onClick={() => { setUpgradeReason('RANKING_LIMIT'); setShowUpgradeModal(true); }}
+                            className="w-full py-3 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-amber-200">
+                            <Lock size={14} /> LIMITE DE 2 LIGAS — SEJA PREMIUM
+                          </button>
+                        ) : (
+                          <button
+                            disabled={joiningLeagueId === league.id}
+                            onClick={async () => {
+                              if (!user || !userProfile) return;
+                              setJoiningLeagueId(league.id);
+                              try {
+                                await setDoc(doc(db, 'rankings', league.id, 'pendingRequests', user.uid), {
+                                  uid: user.uid,
+                                  name: userProfile.displayName || user.displayName || user.email?.split('@')[0] || 'Atleta',
+                                  email: user.email || '',
+                                  userTag: userProfile.userTag || '',
+                                  photo: userProfile.photoURL || user.photoURL || '',
+                                  requestedAt: Date.now(),
+                                  status: 'pending',
+                                });
+                                setRequestSent(league.name);
+                              } catch (err) {
+                                handleFirestoreError(err, OperationType.WRITE, `rankings/${league.id}/pendingRequests`);
+                              } finally { setJoiningLeagueId(null); }
+                            }}
+                            className="w-full py-3 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            {joiningLeagueId === league.id ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={3} />}
+                            SOLICITAR ENTRADA NA LIGA
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {step === 'CREATE_RANKING' && (
             <StepContainer 
@@ -2746,6 +3146,61 @@ export default function BeachProApp() {
 
                 {rankingTab === 'PLAYERS' && (
                   <div className="space-y-6">
+                    {/* Solicitações Pendentes — Admin Only */}
+                    {(activeRanking.ownerId === user?.uid || activeRanking.adminIds?.includes(user?.uid || '')) && (() => {
+                      const pending = pendingRequests[activeRanking.id] || [];
+                      if (pending.length === 0) return null;
+                      return (
+                        <div className="bg-white rounded-[2.5rem] p-6 border border-amber-200 shadow-xl">
+                          <div className="flex items-center gap-3 mb-5">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 relative">
+                              <Users size={20} />
+                              <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{pending.length}</span>
+                            </div>
+                            <div>
+                              <h3 className="text-xs font-black text-on-surface uppercase italic">Solicitações Pendentes</h3>
+                              <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">{pending.length} atleta{pending.length > 1 ? 's' : ''} aguardando aprovação</p>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            {pending.map((req: any) => (
+                              <div key={req.uid} className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
+                                  {req.photo ? <Image src={req.photo} alt={req.name} fill className="object-cover" referrerPolicy="no-referrer" /> : <UserIcon size={18} className="text-primary" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-black text-on-surface truncate">{req.name}</p>
+                                  <p className="text-[9px] font-black text-primary">{req.userTag || req.email}</p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                  <button onClick={async () => {
+                                    try {
+                                      const newAthlete = { id: req.uid, name: req.name, email: req.email, userTag: req.userTag, photo: req.photo, isManual: false };
+                                      const batch = writeBatch(db);
+                                      batch.update(doc(db, 'rankings', activeRanking.id), cleanData({ leagueAthletes: [...(activeRanking.leagueAthletes || []), newAthlete], athleteIds: [...(activeRanking.athleteIds || []), req.uid] }));
+                                      batch.delete(doc(db, 'rankings', activeRanking.id, 'pendingRequests', req.uid));
+                                      await batch.commit();
+                                      setPendingRequests(prev => ({ ...prev, [activeRanking.id]: (prev[activeRanking.id] || []).filter((r: any) => r.uid !== req.uid) }));
+                                      setSnackMessage(`${req.name} aprovado!`);
+                                      setTimeout(() => setSnackMessage(null), 3000);
+                                    } catch (err) { handleFirestoreError(err, OperationType.WRITE, `rankings/${activeRanking.id}`); }
+                                  }} className="px-3 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">✓</button>
+                                  <button onClick={async () => {
+                                    try {
+                                      await deleteDoc(doc(db, 'rankings', activeRanking.id, 'pendingRequests', req.uid));
+                                      setPendingRequests(prev => ({ ...prev, [activeRanking.id]: (prev[activeRanking.id] || []).filter((r: any) => r.uid !== req.uid) }));
+                                      setSnackMessage(`Solicitação de ${req.name} recusada.`);
+                                      setTimeout(() => setSnackMessage(null), 3000);
+                                    } catch (err) { handleFirestoreError(err, OperationType.DELETE, `rankings/${activeRanking.id}/pendingRequests/${req.uid}`); }
+                                  }} className="px-3 py-2 bg-red-100 text-red-600 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">✗</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Add Athlete Section (Admin Only) */}
                     {activeRanking.adminIds.includes(user?.uid || '') && (
                       <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
@@ -2866,7 +3321,7 @@ export default function BeachProApp() {
                     {(() => {
                       const historyTournaments = tournaments
                         .filter(t => t.rankingId === activeRanking.id && (t.isFinished || (t.finalResults && t.finalResults.length > 0)))
-                        .filter(t => !t.createdAt || (Date.now() - t.createdAt) < 365 * 24 * 60 * 60 * 1000)
+                        // Sem filtro de data — exibe todo o histórico da liga
                         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
                       if (historyTournaments.length === 0) {
@@ -3011,7 +3466,7 @@ export default function BeachProApp() {
                                               </div>
                                             </div>
                                             <div className="pl-3 border-l border-slate-50 flex flex-col items-center justify-center min-w-[50px]">
-                                              <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest mb-0.5">MESA</span>
+                                              <span className="text-[7px] font-black text-slate-300 uppercase tracking-widest mb-0.5">QUADRA</span>
                                               <span className="text-[10px] font-black text-slate-500 italic">{m.table}</span>
                                             </div>
                                           </div>
@@ -3143,6 +3598,41 @@ export default function BeachProApp() {
                       </div>
                     )}
 
+                    {/* Código da Liga */}
+                    {activeRanking.leagueCode && (
+                      <div className="bg-primary rounded-[2rem] p-6 border border-primary shadow-xl">
+                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-3">Código da Liga</p>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-4xl font-black text-white tracking-widest font-mono">
+                            {activeRanking.leagueCode}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!
+
+Para entrar, siga os passos:
+1. Baixe o app BeachPró
+2. Crie sua conta
+3. Acesse "Minhas Ligas" → "Encontrar Ligas"
+4. Digite o código: ${activeRanking.leagueCode}
+
+O play na palma da mão! 🏆`;
+                              navigator.clipboard.writeText(text);
+                              setSnackMessage('Texto copiado! Cole no WhatsApp.');
+                              setTimeout(() => setSnackMessage(null), 3000);
+                            }}
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-white/20"
+                          >
+                            <Copy size={14} />
+                            COPIAR CONVITE
+                          </button>
+                        </div>
+                        <p className="text-[9px] font-black text-white/50 uppercase tracking-tight leading-relaxed mt-3">
+                          Compartilhe este código com os atletas para que eles possam entrar na liga.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Sobre a Liga */}
                     <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
                       <div className="flex items-center gap-3 mb-6">
@@ -3244,6 +3734,7 @@ export default function BeachProApp() {
                                      ) : (
                                        <UserIcon size={14} />
                                      )}
+                                     {profile?.isPremium && <PremiumBadge size={12} />}
                                    </div>
                                    <div className="min-w-0">
                                       <p className="text-[10px] font-black text-slate-700 uppercase italic truncate">{profile?.displayName || aid}</p>
@@ -3485,19 +3976,19 @@ export default function BeachProApp() {
             >
               <div className="space-y-4 pr-2 custom-scrollbar">
                 {[
-                  { id: 'REI_DA_QUADRA', title: 'REI DA QUADRA (4 Atletas)', desc: 'Formato individual: 3 rodadas onde cada atleta joga com um parceiro diferente. 4 atletas necessários.', icon: TrophyIcon, req: 4 },
-                  { id: 'SUPER_6_INDIVIDUAL', title: 'SUPER 6 INDIVIDUAL (6 Atletas)', desc: 'Formato individual: 5 rodadas. Você joga uma vez com cada um dos outros 5 atletas. 6 atletas necessários.', icon: Users, req: 6 },
-                  { id: 'SUPER_3_FIXED', title: 'SUPER 3 DUPLAS FIXAS (6 Atletas)', desc: '3 duplas fixas (6 atletas) em formato todos contra todos.', icon: Users, req: 6 },
-                  { id: 'SUPER_4_FIXED', title: 'SUPER 4 DUPLAS FIXAS (8 Atletas)', desc: '4 duplas fixas (8 atletas) em Round Robin completo.', icon: Users, req: 8 },
-                  { id: 'SUPER_8_INDIVIDUAL', title: 'SUPER 8 INDIVIDUAL (8 Atletas)', desc: 'Formato individual: 7 rodadas. Rotação completa de parceiros. 8 atletas necessários.', icon: Users, req: 8 },
-                  { id: 'SUPER_5_FIXED', title: 'SUPER 5 DUPLAS FIXAS (10 Atletas)', desc: '5 duplas fixas (10 atletas) em formato todos contra todos.', icon: Users, req: 10 },
-                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL (10 Atletas)', desc: 'Formato individual: 9 rodadas. Rotação completa entre 10 atletas.', icon: Users, req: 10 },
-                  { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL (12 Atletas)', desc: 'Formato individual: 11 rodadas. Rotação completa entre 12 atletas.', icon: Users, req: 12 },
-                  { id: 'SUPER_6_FIXED', title: 'SUPER 6 DUPLAS FIXAS (12 Atletas)', desc: '6 duplas fixas (12 atletas) em formato todos contra todos.', icon: Users, req: 12 },
-                  { id: 'SUPER_8_FIXED', title: 'SUPER 8 DUPLAS FIXAS (16 Atletas)', desc: '8 duplas fixas (16 atletas). Disputa intensa de Round Robin.', icon: Users, req: 16 },
-                  { id: 'SUPER_10_FIXED', title: 'SUPER 10 DUPLAS FIXAS (20 Atletas)', desc: '10 duplas fixas (20 atletas). Formato de liga longa.', icon: Users, req: 20 },
-                  { id: 'SUPER_12_FIXED', title: 'SUPER 12 DUPLAS FIXAS (24 Atletas)', desc: '12 duplas fixas (24 atletas). O desafio máximo.', icon: Users, req: 24, premium: false },
-                  { id: 'GROUPS_MATA_MATA', title: 'GRUPOS + MATA-MATA', desc: 'Torneio clássico: fase de grupos seguida de eliminatórias.', icon: LayoutGrid, req: 4, premium: true },
+                  { id: 'REI_DA_QUADRA',       title: 'REI DA QUADRA — 4 Atletas',         desc: '3 rodadas individuais. Cada atleta joga uma vez ao lado de cada um dos outros 3. Ao final, o melhor desempenho geral vence.', icon: TrophyIcon, req: 4 },
+                  { id: 'SUPER_6_INDIVIDUAL',  title: 'SUPER 6 INDIVIDUAL — 6 Atletas',    desc: '5 rodadas. Cada atleta joga ao lado de todos os outros 5 parceiros, um por rodada. Parceiros mudam a cada rodada. O desempenho individual ao longo de todas as partidas determina o campeão.', icon: Users, req: 6 },
+                  { id: 'SUPER_3_FIXED',       title: 'SUPER 3 DUPLAS FIXAS — 6 Atletas',  desc: '3 duplas formadas antes do torneio começar. Cada dupla enfrenta todas as outras 2 duplas. Disputam 2 partidas cada.', icon: Users, req: 6 },
+                  { id: 'SUPER_4_FIXED',       title: 'SUPER 4 DUPLAS FIXAS — 8 Atletas',  desc: '4 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 3. Total de 6 partidas no torneio.', icon: Users, req: 8 },
+                  { id: 'SUPER_8_INDIVIDUAL',  title: 'SUPER 8 INDIVIDUAL — 8 Atletas',    desc: '7 rodadas. Cada atleta joga ao lado de todos os outros 7, um por rodada. Parceiros mudam a cada rodada. O desempenho individual acumulado define o campeão.', icon: Users, req: 8 },
+                  { id: 'SUPER_5_FIXED',       title: 'SUPER 5 DUPLAS FIXAS — 10 Atletas', desc: '5 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 4. Total de 10 partidas no torneio.', icon: Users, req: 10 },
+                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL — 10 Atletas',  desc: '9 rodadas. Parceiros mudam a cada rodada. Em cada rodada, 2 atletas descansam enquanto os outros 8 jogam. O melhor aproveitamento individual ao longo das rodadas decide o campeão.', icon: Users, req: 10 },
+                  { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL — 12 Atletas',  desc: '11 rodadas. Parceiros mudam a cada rodada. Todos os atletas jogam juntos ao longo do torneio. O melhor aproveitamento individual determina o campeão.', icon: Users, req: 12 },
+                  { id: 'SUPER_6_FIXED',       title: 'SUPER 6 DUPLAS FIXAS — 12 Atletas', desc: '6 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 5. Total de 15 partidas no torneio.', icon: Users, req: 12 },
+                  { id: 'SUPER_8_FIXED',       title: 'SUPER 8 DUPLAS FIXAS — 16 Atletas', desc: '8 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 7. Total de 28 partidas. Ideal para torneios de liga.', icon: Users, req: 16 },
+                  { id: 'SUPER_10_FIXED',      title: 'SUPER 10 DUPLAS FIXAS — 20 Atletas', desc: '10 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 9. Total de 45 partidas. Formato de temporada longa.', icon: Users, req: 20 },
+                  { id: 'SUPER_12_FIXED',      title: 'SUPER 12 DUPLAS FIXAS — 24 Atletas', desc: '12 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 11. Total de 66 partidas. O formato mais completo.', icon: Users, req: 24, premium: false },
+                  { id: 'GROUPS_MATA_MATA',    title: 'GRUPOS + MATA-MATA',                  desc: 'Fase de grupos: as duplas são divididas em grupos e jogam entre si. Os melhores de cada grupo avançam para a fase eliminatória, onde uma derrota significa eliminação.', icon: LayoutGrid, req: 4, premium: true },
                 ].filter(f => {
                   if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 4;
                   return playerCount === f.req;
@@ -4278,14 +4769,67 @@ export default function BeachProApp() {
             </StepContainer>
           )}
 
-          {isAuthReady && user && step === 'TABLE_COUNT' && (
-            <StepContainer 
+
+          {isAuthReady && user && step === 'TABLE_COUNT' && (() => {
+            // Recomendação de quadras baseada no formato e número de jogadores
+            const getCourtRecommendation = (): { ideal: number; min: number; max: number; reason: string } => {
+              const n = players.length;
+              const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
+              const teams = isIndividual ? n : Math.floor(n / 2);
+
+              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 2, reason: `${n} atletas individuais — 1 quadra roda todas as 5 rodadas sem problemas.` };
+              if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 2, min: 1, max: 2, reason: `${n} atletas — 2 quadras garantem fluxo contínuo nas 7 rodadas.` };
+              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 2, max: 3, reason: `${n} atletas — 2 quadras por rodada, com 2 descansando. 3 quadras aceleram o torneio.` };
+              if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 2, max: 4, reason: `${n} atletas — 3 quadras para rodar as 3 partidas simultâneas por rodada.` };
+              if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: Math.max(1, Math.floor(n / 4)), min: 1, max: Math.ceil(n / 4), reason: `${n} atletas — ${Math.max(1, Math.floor(n / 4))} quadra(s) para rodadas contínuas no Rei da Quadra.` };
+              if (tournamentFormat === 'ROUND_ROBIN') {
+                const matches = (teams * (teams - 1)) / 2;
+                const ideal = Math.min(Math.max(1, Math.floor(teams / 2)), 4);
+                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas = ${matches} partidas no total. ${ideal} quadra(s) é o equilíbrio ideal.` };
+              }
+              if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') {
+                const ideal = Math.min(Math.max(2, Math.floor(teams / 4)), 6);
+                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras para rodadas simultâneas entre grupos diferentes.` };
+              }
+              if (tournamentFormat === 'MATA_MATA') {
+                const ideal = Math.min(Math.max(1, Math.floor(teams / 2)), 4);
+                return { ideal, min: 1, max: 4, reason: `${teams} duplas no eliminatório — ${ideal} quadra(s) para rodadas paralelas.` };
+              }
+              return { ideal: 2, min: 1, max: 4, reason: 'Selecione as quadras disponíveis.' };
+            };
+
+            const rec = getCourtRecommendation();
+            return (
+          <StepContainer 
               key="table-count"
               title="Quadras"
               subtitle="Selecione as quadras que serão utilizadas (1 a 12)."
               currentStep={8}
             >
               <div className="flex flex-col items-center gap-8">
+
+                {/* Recomendação de quadras */}
+                <div className="w-full bg-primary/5 border border-primary/20 rounded-[2rem] p-5 flex gap-4 items-start">
+                  <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center shrink-0 mt-0.5">
+                    <Lightbulb size={18} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">Recomendação para este formato</p>
+                    <p className="text-xs font-black text-on-surface mb-2">{rec.reason}</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <span className="px-3 py-1.5 bg-primary text-white rounded-full text-[9px] font-black uppercase tracking-widest">
+                        IDEAL: {rec.ideal} quadra{rec.ideal > 1 ? 's' : ''}
+                      </span>
+                      <span className="px-3 py-1.5 bg-white border border-primary/20 text-primary rounded-full text-[9px] font-black uppercase tracking-widest">
+                        MÍNIMO: {rec.min}
+                      </span>
+                      <span className="px-3 py-1.5 bg-white border border-primary/20 text-primary rounded-full text-[9px] font-black uppercase tracking-widest">
+                        MÁXIMO: {rec.max}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-4 gap-4 w-full">
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
                     <button
@@ -4294,7 +4838,6 @@ export default function BeachProApp() {
                         if (selectedCourts.includes(num)) {
                           setSelectedCourts(selectedCourts.filter(c => c !== num));
                         } else {
-                          // Check if court is used in another active tournament
                           const usingTournament = tournaments.find(t => !t.isFinished && t.tables.includes(num));
                           if (usingTournament) {
                             setCourtWarning({ court: num, tournamentName: usingTournament.name });
@@ -4337,6 +4880,48 @@ export default function BeachProApp() {
                 </div>
               </div>
 
+              {/* Low Courts Warning Popup */}
+              <AnimatePresence>
+                {showLowCourtsPopup && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm">
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl"
+                    >
+                      <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 mx-auto mb-5">
+                        <AlertTriangle size={32} />
+                      </div>
+                      <h3 className="text-sm font-black text-on-surface uppercase tracking-widest text-center italic mb-3">
+                        Poucas Quadras
+                      </h3>
+                      <p className="text-[10px] font-black text-on-surface-variant/60 uppercase tracking-tight leading-relaxed text-center mb-6">
+                        Para o modo <span className="text-primary font-black">{getFormatDisplayName()}</span> com {players.length || playerCount} atletas, o ideal são <span className="text-amber-600 font-black">{getIdealCourts()} quadras</span>.<br/><br/>
+                        Com apenas <span className="text-red-500 font-black">{selectedCourts.length} quadra{selectedCourts.length > 1 ? 's' : ''}</span>, algumas duplas ficarão esperando entre as partidas.
+                      </p>
+                      <div className="flex flex-col gap-3">
+                        <button
+                          onClick={() => {
+                            setShowLowCourtsPopup(false);
+                            proceedFromTableCount();
+                          }}
+                          className="w-full py-4 bg-amber-500 text-white rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-200"
+                        >
+                          CONTINUAR MESMO ASSIM
+                        </button>
+                        <button
+                          onClick={() => setShowLowCourtsPopup(false)}
+                          className="w-full py-4 bg-surface-container text-on-surface-variant rounded-full font-black text-[10px] uppercase tracking-widest"
+                        >
+                          SELECIONAR MAIS QUADRAS
+                        </button>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+
               {/* Court Warning Modal */}
               <AnimatePresence>
                 {courtWarning && (
@@ -4377,7 +4962,9 @@ export default function BeachProApp() {
                 )}
               </AnimatePresence>
             </StepContainer>
-          )}
+          );
+          })()}
+
 
           {isAuthReady && user && step === 'TOURNAMENT' && activeTournament && (
             <motion.div 
@@ -4577,14 +5164,33 @@ export default function BeachProApp() {
                 {tournamentTab === 'MATCHES' && (() => {
                   const currentViewRound = tournamentViewRound ?? activeTournament.currentRound;
                   const matchesByCourt: { [key: number]: Match[] } = {};
-                  activeTournament.matches
-                    .filter(m => m.round === currentViewRound)
-                    .forEach(m => {
+                  const roundMatches = activeTournament.matches.filter(m => m.round === currentViewRound);
+                  
+                  // Find resting players for this round (Super format)
+                  const restingPlayerIds = roundMatches.find(m => m.restingPlayerIds)?.restingPlayerIds || [];
+                  const restingPlayers = restingPlayerIds.map(id => activeTournament.players.find(p => p.id === id)).filter(Boolean);
+
+                  roundMatches.forEach(m => {
                       if (!matchesByCourt[m.table]) matchesByCourt[m.table] = [];
                       matchesByCourt[m.table].push(m);
                     });
                   
-                  return Object.entries(matchesByCourt).sort(([a], [b]) => Number(a) - Number(b)).map(([court, matches]) => (
+                  return (<>
+                    {/* Resting players banner — Super format only */}
+                    {restingPlayers.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-amber-400 rounded-full flex items-center justify-center shrink-0">
+                          <span className="text-white text-xs font-black">Z</span>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-black text-amber-700 uppercase tracking-widest mb-0.5">Descansando esta rodada</p>
+                          <p className="text-xs font-black text-amber-900">
+                            {restingPlayers.map((p: any) => p.name).join(' & ')}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {Object.entries(matchesByCourt).sort(([a], [b]) => Number(a) - Number(b)).map(([court, matches]) => (
                     <section key={court}>
                       <div className="flex items-baseline gap-3 mb-3">
                         <h2 className="text-xs font-black text-on-surface font-display uppercase tracking-widest">
@@ -4723,7 +5329,8 @@ export default function BeachProApp() {
                           })}
                       </div>
                     </section>
-                  ));
+                  ))}
+                  </>);
                 })()}
 
                 {tournamentTab === 'MATCHES' && (
@@ -5182,58 +5789,22 @@ export default function BeachProApp() {
                       className="hidden" 
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file && user) {
-                          try {
-                            setIsProfileUpdating(true);
-                            
-                            // 1. Compress and convert to Base64
-                            const reader = new FileReader();
-                            reader.readAsDataURL(file);
-                            reader.onload = async (event) => {
-                              const img = new window.Image();
-                              img.src = event.target?.result as string;
-                              img.onload = async () => {
-                                const canvas = document.createElement('canvas');
-                                const MAX_WIDTH = 400;
-                                const MAX_HEIGHT = 400;
-                                let width = img.width;
-                                let height = img.height;
+                        if (!file || !user) return;
+                        try {
+                          setIsProfileUpdating(true);
+                          const path = `users/${user.uid}/avatar.jpg`;
+                          const url  = await uploadImageToStorage(file, path, 400, 0.8);
 
-                                if (width > height) {
-                                  if (width > MAX_WIDTH) {
-                                    height *= MAX_WIDTH / width;
-                                    width = MAX_WIDTH;
-                                  }
-                                } else {
-                                  if (height > MAX_HEIGHT) {
-                                    width *= MAX_HEIGHT / height;
-                                    height = MAX_HEIGHT;
-                                  }
-                                }
+                          await updateDoc(doc(db, 'users', user.uid), { photoURL: url });
+                          setUserProfile((prev: any) => ({ ...prev, photoURL: url }));
 
-                                canvas.width = width;
-                                canvas.height = height;
-                                const ctx = canvas.getContext('2d');
-                                ctx?.drawImage(img, 0, 0, width, height);
-                                
-                                const base64String = canvas.toDataURL('image/jpeg', 0.8);
-
-                                // 1. Update Firestore (Exclusively for Base64 since Auth photoURL has length limits)
-                                await updateDoc(doc(db, 'users', user.uid), { photoURL: base64String });
-
-                                // 2. Update local state
-                                setUserProfile((prev: any) => ({ ...prev, photoURL: base64String }));
-                                
-                                setSnackMessage("Foto atualizada com sucesso");
-                                setTimeout(() => setSnackMessage(null), 3000);
-                                setIsProfileUpdating(false);
-                              };
-                            };
-                          } catch (err) {
-                            console.error("Error uploading image:", err);
-                            setAuthError("Erro ao processar imagem.");
-                            setIsProfileUpdating(false);
-                          }
+                          setSnackMessage("Foto atualizada com sucesso");
+                          setTimeout(() => setSnackMessage(null), 3000);
+                        } catch (err) {
+                          console.error('Error uploading avatar:', err);
+                          setAuthError("Erro ao processar imagem.");
+                        } finally {
+                          setIsProfileUpdating(false);
                         }
                       }}
                     />
@@ -5253,11 +5824,6 @@ export default function BeachProApp() {
                       </motion.span>
                     )}
                   </h2>
-                  {userProfile?.userNumericId && (
-                    <div className="text-[11px] font-black text-white/70 uppercase tracking-widest mb-1">
-                      ID #{userProfile.userNumericId}
-                    </div>
-                  )}
                   {userProfile?.userTag && (
                     <div className="mb-2 px-3 py-1 bg-white text-primary text-sm font-mono font-bold rounded-full tracking-wider shadow-md">
                       {userProfile.userTag}
@@ -5412,6 +5978,54 @@ export default function BeachProApp() {
                         className="w-full bg-white border border-surface-container rounded-2xl py-4 pl-12 pr-4 text-on-surface font-black text-xs uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                       />
                     </div>
+                  </div>
+
+                  {/* Tag */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest px-1">Seu @ (como as pessoas te encontram)</label>
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors font-black text-sm">
+                        @
+                      </div>
+                      <input
+                        type="text"
+                        value={editTag.replace('@', '')}
+                        onChange={async (e) => {
+                          const raw = e.target.value.replace('@', '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                          setEditTag('@' + raw);
+                          setTagError(null);
+                          if (raw.length < 3) return;
+                          if ('@' + raw === userProfile?.userTag) return;
+                          setIsCheckingTag(true);
+                          try {
+                            const { getDocs, query, collection, where } = await import('firebase/firestore');
+                            const q = query(collection(db, 'users'), where('userTag', '==', '@' + raw));
+                            const snap = await getDocs(q);
+                            setTagError(snap.empty ? null : 'Este @ já está em uso.');
+                          } finally {
+                            setIsCheckingTag(false);
+                          }
+                        }}
+                        maxLength={20}
+                        placeholder="seuuser"
+                        className="w-full bg-white border border-surface-container rounded-2xl py-4 pl-10 pr-10 text-on-surface font-black text-xs lowercase tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black">
+                        {isCheckingTag && <RefreshCw size={14} className="animate-spin text-slate-400" />}
+                        {!isCheckingTag && tagError === null && editTag.replace('@','').length >= 3 && (
+                          <span className="text-emerald-500">✓</span>
+                        )}
+                        {!isCheckingTag && tagError && (
+                          <span className="text-red-500">✗</span>
+                        )}
+                      </div>
+                    </div>
+                    {tagError && (
+                      <p className="text-[9px] font-black text-red-500 uppercase tracking-widest px-1">{tagError}</p>
+                    )}
+                    {editTag.replace('@','').length > 0 && editTag.replace('@','').length < 3 && (
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Mínimo 3 caracteres</p>
+                    )}
                   </div>
 
                   {/* Email */}
@@ -5874,36 +6488,55 @@ export default function BeachProApp() {
         <AnimatePresence>
           {leagueToDelete && (
             <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
-              <motion.div 
+              <motion.div
+                key={leagueDeleteStep}
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
                 className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl border border-surface-container"
               >
-                <div className="bg-rose-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-rose-500 mb-8 mx-auto shadow-sm">
+                <div className="bg-rose-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-rose-500 mb-6 mx-auto shadow-sm">
                   <Trash2 size={40} />
                 </div>
-                <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Excluir Liga?</h3>
-                <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-10 uppercase tracking-tight leading-relaxed">
-                  Tem certeza que deseja excluir esta liga? <span className="text-rose-500">Esta ação é irreversível. Todos os rankings, torneios e históricos serão perdidos permanentemente.</span>
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={() => {
-                      deleteRanking(leagueToDelete);
-                      setLeagueToDelete(null);
-                    }}
-                    className="w-full py-5 bg-rose-500 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/20"
-                  >
-                    SIM, EXCLUIR DEFINITIVAMENTE
-                  </button>
-                  <button 
-                    onClick={() => setLeagueToDelete(null)}
-                    className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
-                  >
-                    CANCELAR
-                  </button>
+
+                {/* Step indicator */}
+                <div className="flex justify-center gap-2 mb-6">
+                  <div className={`w-2 h-2 rounded-full ${leagueDeleteStep === 1 ? 'bg-rose-500' : 'bg-rose-200'}`} />
+                  <div className={`w-2 h-2 rounded-full ${leagueDeleteStep === 2 ? 'bg-rose-500' : 'bg-rose-200'}`} />
                 </div>
+
+                {leagueDeleteStep === 1 ? (<>
+                  <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Excluir Liga?</h3>
+                  <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-4 uppercase tracking-tight leading-relaxed">
+                    Ao excluir a liga, <span className="text-rose-500">todos os dados dos atletas nesta liga serão apagados permanentemente</span> — pontuação, histórico de torneios e participações.
+                  </p>
+                  <p className="text-[10px] font-black text-rose-500 text-center mb-8 uppercase tracking-tight">Esta ação é irreversível.</p>
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => setLeagueDeleteStep(2)}
+                      className="w-full py-5 bg-rose-500 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-500/20">
+                      ENTENDI, CONTINUAR
+                    </button>
+                    <button onClick={() => { setLeagueToDelete(null); setLeagueDeleteStep(1); }}
+                      className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest">
+                      CANCELAR
+                    </button>
+                  </div>
+                </>) : (<>
+                  <h3 className="text-xs font-black text-rose-600 text-center mb-2 uppercase tracking-widest">Confirmação Final</h3>
+                  <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-8 uppercase tracking-tight leading-relaxed">
+                    Você tem <span className="text-rose-500 font-black">absoluta certeza</span>? Não há como desfazer esta ação.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => { deleteRanking(leagueToDelete); setLeagueToDelete(null); setLeagueDeleteStep(1); }}
+                      className="w-full py-5 bg-rose-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-600/20">
+                      SIM, EXCLUIR DEFINITIVAMENTE
+                    </button>
+                    <button onClick={() => { setLeagueToDelete(null); setLeagueDeleteStep(1); }}
+                      className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest">
+                      NÃO, CANCELAR
+                    </button>
+                  </div>
+                </>)}
               </motion.div>
             </div>
           )}
@@ -5913,40 +6546,204 @@ export default function BeachProApp() {
         <AnimatePresence>
           {leagueToExit && (
             <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
-              <motion.div 
+              <motion.div
+                key={leagueExitStep}
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
                 className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl border border-surface-container"
               >
-                <div className="bg-amber-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-amber-500 mb-8 mx-auto shadow-sm">
+                <div className="bg-amber-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-amber-500 mb-6 mx-auto shadow-sm">
                   <LogOut size={40} />
                 </div>
-                <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Sair da Liga?</h3>
-                <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-10 uppercase tracking-tight leading-relaxed">
-                  Tem certeza que deseja sair desta liga? <span className="text-amber-600">Seus pontos acumulados serão perdidos e você não terá mais acesso aos torneios desta liga.</span>
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={() => {
-                      exitRanking(leagueToExit);
-                      setLeagueToExit(null);
-                    }}
-                    className="w-full py-5 bg-amber-500 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20"
-                  >
-                    SIM, SAIR DA LIGA
+
+                {/* Step indicator */}
+                <div className="flex justify-center gap-2 mb-6">
+                  <div className={`w-2 h-2 rounded-full ${leagueExitStep === 1 ? 'bg-amber-500' : 'bg-amber-200'}`} />
+                  <div className={`w-2 h-2 rounded-full ${leagueExitStep === 2 ? 'bg-amber-500' : 'bg-amber-200'}`} />
+                </div>
+
+                {leagueExitStep === 1 ? (<>
+                  <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Sair da Liga?</h3>
+                  <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-4 uppercase tracking-tight leading-relaxed">
+                    Ao sair da liga, <span className="text-amber-600">todos os seus dados nesta liga serão apagados permanentemente</span> — pontuação acumulada, histórico de torneios e participações.
+                  </p>
+                  <p className="text-[10px] font-black text-amber-600 text-center mb-8 uppercase tracking-tight">Esta ação é irreversível.</p>
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => setLeagueExitStep(2)}
+                      className="w-full py-5 bg-amber-500 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20">
+                      ENTENDI, CONTINUAR
+                    </button>
+                    <button onClick={() => { setLeagueToExit(null); setLeagueExitStep(1); }}
+                      className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest">
+                      CANCELAR
+                    </button>
+                  </div>
+                </>) : (<>
+                  <h3 className="text-xs font-black text-amber-600 text-center mb-2 uppercase tracking-widest">Confirmação Final</h3>
+                  <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-8 uppercase tracking-tight leading-relaxed">
+                    Você tem <span className="text-amber-600 font-black">absoluta certeza</span>? Seus dados nesta liga serão perdidos para sempre.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => { exitRanking(leagueToExit); setLeagueToExit(null); setLeagueExitStep(1); }}
+                      className="w-full py-5 bg-amber-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-600/20">
+                      SIM, SAIR DA LIGA
+                    </button>
+                    <button onClick={() => { setLeagueToExit(null); setLeagueExitStep(1); }}
+                      className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest">
+                      NÃO, CANCELAR
+                    </button>
+                  </div>
+                </>)}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+        {/* Pending Requests Popup */}
+        <AnimatePresence>
+          {showPendingPopup && activeRanking && (() => {
+            const pending = pendingRequests[activeRanking.id] || [];
+            if (pending.length === 0) { setShowPendingPopup(false); return null; }
+            return (
+              <div className="fixed inset-0 z-[400] flex items-end justify-center p-4 bg-black/50 backdrop-blur-sm">
+                <motion.div
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 40 }}
+                  className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl max-h-[80vh] flex flex-col"
+                >
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 relative shrink-0">
+                      <Users size={20} />
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{pending.length}</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xs font-black text-on-surface uppercase italic">Solicitações Pendentes</h3>
+                      <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">{pending.length} atleta{pending.length > 1 ? 's' : ''} quer entrar em {activeRanking.name}</p>
+                    </div>
+                    <button onClick={() => setShowPendingPopup(false)} className="p-2 rounded-xl bg-slate-100 text-slate-400">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                    {pending.map((req: any) => (
+                      <div key={req.uid} className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
+                          {req.photo ? <Image src={req.photo} alt={req.name} fill className="object-cover" referrerPolicy="no-referrer" /> : <UserIcon size={18} className="text-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-on-surface truncate">{req.name}</p>
+                          <p className="text-[9px] font-black text-primary">{req.userTag || req.email}</p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={async () => {
+                            try {
+                              const newAthlete = { id: req.uid, name: req.name, email: req.email, userTag: req.userTag, photo: req.photo, isManual: false };
+                              const batch = writeBatch(db);
+                              batch.update(doc(db, 'rankings', activeRanking.id), cleanData({ leagueAthletes: [...(activeRanking.leagueAthletes || []), newAthlete], athleteIds: [...(activeRanking.athleteIds || []), req.uid] }));
+                              batch.delete(doc(db, 'rankings', activeRanking.id, 'pendingRequests', req.uid));
+                              await batch.commit();
+                              const updated = (pendingRequests[activeRanking.id] || []).filter((r: any) => r.uid !== req.uid);
+                              setPendingRequests(prev => ({ ...prev, [activeRanking.id]: updated }));
+                              if (updated.length === 0) setShowPendingPopup(false);
+                              setSnackMessage(`${req.name} aprovado!`);
+                              setTimeout(() => setSnackMessage(null), 3000);
+                            } catch (err) { handleFirestoreError(err, OperationType.WRITE, `rankings/${activeRanking.id}`); }
+                          }} className="px-3 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">✓ ACEITAR</button>
+                          <button onClick={async () => {
+                            try {
+                              await deleteDoc(doc(db, 'rankings', activeRanking.id, 'pendingRequests', req.uid));
+                              const updated = (pendingRequests[activeRanking.id] || []).filter((r: any) => r.uid !== req.uid);
+                              setPendingRequests(prev => ({ ...prev, [activeRanking.id]: updated }));
+                              if (updated.length === 0) setShowPendingPopup(false);
+                              setSnackMessage(`Solicitação de ${req.name} recusada.`);
+                              setTimeout(() => setSnackMessage(null), 3000);
+                            } catch (err) { handleFirestoreError(err, OperationType.DELETE, `rankings/${activeRanking.id}/pendingRequests/${req.uid}`); }
+                          }} className="px-3 py-2 bg-red-100 text-red-600 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">✗ RECUSAR</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button onClick={() => setShowPendingPopup(false)} className="mt-5 w-full py-4 bg-slate-100 text-slate-500 rounded-full font-black text-[10px] uppercase tracking-widest">
+                    RESOLVER DEPOIS
                   </button>
-                  <button 
-                    onClick={() => setLeagueToExit(null)}
-                    className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
+                </motion.div>
+              </div>
+            );
+          })()}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showManualAthletePopup && (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => { setShowManualAthletePopup(false); }}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 relative z-10 shadow-2xl text-center"
+              >
+                <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 mx-auto mb-6">
+                  <AlertTriangle size={40} />
+                </div>
+                <h3 className="text-sm font-black text-on-surface uppercase tracking-widest mb-2 italic">Atleta sem cadastro</h3>
+                <p className="text-[10px] text-on-surface-variant/60 font-medium uppercase tracking-tight leading-relaxed mb-8">
+                  Este atleta <span className="text-amber-600 font-black">não possui cadastro oficial</span> no BeachPró.<br/><br/>
+                  Ele poderá participar do torneio, mas seus resultados <span className="text-red-500 font-black">NÃO contarão pontos</span> para o ranking geral da liga.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowManualAthletePopup(false)}
+                    className="flex-1 py-4 bg-surface-container rounded-full font-black text-[10px] uppercase tracking-widest text-on-surface-variant"
                   >
                     CANCELAR
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setShowManualAthletePopup(false);
+                      if (!activeRanking || !searchResult) return;
+                      setIsAddingAthlete(true);
+                      try {
+                        const athleteUid = searchResult.uid;
+                        const newAthlete = {
+                          id: athleteUid,
+                          name: searchResult.displayName || searchResult.email?.split('@')[0] || "Atleta",
+                          email: searchResult.email || "",
+                          userTag: searchResult.userTag || "",
+                          photo: searchResult.photoURL || "",
+                          isManual: true
+                        };
+                        const updatedAthletes = [...(activeRanking.leagueAthletes || []), newAthlete];
+                        const updatedAthleteIds = [...(activeRanking.athleteIds || []), athleteUid];
+                        await updateDoc(doc(db, 'rankings', activeRanking.id), cleanData({ leagueAthletes: updatedAthletes, athleteIds: updatedAthleteIds }));
+                        setSearchResult(null);
+                        setAthleteSearch('');
+                        setSnackMessage("Atleta adicionado com sucesso!");
+                        setTimeout(() => setSnackMessage(null), 3000);
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.UPDATE, `rankings/${activeRanking.id}`);
+                      } finally {
+                        setIsAddingAthlete(false);
+                      }
+                    }}
+                    className="flex-1 py-4 bg-amber-500 text-white rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-200"
+                  >
+                    ADICIONAR MESMO ASSIM
                   </button>
                 </div>
               </motion.div>
             </div>
           )}
         </AnimatePresence>
+
         <AnimatePresence>
           {showDuplicatePopup && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">

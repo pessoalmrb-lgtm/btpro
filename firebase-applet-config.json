@@ -1,9 +1,9 @@
 {
   "projectId": "btsuper-d8521",
-  "appId": "1:931735521781:web:c8f82a36de098baa9478bc",
+  "appId": "1:931735521781:web:6a4cb9aed46c88b79478bc",
   "apiKey": "AIzaSyB8zCvS5ghU_ynW0h4_lv7Gy_kpznhglt0",
   "authDomain": "btsuper-d8521.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-5a4a0a12-9e66-4cf2-b944-e8d87bdedc8b",
   "storageBucket": "btsuper-d8521.firebasestorage.app",
   "messagingSenderId": "931735521781",
   "measurementId": ""

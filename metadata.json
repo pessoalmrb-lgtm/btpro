@@ -3,5 +3,8 @@
   "description": "Aplicativo moderno e intuitivo para gerenciamento de torneios de Beach Tennis, com suporte a sistemas de grupos e todos-contra-todos.",
   "requestFramePermissions": [
     "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

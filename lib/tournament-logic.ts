@@ -541,55 +541,62 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
   }
 
   // Custom fixed matrix for Super 10 (10 players)
+  // Optimized: 36 unique partnerships, players 0-1 rest 1x, players 2-9 rest 2x.
+  // Each round includes restA/restB indicating which player indices rest.
   if (numPlayers === 10) {
     const matrix = [
-      // Round 1
-      { r: 1, p1: 0, p1p: 1, p2: 2, p2p: 3 },
-      { r: 1, p1: 4, p1p: 5, p2: 6, p2p: 7 },
-      // Round 2
-      { r: 2, p1: 0, p1p: 2, p2: 4, p2p: 6 },
-      { r: 2, p1: 1, p1p: 3, p2: 5, p2p: 7 },
-      // Round 3
-      { r: 3, p1: 0, p1p: 3, p2: 5, p2p: 8 },
-      { r: 3, p1: 1, p1p: 4, p2: 6, p2p: 9 },
-      // Round 4
-      { r: 4, p1: 0, p1p: 4, p2: 7, p2p: 9 },
-      { r: 4, p1: 2, p1p: 5, p2: 3, p2p: 8 },
-      // Round 5
-      { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 6 },
-      { r: 5, p1: 2, p1p: 7, p2: 4, p2p: 9 },
-      // Round 6
-      { r: 6, p1: 0, p1p: 6, p2: 3, p2p: 9 },
-      { r: 6, p1: 1, p1p: 7, p2: 4, p2p: 8 },
-      // Round 7
-      { r: 7, p1: 0, p1p: 7, p2: 2, p2p: 9 },
-      { r: 7, p1: 1, p1p: 8, p2: 3, p2p: 5 },
-      // Round 8
-      { r: 8, p1: 0, p1p: 8, p2: 1, p2p: 9 },
-      { r: 8, p1: 2, p1p: 4, p2: 3, p2p: 6 },
-      // Round 9
-      { r: 9, p1: 0, p1p: 9, p2: 3, p2p: 7 },
-      { r: 9, p1: 1, p1p: 5, p2: 2, p2p: 8 },
+      // Round 1 — rest: atleta 0 e atleta 3
+      { r:1, p1:1, p1p:4, p2:5, p2p:8, restA:0, restB:3 },
+      { r:1, p1:2, p1p:6, p2:7, p2p:9, restA:0, restB:3 },
+      // Round 2 — rest: atleta 1 e atleta 5
+      { r:2, p1:3, p1p:4, p2:7, p2p:8, restA:1, restB:5 },
+      { r:2, p1:0, p1p:2, p2:6, p2p:9, restA:1, restB:5 },
+      // Round 3 — rest: atleta 3 e atleta 5
+      { r:3, p1:0, p1p:7, p2:2, p2p:8, restA:3, restB:5 },
+      { r:3, p1:1, p1p:6, p2:4, p2p:9, restA:3, restB:5 },
+      // Round 4 — rest: atleta 7 e atleta 8
+      { r:4, p1:0, p1p:1, p2:3, p2p:9, restA:7, restB:8 },
+      { r:4, p1:2, p1p:4, p2:5, p2p:6, restA:7, restB:8 },
+      // Round 5 — rest: atleta 7 e atleta 8
+      { r:5, p1:0, p1p:5, p2:1, p2p:9, restA:7, restB:8 },
+      { r:5, p1:2, p1p:3, p2:4, p2p:6, restA:7, restB:8 },
+      // Round 6 — rest: atleta 4 e atleta 9
+      { r:6, p1:1, p1p:5, p2:6, p2p:8, restA:4, restB:9 },
+      { r:6, p1:0, p1p:3, p2:2, p2p:7, restA:4, restB:9 },
+      // Round 7 — rest: atleta 4 e atleta 6
+      { r:7, p1:0, p1p:9, p2:1, p2p:8, restA:4, restB:6 },
+      { r:7, p1:2, p1p:5, p2:3, p2p:7, restA:4, restB:6 },
+      // Round 8 — rest: atleta 2 e atleta 6
+      { r:8, p1:0, p1p:8, p2:4, p2p:7, restA:2, restB:6 },
+      { r:8, p1:1, p1p:3, p2:5, p2p:9, restA:2, restB:6 },
+      // Round 9 — rest: atleta 2 e atleta 9
+      { r:9, p1:0, p1p:6, p2:1, p2p:7, restA:2, restB:9 },
+      { r:9, p1:3, p1p:5, p2:4, p2p:8, restA:2, restB:9 },
     ];
     const matches: Match[] = [];
     const rounds = [1, 2, 3, 4, 5, 6, 7, 8, 9];
     rounds.forEach(r => {
       const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
+      // Attach resting players to the first match of each round for display
+      const restA = roundMatches[0]?.restA ?? -1;
+      const restB = roundMatches[0]?.restB ?? -1;
       let availableCourtsInRound = [...selectedCourts];
       roundMatches.forEach((m, idx) => {
         const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
         const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
         const table = getBestCourt(pIds, courtCandidates);
-        
         incUsage(pIds, table);
         availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
-
         matches.push({
           id: `super-10-${r}-${idx}`,
           player1Id: tempPlayers[m.p1].id,
           player1PartnerId: tempPlayers[m.p1p].id,
           player2Id: tempPlayers[m.p2].id,
           player2PartnerId: tempPlayers[m.p2p].id,
+          // Store resting players on first match of round for UI display
+          ...(idx === 0 && restA >= 0 ? {
+            restingPlayerIds: [tempPlayers[restA].id, tempPlayers[restB].id]
+          } : {}),
           table,
           sets: [],
           currentSet: { player1: 0, player2: 0 },
@@ -893,7 +900,31 @@ export function getKnockoutQualifiedTeams(
     });
   }
 
-  return qualifiedTeams.slice(0, targetKnockoutSize);
+  // Anti-clash seeding: interleave groups so teams from the same group
+  // only meet in the final stages. Pattern: G1[0], G2[0], G3[0]..., G1[1], G2[1]...
+  // This ensures group rivals are on opposite sides of the bracket.
+  const seeded: Player[] = [];
+  const perGroupQualified: Player[][] = allGroupRankings.map(gr => {
+    return qualifiedTeams.filter(qt => 
+      gr.rankings.some(r => r.id === qt.id)
+    );
+  });
+
+  let posIdx = 0;
+  while (seeded.length < targetKnockoutSize) {
+    let added = false;
+    for (const groupQ of perGroupQualified) {
+      if (posIdx < groupQ.length && seeded.length < targetKnockoutSize) {
+        seeded.push(groupQ[posIdx]);
+        added = true;
+      }
+    }
+    posIdx++;
+    if (!added) break;
+  }
+
+  // Fallback: if seeding didn't cover all slots, use original order
+  return (seeded.length === targetKnockoutSize ? seeded : qualifiedTeams).slice(0, targetKnockoutSize);
 }
 
 export interface FinalRankingResult {
