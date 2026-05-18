@@ -2616,7 +2616,7 @@ export default function BeachProApp() {
                   <div className="bg-primary/10 rounded-2xl p-5 border border-primary/20 flex gap-3">
                     <Info size={18} className="text-primary shrink-0 mt-0.5" />
                     <p className="text-[10px] font-black text-primary uppercase tracking-tight leading-relaxed">
-                      Peça o código de 6 letras ao administrador da liga. Ele fica na aba "A Liga", no card de código.
+                      Peça o código de 6 letras ao administrador da liga. Ele fica na aba &quot;A Liga&quot;, no card de código.
                     </p>
                   </div>
 
