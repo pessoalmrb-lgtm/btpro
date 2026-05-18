@@ -43,7 +43,9 @@ export type TournamentFormat =
   | 'SUPER_12'
   | 'SUPER_16'
   | 'SUPER_20'
-  | 'SUPER_24';
+  | 'SUPER_24'
+  | 'ROUND_ROBIN'
+  | 'MATA_MATA';
 
 export type MatchFormat = 
   | '6_GAMES_TIEBREAK' 
