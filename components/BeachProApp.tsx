@@ -441,7 +441,14 @@ export default function BeachProApp() {
     // For simplicity, we'll listen to the playerStats subcollection
     const q = query(collection(db, `rankings/${activeRankingId}/players`));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const stats = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PlayerStats));
+      const stats = snapshot.docs.map(doc => {
+        const data = { ...doc.data(), id: doc.id } as PlayerStats;
+        if (user && doc.id === user.uid) {
+          const currentPhoto = userProfile?.photoURL || user.photoURL || data.photo;
+          return { ...data, photo: currentPhoto };
+        }
+        return data;
+      });
       setRankingStats(stats.sort((a, b) => b.totalPoints - a.totalPoints));
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, `rankings/${activeRankingId}/players`);
