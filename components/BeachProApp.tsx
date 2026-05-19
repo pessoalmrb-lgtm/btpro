@@ -3494,263 +3494,167 @@ export default function BeachProApp() {
                 )}
 
                 {rankingTab === 'CONFIG' && (
-                  <div className="space-y-6 pb-20">
-                    {/* Editar Informações da Liga (Admin Only) */}
-                    {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
-                        <div className="flex items-center gap-3 mb-6">
-                          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                            <Camera size={20} />
-                          </div>
-                          <h3 className="text-xs font-black text-on-surface uppercase italic">Editar Dados da Liga</h3>
-                        </div>
+                  <div className="space-y-5 pb-24">
 
-                        <div className="space-y-6">
-                           <div className="space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Nome da Liga</label>
-                             <input 
-                               type="text"
-                               className="input-field py-4 text-xs font-bold"
-                               placeholder="Nome da Liga"
-                               value={rankingName}
-                               onChange={(e) => setRankingName(e.target.value)}
-                             />
-                           </div>
-
-                           <div className="space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Descrição</label>
-                             <textarea 
-                               className="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-medium italic focus:ring-2 focus:ring-primary/20 transition-all min-h-[100px]"
-                               placeholder="Descreva sua liga..."
-                               value={rankingDescription}
-                               onChange={(e) => setRankingDescription(e.target.value)}
-                             />
-                           </div>
-
-                           <div className="space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Nome da Arena</label>
-                             <input 
-                               type="text"
-                               className="input-field py-4 text-xs font-bold"
-                               placeholder="Ex: Arena Beach Tennis"
-                               value={arenaName}
-                               onChange={(e) => setArenaName(e.target.value)}
-                             />
-                           </div>
-
-                           <div className="space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Endereço da Arena</label>
-                             <button 
-                               onClick={() => setShowAddressPopup(true)}
-                               className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left"
-                             >
-                                <span className="text-xs font-medium text-slate-600 truncate">
-                                  {arenaAddress.street ? `${arenaAddress.street}, ${arenaAddress.city}` : "Definir endereço..."}
-                                </span>
-                                <ChevronRight size={16} className="text-slate-400" />
-                             </button>
-                           </div>
-
-                           <div className="pt-4 border-t border-slate-50">
-                             <h4 className="text-[10px] font-black text-slate-900 uppercase italic mb-4">Regras de Pontuação</h4>
-                             
-                             <div className="grid grid-cols-2 gap-3 mb-6">
-                               <div className="space-y-2">
-                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Partic.</label>
-                                 <div className="flex items-center gap-2">
-                                   <button onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">-</button>
-                                   <span className="text-xs font-black w-6 text-center">{pPoints}</span>
-                                   <button onClick={() => setPPoints(pPoints + 1)} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">+</button>
-                                 </div>
-                               </div>
-                             </div>
-
-                             <div className="space-y-2 mb-6">
-                               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Posições que Pontuam (Top X)</label>
-                               <div className="flex items-center gap-3">
-                                 <button onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">-</button>
-                                 <span className="text-xs font-black w-10 text-center">Top {positionsThatScore}</span>
-                                 <button onClick={() => setPositionsThatScore(Math.min(10, positionsThatScore + 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">+</button>
-                               </div>
-                             </div>
-
-                             <div className="space-y-2">
-                               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Pontos por Posição</label>
-                               <div className="grid grid-cols-2 gap-2">
-                                 {Array.from({ length: positionsThatScore }).map((_, idx) => {
-                                   const pos = idx + 1;
-                                   return (
-                                     <div key={`edit-pts-${pos}`} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100">
-                                       <span className="text-[9px] font-black text-slate-400">#{pos}</span>
-                                       <input 
-                                         type="number"
-                                         value={placementPoints[pos] || 0}
-                                         onChange={(e) => setPlacementPoints(prev => ({ ...prev, [pos]: parseInt(e.target.value) || 0 }))}
-                                         className="w-12 bg-transparent text-right text-[10px] font-black text-primary outline-none"
-                                       />
-                                     </div>
-                                   );
-                                 })}
-                               </div>
-                             </div>
-                           </div>
-
-                           <button 
-                             onClick={updateRankingGeneral}
-                             className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all mt-4"
-                           >
-                             SALVAR CONFIGURAÇÕES
-                           </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Código da Liga */}
+                    {/* 1. CÓDIGO DA LIGA */}
                     {activeRanking.leagueCode && (
-                      <div className="bg-primary rounded-[2rem] p-6 border border-primary shadow-xl">
-                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-3">Código da Liga</p>
+                      <div className="bg-slate-900 rounded-[2rem] p-6 shadow-xl">
+                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">Código da Liga</p>
                         <div className="flex items-center justify-between gap-4">
-                          <span className="text-4xl font-black text-white tracking-widest font-mono">
-                            {activeRanking.leagueCode}
-                          </span>
+                          <span className="text-4xl font-black text-white tracking-widest font-mono">{activeRanking.leagueCode}</span>
                           <button
                             onClick={() => {
-                              const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!
-
-Para entrar, siga os passos:
-1. Baixe o app BeachPró
-2. Crie sua conta
-3. Acesse "Minhas Ligas" → "Encontrar Ligas"
-4. Digite o código: ${activeRanking.leagueCode}
-
-O play na palma da mão! 🏆`;
+                              const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!\n\nPara entrar, siga os passos:\n1. Baixe o app BeachPró\n2. Crie sua conta\n3. Acesse "Minhas Ligas" → "Encontrar Ligas"\n4. Digite o código: ${activeRanking.leagueCode}\n\nO play na palma da mão! 🏆`;
                               navigator.clipboard.writeText(text);
                               setSnackMessage('Texto copiado! Cole no WhatsApp.');
                               setTimeout(() => setSnackMessage(null), 3000);
                             }}
-                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-white/20"
+                            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-white/10 shrink-0"
                           >
                             <Copy size={14} />
                             COPIAR CONVITE
                           </button>
                         </div>
-                        <p className="text-[9px] font-black text-white/50 uppercase tracking-tight leading-relaxed mt-3">
-                          Compartilhe este código com os atletas para que eles possam entrar na liga.
+                        <p className="text-[9px] font-black text-white/30 uppercase tracking-tight mt-3 leading-relaxed">
+                          Compartilhe com os atletas para que eles possam solicitar entrada na liga.
                         </p>
                       </div>
                     )}
 
-                    {/* Sobre a Liga */}
-                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                          <Info size={20} />
-                        </div>
-                        <h3 className="text-xs font-black text-on-surface uppercase italic">Sobre a Liga</h3>
-                      </div>
-
-                      <div className="space-y-6">
-                        {activeRanking.description && (
-                          <div className="space-y-2">
-                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Descrição</label>
-                             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                               <p className="text-xs font-medium text-slate-600 leading-relaxed italic">{activeRanking.description}</p>
-                             </div>
-                          </div>
-                        )}
-
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-4">
-                           <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm shrink-0">
-                             <MapPin size={18} />
-                           </div>
-                           <div>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Localização / Arena</p>
-                              <p className="text-sm font-black text-slate-900 uppercase italic">{activeRanking.arenaName || "Arena não informada"}</p>
-                              {activeRanking.address && (activeRanking.address.street || activeRanking.address.city) && (
-                                <p className="text-[9px] font-medium text-slate-400 uppercase mt-1">
-                                  {[activeRanking.address.street, activeRanking.address.neighborhood, activeRanking.address.city, activeRanking.address.state].filter(Boolean).join(', ')}
-                                </p>
-                              )}
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
-                      <div className="flex items-center gap-3 mb-6">
-                         <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                            <ClipboardList size={20} />
-                         </div>
-                         <h3 className="text-xs font-black text-on-surface uppercase italic">Regras de Pontuação</h3>
-                      </div>
-
-                      <div className="space-y-3 mb-8">
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Participação</span>
-                          <span className="text-sm font-black text-slate-500 italic">+{activeRanking.pointsConfig.participation || 0} Pts</span>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-rose-50 rounded-2xl border border-rose-100">
-                          <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest italic">Penalidade Pneu</span>
-                          <span className="text-sm font-black text-rose-500 italic">{activeRanking.pointsConfig.pneu || 0} Pts</span>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Pontua até:</span>
-                          <span className="text-sm font-black text-slate-900 italic">Top {activeRanking.pointsConfig.positionsThatScore}</span>
-                        </div>
-                      </div>
-                      
-                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 px-2 italic">Bônus por Colocação</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        {Object.entries(activeRanking.pointsConfig.placementPoints || {}).sort((a, b) => Number(a[0]) - Number(b[0])).map(([pos, pts]) => (
-                          <div key={pos} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
-                            <span className="text-[10px] font-black text-slate-400 italic">#{pos} LUGAR</span>
-                            <span className="text-xs font-black text-primary">{pts as number}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
+                    {/* 2. INFORMAÇÕES DA LIGA */}
                     {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
-                        <h3 className="text-xs font-black text-on-surface uppercase italic mb-6">Administradores da Liga</h3>
-                        <div className="flex gap-2 mb-6">
-                           <input 
-                             type="email" 
-                             placeholder="E-mail do novo ADM" 
-                             className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black placeholder:text-on-surface-variant/20 outline-none"
-                             value={newAdminEmail}
-                             onChange={(e) => setNewAdminEmail(e.target.value)}
-                           />
-                           <button 
-                             onClick={() => addAdminToRanking(activeRanking.id, newAdminEmail)}
-                             className="bg-primary text-white px-5 rounded-2xl active:scale-95 transition-all shadow-lg"
-                           >
-                             <Check size={20} />
-                           </button>
+                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <Pencil size={16} />
+                          </div>
+                          <h3 className="text-xs font-black text-on-surface uppercase italic">Informações da Liga</h3>
                         </div>
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Liga</label>
+                            <input type="text" className="input-field py-3 text-xs font-bold" placeholder="Nome da Liga" value={rankingName} onChange={(e) => setRankingName(e.target.value)} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
+                            <textarea className="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-medium italic focus:ring-2 focus:ring-primary/20 transition-all min-h-[80px]" placeholder="Descreva sua liga..." value={rankingDescription} onChange={(e) => setRankingDescription(e.target.value)} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Arena</label>
+                            <input type="text" className="input-field py-3 text-xs font-bold" placeholder="Ex: Arena Beach Tennis" value={arenaName} onChange={(e) => setArenaName(e.target.value)} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço da Arena</label>
+                            <button onClick={() => setShowAddressPopup(true)} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left">
+                              <span className="text-xs font-medium text-slate-600 truncate">{arenaAddress.street ? `${arenaAddress.street}, ${arenaAddress.city}` : "Definir endereço..."}</span>
+                              <ChevronRight size={16} className="text-slate-400 shrink-0" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
+                    {/* 3. REGRAS DE PONTUAÇÃO */}
+                    {activeRanking.adminIds.includes(user?.uid || '') && (
+                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <ClipboardList size={16} />
+                          </div>
+                          <h3 className="text-xs font-black text-on-surface uppercase italic">Regras de Pontuação</h3>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                            <div>
+                              <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Pontos por participação</p>
+                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">Todo atleta que jogar recebe</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">-</button>
+                              <span className="text-sm font-black text-primary w-6 text-center">{pPoints}</span>
+                              <button onClick={() => setPPoints(pPoints + 1)} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">+</button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                            <div>
+                              <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Posições que pontuam</p>
+                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">Quantos do pódio recebem bônus</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">-</button>
+                              <span className="text-sm font-black text-primary w-12 text-center">Top {positionsThatScore}</span>
+                              <button onClick={() => setPositionsThatScore(Math.min(10, positionsThatScore + 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">+</button>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Bônus por colocação</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {Array.from({ length: positionsThatScore }).map((_, idx) => {
+                                const pos = idx + 1;
+                                const medals = ['🥇','🥈','🥉'];
+                                return (
+                                  <div key={`pts-${pos}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <span className="text-[10px] font-black text-slate-500">{medals[idx] || `#${pos}`} {pos}º</span>
+                                    <input
+                                      type="number"
+                                      value={placementPoints[pos] || 0}
+                                      onChange={(e) => setPlacementPoints(prev => ({ ...prev, [pos]: parseInt(e.target.value) || 0 }))}
+                                      className="w-12 bg-white border border-slate-200 rounded-lg text-right text-[10px] font-black text-primary outline-none p-1 shadow-sm"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <button onClick={updateRankingGeneral} className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all mt-2">
+                            SALVAR CONFIGURAÇÕES
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. ADMINISTRADORES */}
+                    {activeRanking.adminIds.includes(user?.uid || '') && (
+                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <Users size={16} />
+                          </div>
+                          <h3 className="text-xs font-black text-on-surface uppercase italic">Administradores</h3>
+                        </div>
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            type="email"
+                            placeholder="E-mail do novo ADM"
+                            className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            value={newAdminEmail}
+                            onChange={(e) => setNewAdminEmail(e.target.value)}
+                          />
+                          <button
+                            onClick={() => addAdminToRanking(activeRanking.id, newAdminEmail)}
+                            className="w-11 h-11 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 active:scale-95 transition-all shrink-0"
+                          >
+                            <Check size={18} />
+                          </button>
+                        </div>
                         <div className="space-y-3">
-                          {activeRanking.adminIds.map((aid, idx) => {
+                          {activeRanking.adminIds.map((aid: string) => {
                             const profile = adminProfiles[aid];
                             return (
-                              <div key={`admin-item-${aid || idx}`} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="flex items-center gap-3 min-w-0">
-                                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden relative">
-                                     {profile?.photoURL ? (
-                                       <Image src={profile.photoURL} alt="" fill className="object-cover" referrerPolicy="no-referrer" />
-                                     ) : (
-                                       <UserIcon size={14} />
-                                     )}
-                                     {profile?.isPremium && <PremiumBadge size={12} />}
-                                   </div>
-                                   <div className="min-w-0">
-                                      <p className="text-[10px] font-black text-slate-700 uppercase italic truncate">{profile?.displayName || aid}</p>
-                                      <p className="text-[8px] font-medium text-slate-400 truncate">{profile?.email || profile?.userTag || "ADM"}</p>
-                                   </div>
+                              <div key={aid} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden relative">
+                                  {profile?.photoURL ? (
+                                    <Image src={profile.photoURL} alt="" fill className="object-cover" referrerPolicy="no-referrer" unoptimized />
+                                  ) : <UserIcon size={14} />}
+                                  {profile?.isPremium && <PremiumBadge size={12} />}
                                 </div>
-                                {aid === activeRanking.ownerId && (
-                                   <span className="text-[8px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg uppercase italic whitespace-nowrap">Fundador</span>
-                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-black text-on-surface uppercase italic truncate">{profile?.displayName || aid}</p>
+                                  <p className="text-[9px] text-slate-400 truncate">{profile?.email || ''}</p>
+                                </div>
+                                <span className="text-[8px] font-black text-primary uppercase tracking-widest shrink-0">
+                                  {aid === activeRanking.ownerId ? 'FUNDADOR' : 'ADM'}
+                                </span>
                               </div>
                             );
                           })}
@@ -3758,34 +3662,33 @@ O play na palma da mão! 🏆`;
                       </div>
                     )}
 
-                    <div className="bg-white rounded-[2.5rem] p-8 border-2 border-rose-100 shadow-xl shadow-rose-500/5">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500">
-                                {activeRanking.ownerId === user?.uid ? <Trash2 size={20} /> : <LogOut size={20} />}
-                            </div>
-                            <h3 className="text-xs font-black text-on-surface uppercase italic">
-                              {activeRanking.ownerId === user?.uid ? "Zona de Perigo" : "Sair da Liga"}
-                            </h3>
+                    {/* 5. ZONA DE PERIGO */}
+                    <div className="bg-rose-50 rounded-[2.5rem] p-6 border border-rose-100">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-9 h-9 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-500 shrink-0">
+                          <Trash2 size={16} />
                         </div>
-                        <p className="text-[10px] font-black text-on-surface-variant/40 mb-8 uppercase tracking-tight leading-relaxed">
-                          {activeRanking.ownerId === user?.uid 
-                            ? "A exclusão da liga é permanente. Todos os rankings, torneios e históricos vinculados serão perdidos."
-                            : "Você deixará de fazer parte desta liga. Aviso: Todos os seus pontos acumulados no ranking serão permanentemente perdidos."
+                        <h3 className="text-xs font-black text-rose-700 uppercase italic">Zona de Perigo</h3>
+                      </div>
+                      <p className="text-[9px] font-black text-rose-400 uppercase tracking-tight leading-relaxed mb-5">
+                        {activeRanking.ownerId === user?.uid
+                          ? 'A exclusão da liga é permanente. Todos os rankings, torneios e históricos vinculados serão perdidos.'
+                          : 'Ao sair da liga, todos os seus dados nesta liga serão apagados permanentemente.'}
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (activeRanking.ownerId === user?.uid) {
+                            setLeagueToDelete(activeRanking.id);
+                          } else {
+                            setLeagueToExit(activeRanking.id);
                           }
-                        </p>
-                        <button 
-                          onClick={() => {
-                            if (activeRanking.ownerId === user?.uid) {
-                              setLeagueToDelete(activeRanking.id);
-                            } else {
-                              setLeagueToExit(activeRanking.id);
-                            }
-                          }}
-                          className="w-full py-6 bg-rose-500 text-white rounded-3xl font-black text-xs uppercase tracking-[0.2em] active:scale-95 transition-all shadow-lg shadow-rose-500/20"
-                        >
-                          {activeRanking.ownerId === user?.uid ? "EXCLUIR LIGA PERMANENTEMENTE" : "SAIR DA LIGA"}
-                        </button>
+                        }}
+                        className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-rose-500/20"
+                      >
+                        {activeRanking.ownerId === user?.uid ? 'EXCLUIR LIGA PERMANENTEMENTE' : 'SAIR DA LIGA'}
+                      </button>
                     </div>
+
                   </div>
                 )}
               </div>
