@@ -5805,6 +5805,17 @@ O play na palma da mão! 🏆`;
                           await updateDoc(doc(db, 'users', user.uid), { photoURL: url });
                           setUserProfile((prev: any) => ({ ...prev, photoURL: url }));
 
+                          // Sincroniza foto em todos os rankings onde o usuário tem stats
+                          try {
+                            const userRankings = rankings.filter(r =>
+                              r.athleteIds?.includes(user.uid) || r.ownerId === user.uid
+                            );
+                            await Promise.all(userRankings.map(r =>
+                              updateDoc(doc(db, 'rankings', r.id, 'players', user.uid), { photo: url })
+                                .catch(() => {})
+                            ));
+                          } catch {}
+
                           setSnackMessage("Foto atualizada com sucesso");
                           setTimeout(() => setSnackMessage(null), 3000);
                         } catch (err) {
