@@ -6279,15 +6279,6 @@ O play na palma da mão! 🏆`;
                     <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-3 px-1">Estatísticas nas Ligas</p>
                   {(() => {
                     // Aggregate stats across all leagues
-                    const allStats = rankings.flatMap(r => {
-                      const stat = rankingStats.find ? null : null; // fallback
-                      return [];
-                    });
-                    // Get from userProfile tournament history across all leagues
-                    const allHistory: any[] = [];
-                    rankings.forEach(r => {
-                      // We'll use the data from the active ranking stats
-                    });
 
                     // Compute from tournaments the user participated in
                     const userTournaments = tournaments.filter(t =>
