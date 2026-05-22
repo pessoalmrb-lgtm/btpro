@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Posicionador de Textos — BeachPró</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; color: #fff; font-family: system-ui, sans-serif; display: flex; gap: 16px; padding: 16px; min-height: 100vh; }
+  
+  #canvas-wrap { position: relative; flex-shrink: 0; user-select: none; }
+  #canvas-wrap img { display: block; width: 360px; height: 640px; object-fit: cover; border-radius: 8px; pointer-events: none; }
+  
+  .label { position: absolute; cursor: grab; background: rgba(0,0,0,0.7); border: 1.5px solid #bef264; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; color: #bef264; white-space: nowrap; transform: translate(-50%, -50%); }
+  .label:active { cursor: grabbing; }
+  .label .num { color: rgba(255,255,255,0.5); font-size: 9px; margin-right: 3px; }
+
+  #panel { flex: 1; min-width: 260px; }
+  #panel h2 { font-size: 14px; color: #bef264; margin-bottom: 12px; font-weight: 700; letter-spacing: 1px; }
+  #coords { background: #0d0d1a; border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.9; font-family: monospace; color: #aaa; white-space: pre; }
+  #coords .val { color: #bef264; }
+  
+  button#copy { margin-top: 10px; width: 100%; padding: 10px; background: #bef264; color: #0a1628; border: none; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; letter-spacing: 1px; }
+  button#copy:hover { background: #d4fa80; }
+  
+  #hint { margin-top: 10px; font-size: 11px; color: rgba(255,255,255,0.3); line-height: 1.6; }
+  #scale-info { font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap">
+  <img src="cardcampeao.png" alt="template" />
+  <!-- Dynamic labels injected by JS -->
+</div>
+
+<div id="panel">
+  <h2>COORDENADAS (1080×1920)</h2>
+  <div id="coords">Arraste os textos para a posição correta...</div>
+  <button id="copy" onclick="copyCoords()">COPIAR COORDENADAS</button>
+  <div id="hint">
+    Arraste cada texto para o local correto no template.<br>
+    As coordenadas serão atualizadas automaticamente.<br>
+    Clique em COPIAR e cole aqui no chat.
+  </div>
+  <div id="scale-info">Preview: 360×640 → Real: 1080×1920 (×3)</div>
+</div>
+
+<script>
+const PREVIEW_W = 360, PREVIEW_H = 640;
+const REAL_W = 1080, REAL_H = 1920;
+const SCALE_X = REAL_W / PREVIEW_W;
+const SCALE_Y = REAL_H / PREVIEW_H;
+
+const labels = [
+  { id: 'liga',      text: 'ARENA RJ LIGA',          px: 95,  py: 100, anchor: 'left' },
+  { id: 'campeao',   text: 'JANY GARCIA',             px: 180, py: 357, anchor: 'center' },
+  { id: 'vitorias',  text: '2 (vitórias)',             px: 125, py: 408, anchor: 'center' },
+  { id: 'pontos_c',  text: '9 (pts campeão)',          px: 228, py: 408, anchor: 'center' },
+  { id: 'jogos',     text: '3 (jogos)',                px: 51,  py: 487, anchor: 'center' },
+  { id: 'pontos_t',  text: '15 (pontos)',              px: 128, py: 487, anchor: 'center' },
+  { id: 'atletas',   text: '4 (atletas)',              px: 206, py: 487, anchor: 'center' },
+  { id: 'data',      text: '19/05/2026',               px: 286, py: 487, anchor: 'center' },
+  { id: 'segundo',   text: 'MARCELO BORGES (2º)',      px: 67,  py: 573, anchor: 'left' },
+  { id: 'terceiro',  text: 'M. RASSWEILER (3º)',       px: 213, py: 573, anchor: 'left' },
+];
+
+const wrap = document.getElementById('canvas-wrap');
+let dragging = null, offX = 0, offY = 0;
+
+labels.forEach((lb, i) => {
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.id = 'lb_' + lb.id;
+  el.innerHTML = `<span class="num">${i+1}</span>${lb.text}`;
+  el.style.left = lb.px + 'px';
+  el.style.top  = lb.py + 'px';
+  el.dataset.id = lb.id;
+
+  el.addEventListener('mousedown', (e) => {
+    dragging = el;
+    const rect = el.getBoundingClientRect();
+    const wRect = wrap.getBoundingClientRect();
+    offX = e.clientX - rect.left - rect.width/2;
+    offY = e.clientY - rect.top  - rect.height/2;
+    e.preventDefault();
+  });
+
+  wrap.appendChild(el);
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const wRect = wrap.getBoundingClientRect();
+  let x = e.clientX - wRect.left - offX;
+  let y = e.clientY - wRect.top  - offY;
+  x = Math.max(0, Math.min(PREVIEW_W, x));
+  y = Math.max(0, Math.min(PREVIEW_H, y));
+  dragging.style.left = x + 'px';
+  dragging.style.top  = y + 'px';
+  updateCoords();
+});
+
+document.addEventListener('mouseup', () => { dragging = null; });
+
+// Touch support
+wrap.addEventListener('touchstart', (e) => {
+  const touch = e.touches[0];
+  const target = touch.target.closest('.label');
+  if (!target) return;
+  dragging = target;
+  const rect = target.getBoundingClientRect();
+  offX = touch.clientX - rect.left - rect.width/2;
+  offY = touch.clientY - rect.top  - rect.height/2;
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+  if (!dragging) return;
+  const touch = e.touches[0];
+  const wRect = wrap.getBoundingClientRect();
+  let x = touch.clientX - wRect.left - offX;
+  let y = touch.clientY - wRect.top  - offY;
+  x = Math.max(0, Math.min(PREVIEW_W, x));
+  y = Math.max(0, Math.min(PREVIEW_H, y));
+  dragging.style.left = x + 'px';
+  dragging.style.top  = y + 'px';
+  updateCoords();
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchend', () => { dragging = null; });
+
+function getPositions() {
+  return labels.map((lb, i) => {
+    const el = document.getElementById('lb_' + lb.id);
+    const px = parseFloat(el.style.left);
+    const py = parseFloat(el.style.top);
+    return {
+      id: lb.id,
+      text: lb.text,
+      rx: Math.round(px * SCALE_X),
+      ry: Math.round(py * SCALE_Y),
+    };
+  });
+}
+
+function updateCoords() {
+  const pos = getPositions();
+  let out = '';
+  const names = {
+    liga: '① Liga', campeao: '② Campeão', vitorias: '③ Vitórias',
+    pontos_c: '④ Pts campeão', jogos: '⑤ Jogos', pontos_t: '⑥ Pontos totais',
+    atletas: '⑦ Atletas', data: '⑧ Data', segundo: '⑨ 2º lugar', terceiro: '⑩ 3º lugar'
+  };
+  pos.forEach(p => {
+    out += `${names[p.id] || p.id}: x=${p.rx}, y=${p.ry}\n`;
+  });
+  document.getElementById('coords').innerHTML = out.replace(/(\d+)/g, '<span class="val">$1</span>');
+}
+
+function copyCoords() {
+  const pos = getPositions();
+  let text = 'COORDENADAS FINAIS (1080x1920):\n\n';
+  const names = {
+    liga: '① Liga', campeao: '② Campeão', vitorias: '③ Vitórias',
+    pontos_c: '④ Pts campeão', jogos: '⑤ Jogos', pontos_t: '⑥ Pontos totais',
+    atletas: '⑦ Atletas', data: '⑧ Data', segundo: '⑨ 2º lugar', terceiro: '⑩ 3º lugar'
+  };
+  pos.forEach(p => {
+    text += `${names[p.id]}: x=${p.rx}, y=${p.ry}\n`;
+  });
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy');
+    btn.textContent = '✓ COPIADO!';
+    setTimeout(() => btn.textContent = 'COPIAR COORDENADAS', 2000);
+  });
+}
+
+updateCoords();
+</script>
+</body>
+</html>

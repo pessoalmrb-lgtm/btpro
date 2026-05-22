@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { Home, Trophy as TrophyIcon, User as UserIcon, LayoutGrid } from 'lucide-react';
+import { Home, Trophy as TrophyIcon, User as UserIcon, Award } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AppStep } from '../types';
 
@@ -14,7 +14,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       exit={{ y: 100 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[440px] bottom-nav-glass rounded-full px-4 py-1 flex items-center justify-between z-[200] h-16"
+      className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[92%] max-w-[440px] bottom-nav-glass rounded-full px-4 py-1 flex items-center justify-between z-[200] h-16"
     >
       <button 
         onClick={resetApp}
@@ -43,7 +43,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
           "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
           activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "bg-primary/10" : ""
         )}>
-          <LayoutGrid size={20} className={activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "fill-primary/10" : "opacity-40"} />
+          <Award size={20} className={activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "fill-primary/10" : "opacity-40"} />
         </div>
         <span className="text-[8px] font-black uppercase tracking-widest leading-none">Ligas</span>
       </button>

@@ -6,7 +6,8 @@ import {
   Plus, 
   Minus, 
   Users, 
-  LayoutGrid, 
+  LayoutGrid,
+  Award,
   ChevronRight, 
   ChevronLeft, 
   Waves, 
@@ -42,6 +43,8 @@ import {
   ClipboardList,
   Search,
   Copy
+,
+  Share2
 } from 'lucide-react';
 import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
@@ -119,30 +122,60 @@ export default function BeachProApp() {
   const [leagueExitStep, setLeagueExitStep] = useState<1|2>(1);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  const handleRankingPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRankingPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeRanking) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setCoverCropImage(ev.target?.result as string);
+      setCropOffset({ x: 0, y: 0 });
+      setCropScale(1);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
+  const handleCoverCropConfirm = async () => {
+    if (!coverCropImage || !activeRanking) return;
     setSnackMessage("Enviando foto...");
     try {
-      const path = `rankings/${activeRanking.id}/cover.jpg`;
-      const url  = await uploadImageToStorage(file, path, 800, 0.7);
-
-      await updateDoc(doc(db, 'rankings', activeRanking.id), {
-        logoUrl:  url,
-        coverUrl: url,
+      const canvas = document.createElement('canvas');
+      const CW = 900, CH = 300;
+      canvas.width = CW; canvas.height = CH;
+      const ctx = canvas.getContext('2d')!;
+      await new Promise<void>((resolve) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const scale = cropScale * Math.max(CW / img.width, CH / img.height);
+          const sw = img.width * scale;
+          const sh = img.height * scale;
+          const dx = (CW - sw) / 2 + cropOffset.x;
+          const dy = (CH - sh) / 2 + cropOffset.y;
+          ctx.drawImage(img, dx, dy, sw, sh);
+          resolve();
+        };
+        img.src = coverCropImage;
       });
-
+      const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/jpeg', 0.85));
+      const file = new File([blob], 'cover.jpg', { type: 'image/jpeg' });
+      const url = await uploadImageToStorage(file, `rankings/${activeRanking.id}/cover.jpg`, 900, 0.85);
+      await updateDoc(doc(db, 'rankings', activeRanking.id), { logoUrl: url, coverUrl: url });
+      setCoverCropImage(null);
       setSnackMessage("Foto da liga atualizada!");
       setTimeout(() => setSnackMessage(null), 3000);
-    } catch (error) {
-      console.error('Error uploading ranking photo:', error);
+    } catch (err) {
       setSnackMessage("Erro ao atualizar foto.");
       setTimeout(() => setSnackMessage(null), 3000);
     }
   };
+  const [coverCropImage, setCoverCropImage] = useState<string | null>(null);
+  const [inlineEdits, setInlineEdits] = useState<Record<string, {p1: number, p2: number}>>({});
+  const [savingMatch, setSavingMatch] = useState<string | null>(null);
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [cropScale, setCropScale] = useState(1);
   const [tournamentTab, setTournamentTab] = useState<'MATCHES' | 'RANKING' | 'ROUNDS'>('MATCHES');
   const [tournamentViewRound, setTournamentViewRound] = useState<number | null>(null);
+  const [showRoundSelector, setShowRoundSelector] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // --- Profile Editing State ---
@@ -195,6 +228,10 @@ export default function BeachProApp() {
   const [showDuplicatePopup, setShowDuplicatePopup] = useState(false);
   const [showManualAthletePopup, setShowManualAthletePopup] = useState(false);
   const [showLowCourtsPopup, setShowLowCourtsPopup] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingSlide, setOnboardingSlide] = useState(0);
+  const [showSupportPopup, setShowSupportPopup] = useState(false);
+  const [supportPopupVariant, setSupportPopupVariant] = useState(0);
   const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
   const [requestSent, setRequestSent] = useState<string | null>(null);
   const [showPendingPopup, setShowPendingPopup] = useState(false);
@@ -222,8 +259,9 @@ export default function BeachProApp() {
     const nextTournamentId = options.tournamentId !== undefined ? options.tournamentId : activeTournamentId;
     const nextRankingId = options.rankingId !== undefined ? options.rankingId : activeRankingId;
     const nextMatchHistory = options.matchHistory !== undefined ? options.matchHistory : showMatchHistory;
-    const nextTab = options.tab !== undefined ? options.tab : tournamentTab;
-    const nextRound = options.round !== undefined ? options.round : tournamentViewRound;
+    // When going to FINISHED, always reset tab to avoid showing wrong content
+    const nextTab = newStep === 'FINISHED' ? 'MATCHES' : (options.tab !== undefined ? options.tab : tournamentTab);
+    const nextRound = newStep === 'FINISHED' ? null : (options.round !== undefined ? options.round : tournamentViewRound);
 
     const state = { 
       step: nextStep, 
@@ -353,14 +391,33 @@ export default function BeachProApp() {
         setStep('HOME');
       }
       // Garante tempo mínimo de exibição do splash
-      setTimeout(() => setSplashDone(true), 2500);
+      setTimeout(() => {
+        setSplashDone(true);
+      }, 2500);
     });
 
-    // Verify Firestore connection on boot
+  // Verify Firestore connection on boot
     testConnection();
 
     return () => unsubscribe();
   }, []);
+
+  // Show onboarding or support popup after splash (must be outside auth effect)
+  React.useEffect(() => {
+    if (!splashDone || !user) return;
+    if (typeof window === 'undefined') return;
+    const seen = localStorage.getItem('btpro_onboarding_done');
+    if (!seen) {
+      setShowOnboarding(true);
+    } else {
+      const lastVariant = parseInt(localStorage.getItem('btpro_support_variant') || '-1');
+      const nextVariant = (lastVariant + 1) % 3;
+      setSupportPopupVariant(nextVariant);
+      localStorage.setItem('btpro_support_variant', String(nextVariant));
+      setShowSupportPopup(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splashDone, user?.uid]);
 
   React.useEffect(() => {
     if (!user) {
@@ -1188,15 +1245,23 @@ export default function BeachProApp() {
     const n = players.length || playerCount;
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     const teams = isIndividual ? n : Math.floor(n / 2);
-    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 1;
-    if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 2;
+    const matchesPerRound = Math.floor(teams / 2);
+    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 3;
+    if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 4;
     if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return 2;
     if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return 3;
-    if (tournamentFormat === 'REI_DA_QUADRA')       return Math.max(1, Math.floor(n / 4));
-    if (tournamentFormat === 'ROUND_ROBIN')         return Math.min(Math.max(1, Math.floor(teams / 2)), 4);
+    if (tournamentFormat === 'REI_DA_QUADRA')       return 1;
+    if (tournamentFormat === 'SUPER_3_FIXED')       return 1;
+    if (tournamentFormat === 'SUPER_4_FIXED')       return 2;
+    if (tournamentFormat === 'SUPER_5_FIXED')       return 2;
+    if (tournamentFormat === 'SUPER_6_FIXED')       return 3;
+    if (tournamentFormat === 'SUPER_8_FIXED')       return 4;
+    if (tournamentFormat === 'SUPER_10_FIXED')      return 5;
+    if (tournamentFormat === 'SUPER_12_FIXED')      return 6;
+    if (tournamentFormat === 'ROUND_ROBIN')         return Math.min(matchesPerRound, 6);
     if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') return Math.min(Math.max(2, Math.floor(teams / 4)), 6);
-    if (tournamentFormat === 'MATA_MATA')           return Math.min(Math.max(1, Math.floor(teams / 2)), 4);
-    return 2;
+    if (tournamentFormat === 'MATA_MATA')           return Math.min(matchesPerRound, 6);
+    return Math.min(matchesPerRound || 2, 6);
   };
 
   const getFormatDisplayName = (): string => {
@@ -2014,7 +2079,7 @@ export default function BeachProApp() {
 
     return (
       <main className={cn(
-        "min-h-[100dvh] flex flex-col items-center overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+5rem)] transition-colors duration-500",
+        "min-h-[100dvh] flex flex-col items-center overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+6rem)] transition-colors duration-500",
         bgColor
       )}>
         <div className="w-full flex-grow">
@@ -2256,20 +2321,33 @@ export default function BeachProApp() {
             >
               <div className="arena-hero-bg pt-4 pb-16 px-8 flex flex-col items-center text-center">
                 <div className="w-full flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden">
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden shrink-0">
                       {(userProfile?.photoURL || user?.photoURL) ? (
                         <div className="relative w-full h-full">
                           <Image src={userProfile?.photoURL || user?.photoURL} alt="Profile" fill className="object-cover" referrerPolicy="no-referrer" />
                         </div>
                       ) : (
-                        <UserIcon size={20} />
+                        <UserIcon size={26} />
                       )}
-                      {isPremium && <PremiumBadge size={16} />}
+                      {isPremium && <PremiumBadge size={18} />}
                     </div>
                     <div className="text-left">
-                      <p className="text-[9px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">Bem-vindo</p>
-                      <p className="text-xs font-black text-white uppercase italic leading-none">{user?.displayName?.split(' ')[0] || 'Organizador'}</p>
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-[3px] leading-none mb-1.5">
+                        {(() => {
+                          const h = new Date().getHours();
+                          return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+                        })()}
+                      </p>
+                      <p className="text-lg font-black text-white uppercase italic leading-none tracking-tight">{user?.displayName?.split(' ')[0] || 'Organizador'}</p>
+                      {isPremium && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-3 h-3 bg-amber-400 rounded-full flex items-center justify-center">
+                            <svg width="7" height="7" viewBox="0 0 10 10" fill="#1e293b"><path d="M5 1L6.2 3.8L9 4.1L7 6L7.6 9L5 7.5L2.4 9L3 6L1 4.1L3.8 3.8L5 1Z"/></svg>
+                          </div>
+                          <span className="text-[8px] font-black text-amber-400/70 uppercase tracking-widest">Premium</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2314,7 +2392,7 @@ export default function BeachProApp() {
                     className="btn-hero-secondary group h-20"
                   >
                     <div className="bg-white/20 w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg">
-                      <LayoutGrid size={24} />
+                      <Award size={24} />
                     </div>
                     <span className="text-white font-black text-sm uppercase tracking-widest flex-1">
                       MINHAS LIGAS
@@ -2328,18 +2406,20 @@ export default function BeachProApp() {
 
               <div className="wave-container px-6 pt-10 pb-32">
                 <div className="max-w-2xl mx-auto">
-                  <div className="flex items-center justify-between mb-8 px-2">
-                    <div className="flex flex-col">
-                      <h3 className="text-[10px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] flex items-center gap-2 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        Torneios Ativos
-                      </h3>
-                      <p className="text-xs font-black text-on-surface uppercase italic">Em andamento na Arena</p>
+                  <div className="flex items-center justify-between mb-5 px-1">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-primary rounded-full" />
+                        <h3 className="text-xs font-black text-on-surface uppercase italic tracking-tight">Torneios Ativos</h3>
+                      </div>
+                      <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest pl-3">
+                        {tournaments.filter(t => !t.isHidden && !t.isFinished).length} em andamento · {tournaments.filter(t => !t.isHidden && t.isFinished).length} finalizados
+                      </p>
                     </div>
                     {tournaments.length > 0 && (
                       <button 
                         onClick={() => navigateTo('TOURNAMENTS_LIST')}
-                        className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/5 px-4 py-2 rounded-full border border-primary/10 hover:bg-primary/10 transition-colors"
+                        className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/5 px-4 py-2 rounded-full border border-primary/10 active:scale-95 transition-all"
                       >
                         Ver Todos
                       </button>
@@ -2347,7 +2427,7 @@ export default function BeachProApp() {
                   </div>
                   {tournaments.filter(t => !t.isHidden).length > 0 ? (
                     <div className="grid gap-5">
-                      {tournaments.filter(t => !t.isHidden).map((t) => {
+                      {tournaments.filter(t => !t.isHidden).sort((a, b) => { if(a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1; return b.createdAt - a.createdAt; }).map((t, _tIdx) => {
                         const totalRegular = t.matches.length > 0 ? Math.max(...t.matches.map(m => m.round).filter(r => r < 100), 0) : 0;
                         const roundLabel = t.currentRound >= 100 ? (() => {
                           const types: { [key: number]: string } = { 100: 'Oitavas', 101: 'Quartas', 102: 'Semi', 103: 'Final' };
@@ -2355,45 +2435,76 @@ export default function BeachProApp() {
                         })() : `Rodada ${t.currentRound}/${totalRegular || t.totalRounds}`;
 
                         return (
-                          <motion.button 
-                            key={t.id}
-                            whileTap={{ scale: 0.98 }}
+                          <motion.div
+                            key={t.id || `home-t-${_tIdx}`}
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => {
-                              navigateTo(t.isFinished ? 'FINISHED' : 'TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
+                              if (t.isFinished) { navigateTo('FINISHED', { tournamentId: t.id }); } else { navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null }); }
                             }}
-                            className="bg-white rounded-[1.5rem] p-4 border border-surface-container shadow-sm hover:shadow-md hover:border-primary/20 transition-all group w-full text-left flex items-center justify-between gap-3"
+                            className="group w-full text-left relative overflow-hidden cursor-pointer"
                           >
-                            <div className="flex-1 min-w-0">
-                               <div className="flex items-center gap-2 mb-1">
-                                 <span className={cn(
-                                   "w-1.5 h-1.5 rounded-full",
-                                   t.isFinished ? "bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" : "bg-emerald-500 animate-pulse"
-                                 )} />
-                                 <h4 className="text-xs font-black text-primary uppercase italic truncate font-display tracking-tight group-hover:text-primary flex items-center gap-2">
-                                  {t.name}
-                                  {t.isFinished && (
-                                    <span className="bg-primary/10 text-primary text-[8px] px-2 py-0.5 rounded-full not-italic">FINALIZADO</span>
-                                  )}
-                                </h4>
-                               </div>
-                               <div className="flex items-center gap-3 opacity-40">
-                                  <div className="flex items-center gap-1">
-                                    <Users size={10} />
-                                    <span className="text-[8px] font-black uppercase tracking-widest">{(t.athleteCount || t.players.length)} Atletas</span>
+                            {/* Card */}
+                            <div className={cn(
+                              "rounded-[1.75rem] border transition-all overflow-hidden p-5",
+                              t.isFinished
+                                ? "bg-white border-rose-100 shadow-sm"
+                                : "bg-white border-primary/10 shadow-md shadow-primary/5"
+                            )}>
+                              {/* Left stripe — green active, red finished */}
+                              <div className={cn(
+                                "absolute left-0 top-4 bottom-4 w-1 rounded-r-full",
+                                t.isFinished ? "bg-rose-400" : "bg-emerald-400"
+                              )} />
+                              <div className={cn(t.isFinished ? "p-4" : "")}>
+
+                              <div className="flex items-center justify-between gap-3">
+                                {/* Left */}
+                                <div className="flex-1 min-w-0 pl-2">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h4 className="text-sm font-black text-on-surface uppercase italic truncate tracking-tight pr-1">
+                                      {t.name}
+                                    </h4>
+                                    {t.isFinished && (
+                                      <span className="shrink-0 bg-rose-50 text-rose-400 text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border border-rose-100">✓ FIM</span>
+                                    )}
                                   </div>
-                               </div>
-                            </div>
-                            <div className="shrink-0 flex items-center gap-3">
-                                <div className="text-right">
-                                  <span className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/5 px-3 py-1.5 rounded-full border border-primary/10">
-                                    {roundLabel}
-                                  </span>
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1 text-on-surface-variant/40">
+                                      <Users size={10} />
+                                      <span className="text-[9px] font-black uppercase tracking-widest">{(t.athleteCount || t.players.length)} atletas</span>
+                                    </div>
+                                    <span className="text-on-surface-variant/20 text-[9px]">·</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">
+                                      {t.format?.replace('_INDIVIDUAL','').replace(/_/g,' ')}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all text-on-surface-variant/20">
-                                  <ChevronRight size={16} />
+
+                                {/* Right */}
+                                <div className="shrink-0 flex items-center gap-2">
+                                  {t.isFinished ? (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setTournamentToDelete(t.id); }}
+                                      className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-rose-500/20 active:scale-90 transition-all"
+                                    >
+                                      <Trash2 size={12} />
+                                      EXCLUIR
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <div className="px-3 py-2 rounded-2xl text-[9px] font-black uppercase tracking-widest bg-primary/8 text-primary border border-primary/15">
+                                        {roundLabel}
+                                      </div>
+                                      <div className="w-9 h-9 rounded-2xl flex items-center justify-center transition-all bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white">
+                                        <ChevronRight size={16} />
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
+                              </div>
+                              </div>
                             </div>
-                          </motion.button>
+                          </motion.div>
                         );
                       })}
                     </div>
@@ -2434,7 +2545,7 @@ export default function BeachProApp() {
                 
                 <div className="mb-2">
                   <div className="p-3 bg-white/10 rounded-2xl mb-4 inline-block backdrop-blur-sm border border-white/20">
-                    <LayoutGrid size={24} className="text-white" />
+                    <Award size={24} className="text-white" />
                   </div>
                   <h1 className="text-4xl font-display font-black text-white italic uppercase tracking-tighter leading-none mb-2">
                     Minhas Ligas
@@ -2479,57 +2590,94 @@ export default function BeachProApp() {
                   </div>
 
                   {rankings.length > 0 ? (
-                    rankings.map((r, idx) => (
-                            <div
-                              key={`ranking-item-${r.id || idx}`}
-                              className="w-full bg-white p-6 rounded-[2rem] border border-surface-container shadow-sm flex items-center justify-between group hover:border-primary/30 transition-all"
-                            >
-                      <div 
-                        className="flex items-center gap-5 flex-1 cursor-pointer"
-                        onClick={() => navigateTo('RANKING_DETAILS', { rankingId: r.id })}
-                      >
-                        <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all overflow-hidden relative">
-                          {r.coverUrl ? (
-                            <Image src={r.coverUrl} alt={r.name} fill className="object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <LayoutGrid size={24} />
+                    rankings.map((r, idx) => {
+                      const isAdmin = r.ownerId === user?.uid || r.adminIds.includes(user?.uid || '');
+                      const memberCount = r.leagueAthletes?.length || r.athleteIds?.length || 0;
+                      return (
+                        <div
+                          key={`ranking-item-${r.id || idx}`}
+                          className="w-full bg-white rounded-[2rem] border border-surface-container shadow-sm overflow-hidden group hover:shadow-md hover:border-primary/20 transition-all cursor-pointer"
+                          onClick={() => navigateTo('RANKING_DETAILS', { rankingId: r.id })}
+                        >
+                          {/* Cover image strip */}
+                          {r.coverUrl && (
+                            <div className="relative w-full h-20 overflow-hidden">
+                              <Image src={r.coverUrl} alt={r.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                              {/* Name overlay on cover */}
+                              <div className="absolute bottom-0 left-0 right-0 px-5 pb-3 flex items-end justify-between">
+                                <h4 className="text-base font-black text-white uppercase italic tracking-tight truncate drop-shadow pr-1">{r.name}</h4>
+                                <span className={cn(
+                                  "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0",
+                                  isAdmin ? "bg-primary text-white" : "bg-white/20 text-white backdrop-blur-sm"
+                                )}>
+                                  {isAdmin ? 'ADM' : 'ATLETA'}
+                                </span>
+                              </div>
+                            </div>
                           )}
-                        </div>
-                        <div className="text-left flex-1 min-w-0">
-                          <h4 className="text-base font-black text-on-surface uppercase italic truncate mb-1">{r.name}</h4>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-                              {r.ownerId === user?.uid ? "ADMINISTRADOR" : (r.adminIds.includes(user?.uid || '') ? "ADMINISTRADOR" : "ATLETA")}
-                            </span>
-                            {r.arenaName && (
-                              <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase truncate">
-                                Arena: {r.arenaName}
-                              </span>
+
+                          <div className="flex items-center gap-4 px-5 py-4">
+                            {/* Avatar — only when no cover */}
+                            {!r.coverUrl && (
+                              <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center text-primary shrink-0">
+                                <Award size={22} />
+                              </div>
                             )}
+
+                            <div className="flex-1 min-w-0">
+                              {/* Name — only when no cover */}
+                              {!r.coverUrl && (
+                                <h4 className="text-sm font-black text-on-surface uppercase italic truncate mb-1 pr-1">{r.name}</h4>
+                              )}
+                              <div className="flex items-center gap-3 flex-wrap">
+                                {!r.coverUrl && (
+                                  <span className={cn(
+                                    "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest",
+                                    isAdmin ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-400"
+                                  )}>
+                                    {isAdmin ? 'ADM' : 'ATLETA'}
+                                  </span>
+                                )}
+                                {r.arenaName && (
+                                  <span className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest truncate flex items-center gap-1">
+                                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+                                    {r.arenaName}
+                                  </span>
+                                )}
+                                {memberCount > 0 && (
+                                  <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-widest flex items-center gap-1">
+                                    <Users size={8} />
+                                    {memberCount}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                              {r.ownerId === user?.uid ? (
+                                <button
+                                  onClick={() => setLeagueToDelete(r.id)}
+                                  className="p-2.5 text-rose-400 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setLeagueToExit(r.id)}
+                                  className="p-2.5 text-slate-300 hover:bg-slate-50 rounded-xl transition-all active:scale-90"
+                                >
+                                  <LogOut size={16} />
+                                </button>
+                              )}
+                              <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-on-surface-variant/20 group-hover:bg-primary group-hover:text-white transition-all">
+                                <ChevronRight size={16} />
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                         {r.ownerId === user?.uid ? (
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); setLeagueToDelete(r.id); }}
-                             className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                           >
-                             <Trash2 size={20} />
-                           </button>
-                         ) : (
-                           <button 
-                             onClick={() => exitRanking(r.id)}
-                             className="p-3 text-slate-400 hover:bg-slate-50 rounded-xl transition-all"
-                           >
-                             <LogOut size={20} />
-                           </button>
-                         )}
-                         <ChevronRight size={20} className="text-on-surface-variant/20 group-hover:text-primary transition-colors" />
-                      </div>
-                    </div>
-                  ))
+                      );
+                    })
                 ) : (
                   <div className="text-center py-16 opacity-30 select-none">
                     <TrophyIcon size={64} className="mx-auto mb-4 opacity-10" />
@@ -2656,10 +2804,10 @@ export default function BeachProApp() {
                           <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary overflow-hidden relative shrink-0">
                             {league.coverUrl && !league.coverUrl.startsWith('data:') ? (
                               <Image src={league.coverUrl} alt={league.name} fill className="object-cover" referrerPolicy="no-referrer" />
-                            ) : <LayoutGrid size={24} />}
+                            ) : <Award size={24} />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-black text-on-surface uppercase italic truncate">{league.name}</h4>
+                            <h4 className="text-sm font-black text-on-surface uppercase italic truncate pr-1">{league.name}</h4>
                             {league.arenaName && <p className="text-[9px] font-black text-on-surface-variant/50 uppercase tracking-widest truncate">{league.arenaName}</p>}
                             <p className="text-[9px] font-black text-primary uppercase tracking-widest mt-1">{memberCount} atletas</p>
                           </div>
@@ -2718,7 +2866,7 @@ export default function BeachProApp() {
               subtitle="Configurações e Regras de Pontuação"
               currentStep={1}
             >
-              <div className="space-y-8 pb-10">
+              <div className="space-y-8 pb-28">
                 {/* 1. Nome e Descrição da Liga */}
                 <div className="space-y-4">
                   <div className="space-y-1">
@@ -2847,7 +2995,7 @@ export default function BeachProApp() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 pt-4 pb-10">
+                <div className="flex gap-4 pt-4 pb-28">
                   <button onClick={goBack} disabled={isCreatingRanking} className="flex-1 py-5 bg-surface-container rounded-full font-black text-[10px] uppercase tracking-widest text-on-surface-variant disabled:opacity-50">CANCELAR</button>
                   <button onClick={createRanking} disabled={isCreatingRanking} className="flex-1 py-5 bg-primary text-white rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 disabled:opacity-50">
                     {isCreatingRanking ? "CRIANDO..." : "CRIAR LIGA"}
@@ -2963,7 +3111,28 @@ export default function BeachProApp() {
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-0.5">Classificação Geral</span>
                        </div>
                        <div className="flex items-center gap-2">
-                          {/* Buttons removed per request */}
+                          {activeRanking.leagueCode && (
+                            <button
+                              onClick={() => {
+                                const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!
+
+Para entrar, siga os passos:
+1. Baixe o app BeachPró
+2. Crie sua conta
+3. Acesse "Minhas Ligas" → "Encontrar Ligas"
+4. Digite o código: ${activeRanking.leagueCode}
+
+O play na palma da mão! 🏆`;
+                                navigator.clipboard.writeText(text);
+                                setSnackMessage('Convite copiado! Cole no WhatsApp.');
+                                setTimeout(() => setSnackMessage(null), 3000);
+                              }}
+                              className="w-9 h-9 bg-primary/10 hover:bg-primary/20 rounded-2xl flex items-center justify-center text-primary active:scale-90 transition-all border border-primary/10"
+                              title="Copiar convite da liga"
+                            >
+                              <Share2 size={16} />
+                            </button>
+                          )}
                        </div>
                     </div>
 
@@ -3094,11 +3263,19 @@ export default function BeachProApp() {
                                   </td>
                                   <td className="py-5 px-2">
                                     <div className="flex items-center gap-3">
-                                       <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden relative shadow-sm">
+                                       <div className={cn(
+                                         "w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden relative shadow-sm",
+                                         stat.isPremium ? "ring-2 ring-amber-400 ring-offset-1" : "bg-slate-50 border border-slate-100"
+                                       )}>
                                          {stat.photo ? (
                                            <Image src={stat.photo} alt="" fill className="object-cover" referrerPolicy="no-referrer" />
                                          ) : (
                                            <UserIcon size={14} className="text-slate-300" />
+                                         )}
+                                         {stat.isPremium && (
+                                           <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 rounded-full flex items-center justify-center border border-white z-10">
+                                             <svg width="7" height="7" viewBox="0 0 10 10" fill="none"><path d="M5 1L6.2 3.8L9 4.1L7 6L7.6 9L5 7.5L2.4 9L3 6L1 4.1L3.8 3.8L5 1Z" fill="#1e293b"/></svg>
+                                           </div>
                                          )}
                                        </div>
                                        <div>
@@ -3352,7 +3529,7 @@ export default function BeachProApp() {
                                   </span>
                                 </div>
                                 <div className="max-w-[140px] xs:max-w-[200px]">
-                                  <h4 className="text-xs font-black text-slate-900 uppercase italic truncate">{t.name}</h4>
+                                  <h4 className="text-xs font-black text-slate-900 uppercase italic truncate pr-1">{t.name}</h4>
                                   <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-0.5">
                                     {t.athleteCount} ATLETAS • {t.matches.length} PARTIDAS
                                   </p>
@@ -3380,12 +3557,17 @@ export default function BeachProApp() {
                                     {showHistoryDetail === t.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                   </button>
                                   {activeRanking.adminIds.includes(user?.uid || '') && (
-                                    <button 
-                                      onClick={() => setTournamentToDelete(t.id)}
-                                      className="p-2 text-rose-500/20 hover:text-rose-500 transition-colors"
-                                      title="Excluir do Histórico"
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setTournamentToDelete(t.id); }}
+                                      className={cn(
+                                        "rounded-xl transition-all shrink-0 flex items-center gap-1.5 active:scale-90",
+                                        t.isFinished
+                                          ? "px-3 py-1.5 bg-rose-500 text-white text-[9px] font-black uppercase tracking-widest shadow-md shadow-rose-500/20"
+                                          : "p-2 text-rose-500/20 hover:text-rose-500"
+                                      )}
                                     >
-                                      <Trash2 size={16} />
+                                      <Trash2 size={13} />
+                                      {t.isFinished && <span>EXCLUIR</span>}
                                     </button>
                                   )}
                                 </div>
@@ -3433,7 +3615,7 @@ export default function BeachProApp() {
                                             )}>
                                               {res.placement}º
                                             </div>
-                                            <span className="text-[10px] font-black text-slate-700 uppercase italic truncate max-w-[140px]">{res.playerName}</span>
+                                            <span className="text-[10px] font-black text-slate-700 uppercase italic truncate max-w-[140px] pr-1">{res.playerName}</span>
                                           </div>
                                           <div className="flex items-center gap-2">
                                             {res.hadPneu && (
@@ -3460,13 +3642,13 @@ export default function BeachProApp() {
                                           <div key={`hist-match-${idx}`} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
                                             <div className="flex flex-col gap-0.5 flex-1 pr-4">
                                               <div className="flex items-center justify-between">
-                                                <span className="text-[9px] font-black text-slate-700 uppercase italic truncate">
+                                                <span className="text-[9px] font-black text-slate-700 uppercase italic truncate pr-1">
                                                   {p1Name}{p1pName ? ` / ${p1pName}` : ''}
                                                 </span>
                                                 <span className={cn("text-[9px] font-black ml-2", s1 > s2 ? "text-primary" : "text-slate-400")}>{s1}</span>
                                               </div>
                                               <div className="flex items-center justify-between">
-                                                <span className="text-[9px] font-black text-slate-700 uppercase italic truncate">
+                                                <span className="text-[9px] font-black text-slate-700 uppercase italic truncate pr-1">
                                                   {p2Name}{p2pName ? ` / ${p2pName}` : ''}
                                                 </span>
                                                 <span className={cn("text-[9px] font-black ml-2", s2 > s1 ? "text-primary" : "text-slate-400")}>{s2}</span>
@@ -3494,167 +3676,263 @@ export default function BeachProApp() {
                 )}
 
                 {rankingTab === 'CONFIG' && (
-                  <div className="space-y-5 pb-24">
+                  <div className="space-y-6 pb-20">
+                    {/* Editar Informações da Liga (Admin Only) */}
+                    {activeRanking.adminIds.includes(user?.uid || '') && (
+                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                            <Camera size={20} />
+                          </div>
+                          <h3 className="text-xs font-black text-on-surface uppercase italic">Editar Dados da Liga</h3>
+                        </div>
 
-                    {/* 1. CÓDIGO DA LIGA */}
+                        <div className="space-y-6">
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Nome da Liga</label>
+                             <input 
+                               type="text"
+                               className="input-field py-4 text-xs font-bold"
+                               placeholder="Nome da Liga"
+                               value={rankingName}
+                               onChange={(e) => setRankingName(e.target.value)}
+                             />
+                           </div>
+
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Descrição</label>
+                             <textarea 
+                               className="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-medium italic focus:ring-2 focus:ring-primary/20 transition-all min-h-[100px]"
+                               placeholder="Descreva sua liga..."
+                               value={rankingDescription}
+                               onChange={(e) => setRankingDescription(e.target.value)}
+                             />
+                           </div>
+
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Nome da Arena</label>
+                             <input 
+                               type="text"
+                               className="input-field py-4 text-xs font-bold"
+                               placeholder="Ex: Arena Beach Tennis"
+                               value={arenaName}
+                               onChange={(e) => setArenaName(e.target.value)}
+                             />
+                           </div>
+
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Endereço da Arena</label>
+                             <button 
+                               onClick={() => setShowAddressPopup(true)}
+                               className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left"
+                             >
+                                <span className="text-xs font-medium text-slate-600 truncate">
+                                  {arenaAddress.street ? `${arenaAddress.street}, ${arenaAddress.city}` : "Definir endereço..."}
+                                </span>
+                                <ChevronRight size={16} className="text-slate-400" />
+                             </button>
+                           </div>
+
+                           <div className="pt-4 border-t border-slate-50">
+                             <h4 className="text-[10px] font-black text-slate-900 uppercase italic mb-4">Regras de Pontuação</h4>
+                             
+                             <div className="grid grid-cols-2 gap-3 mb-6">
+                               <div className="space-y-2">
+                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Partic.</label>
+                                 <div className="flex items-center gap-2">
+                                   <button onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">-</button>
+                                   <span className="text-xs font-black w-6 text-center">{pPoints}</span>
+                                   <button onClick={() => setPPoints(pPoints + 1)} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">+</button>
+                                 </div>
+                               </div>
+                             </div>
+
+                             <div className="space-y-2 mb-6">
+                               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Posições que Pontuam (Top X)</label>
+                               <div className="flex items-center gap-3">
+                                 <button onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">-</button>
+                                 <span className="text-xs font-black w-10 text-center">Top {positionsThatScore}</span>
+                                 <button onClick={() => setPositionsThatScore(Math.min(10, positionsThatScore + 1))} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">+</button>
+                               </div>
+                             </div>
+
+                             <div className="space-y-2">
+                               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic">Pontos por Posição</label>
+                               <div className="grid grid-cols-2 gap-2">
+                                 {Array.from({ length: positionsThatScore }).map((_, idx) => {
+                                   const pos = idx + 1;
+                                   return (
+                                     <div key={`edit-pts-${pos}`} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100">
+                                       <span className="text-[9px] font-black text-slate-400">#{pos}</span>
+                                       <input 
+                                         type="number"
+                                         value={placementPoints[pos] || 0}
+                                         onChange={(e) => setPlacementPoints(prev => ({ ...prev, [pos]: parseInt(e.target.value) || 0 }))}
+                                         className="w-12 bg-transparent text-right text-[10px] font-black text-primary outline-none"
+                                       />
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             </div>
+                           </div>
+
+                           <button 
+                             onClick={updateRankingGeneral}
+                             className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all mt-4"
+                           >
+                             SALVAR CONFIGURAÇÕES
+                           </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Código da Liga */}
                     {activeRanking.leagueCode && (
-                      <div className="bg-slate-900 rounded-[2rem] p-6 shadow-xl">
-                        <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">Código da Liga</p>
+                      <div className="bg-primary rounded-[2rem] p-6 border border-primary shadow-xl">
+                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-3">Código da Liga</p>
                         <div className="flex items-center justify-between gap-4">
-                          <span className="text-4xl font-black text-white tracking-widest font-mono">{activeRanking.leagueCode}</span>
+                          <span className="text-4xl font-black text-white tracking-widest font-mono">
+                            {activeRanking.leagueCode}
+                          </span>
                           <button
                             onClick={() => {
-                              const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!\n\nPara entrar, siga os passos:\n1. Baixe o app BeachPró\n2. Crie sua conta\n3. Acesse "Minhas Ligas" → "Encontrar Ligas"\n4. Digite o código: ${activeRanking.leagueCode}\n\nO play na palma da mão! 🏆`;
+                              const text = `🎾 Você foi convidado para participar da liga ${activeRanking.name} no app BeachPró!
+
+Para entrar, siga os passos:
+1. Baixe o app BeachPró
+2. Crie sua conta
+3. Acesse "Minhas Ligas" → "Encontrar Ligas"
+4. Digite o código: ${activeRanking.leagueCode}
+
+O play na palma da mão! 🏆`;
                               navigator.clipboard.writeText(text);
                               setSnackMessage('Texto copiado! Cole no WhatsApp.');
                               setTimeout(() => setSnackMessage(null), 3000);
                             }}
-                            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-white/10 shrink-0"
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-white/20"
                           >
                             <Copy size={14} />
                             COPIAR CONVITE
                           </button>
                         </div>
-                        <p className="text-[9px] font-black text-white/30 uppercase tracking-tight mt-3 leading-relaxed">
-                          Compartilhe com os atletas para que eles possam solicitar entrada na liga.
+                        <p className="text-[9px] font-black text-white/50 uppercase tracking-tight leading-relaxed mt-3">
+                          Compartilhe este código com os atletas para que eles possam entrar na liga.
                         </p>
                       </div>
                     )}
 
-                    {/* 2. INFORMAÇÕES DA LIGA */}
-                    {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
-                        <div className="flex items-center gap-3 mb-5">
-                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <Pencil size={16} />
-                          </div>
-                          <h3 className="text-xs font-black text-on-surface uppercase italic">Informações da Liga</h3>
+                    {/* Sobre a Liga */}
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                          <Info size={20} />
                         </div>
-                        <div className="space-y-4">
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Liga</label>
-                            <input type="text" className="input-field py-3 text-xs font-bold" placeholder="Nome da Liga" value={rankingName} onChange={(e) => setRankingName(e.target.value)} />
+                        <h3 className="text-xs font-black text-on-surface uppercase italic">Sobre a Liga</h3>
+                      </div>
+
+                      <div className="space-y-6">
+                        {activeRanking.description && (
+                          <div className="space-y-2">
+                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic ml-1">Descrição</label>
+                             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                               <p className="text-xs font-medium text-slate-600 leading-relaxed italic">{activeRanking.description}</p>
+                             </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição</label>
-                            <textarea className="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-medium italic focus:ring-2 focus:ring-primary/20 transition-all min-h-[80px]" placeholder="Descreva sua liga..." value={rankingDescription} onChange={(e) => setRankingDescription(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Arena</label>
-                            <input type="text" className="input-field py-3 text-xs font-bold" placeholder="Ex: Arena Beach Tennis" value={arenaName} onChange={(e) => setArenaName(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço da Arena</label>
-                            <button onClick={() => setShowAddressPopup(true)} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left">
-                              <span className="text-xs font-medium text-slate-600 truncate">{arenaAddress.street ? `${arenaAddress.street}, ${arenaAddress.city}` : "Definir endereço..."}</span>
-                              <ChevronRight size={16} className="text-slate-400 shrink-0" />
-                            </button>
-                          </div>
+                        )}
+
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-4">
+                           <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm shrink-0">
+                             <MapPin size={18} />
+                           </div>
+                           <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Localização / Arena</p>
+                              <p className="text-sm font-black text-slate-900 uppercase italic">{activeRanking.arenaName || "Arena não informada"}</p>
+                              {activeRanking.address && (activeRanking.address.street || activeRanking.address.city) && (
+                                <p className="text-[9px] font-medium text-slate-400 uppercase mt-1">
+                                  {[activeRanking.address.street, activeRanking.address.neighborhood, activeRanking.address.city, activeRanking.address.state].filter(Boolean).join(', ')}
+                                </p>
+                              )}
+                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
 
-                    {/* 3. REGRAS DE PONTUAÇÃO */}
-                    {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
-                        <div className="flex items-center gap-3 mb-5">
-                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <ClipboardList size={16} />
-                          </div>
-                          <h3 className="text-xs font-black text-on-surface uppercase italic">Regras de Pontuação</h3>
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                      <div className="flex items-center gap-3 mb-6">
+                         <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                            <ClipboardList size={20} />
+                         </div>
+                         <h3 className="text-xs font-black text-on-surface uppercase italic">Regras de Pontuação</h3>
+                      </div>
+
+                      <div className="space-y-3 mb-8">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Participação</span>
+                          <span className="text-sm font-black text-slate-500 italic">+{activeRanking.pointsConfig.participation || 0} Pts</span>
                         </div>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                            <div>
-                              <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Pontos por participação</p>
-                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">Todo atleta que jogar recebe</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <button onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">-</button>
-                              <span className="text-sm font-black text-primary w-6 text-center">{pPoints}</span>
-                              <button onClick={() => setPPoints(pPoints + 1)} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">+</button>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                            <div>
-                              <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Posições que pontuam</p>
-                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">Quantos do pódio recebem bônus</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <button onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">-</button>
-                              <span className="text-sm font-black text-primary w-12 text-center">Top {positionsThatScore}</span>
-                              <button onClick={() => setPositionsThatScore(Math.min(10, positionsThatScore + 1))} className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-black shadow-sm">+</button>
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Bônus por colocação</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {Array.from({ length: positionsThatScore }).map((_, idx) => {
-                                const pos = idx + 1;
-                                const medals = ['🥇','🥈','🥉'];
-                                return (
-                                  <div key={`pts-${pos}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <span className="text-[10px] font-black text-slate-500">{medals[idx] || `#${pos}`} {pos}º</span>
-                                    <input
-                                      type="number"
-                                      value={placementPoints[pos] || 0}
-                                      onChange={(e) => setPlacementPoints(prev => ({ ...prev, [pos]: parseInt(e.target.value) || 0 }))}
-                                      className="w-12 bg-white border border-slate-200 rounded-lg text-right text-[10px] font-black text-primary outline-none p-1 shadow-sm"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <button onClick={updateRankingGeneral} className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all mt-2">
-                            SALVAR CONFIGURAÇÕES
-                          </button>
+                        <div className="flex items-center justify-between p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                          <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest italic">Penalidade Pneu</span>
+                          <span className="text-sm font-black text-rose-500 italic">{activeRanking.pointsConfig.pneu || 0} Pts</span>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Pontua até:</span>
+                          <span className="text-sm font-black text-slate-900 italic">Top {activeRanking.pointsConfig.positionsThatScore}</span>
                         </div>
                       </div>
-                    )}
-
-                    {/* 4. ADMINISTRADORES */}
-                    {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-6 border border-surface-container shadow-xl">
-                        <div className="flex items-center gap-3 mb-5">
-                          <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <Users size={16} />
+                      
+                      <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 px-2 italic">Bônus por Colocação</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        {Object.entries(activeRanking.pointsConfig.placementPoints || {}).sort((a, b) => Number(a[0]) - Number(b[0])).map(([pos, pts]) => (
+                          <div key={pos} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                            <span className="text-[10px] font-black text-slate-400 italic">#{pos} LUGAR</span>
+                            <span className="text-xs font-black text-primary">{pts as number}</span>
                           </div>
-                          <h3 className="text-xs font-black text-on-surface uppercase italic">Administradores</h3>
+                        ))}
+                      </div>
+                    </div>
+
+                    {activeRanking.adminIds.includes(user?.uid || '') && (
+                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                        <h3 className="text-xs font-black text-on-surface uppercase italic mb-6">Administradores da Liga</h3>
+                        <div className="flex gap-2 mb-6">
+                           <input 
+                             type="email" 
+                             placeholder="E-mail do novo ADM" 
+                             className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black placeholder:text-on-surface-variant/20 outline-none"
+                             value={newAdminEmail}
+                             onChange={(e) => setNewAdminEmail(e.target.value)}
+                           />
+                           <button 
+                             onClick={() => addAdminToRanking(activeRanking.id, newAdminEmail)}
+                             className="bg-primary text-white px-5 rounded-2xl active:scale-95 transition-all shadow-lg"
+                           >
+                             <Check size={20} />
+                           </button>
                         </div>
-                        <div className="flex gap-2 mb-4">
-                          <input
-                            type="email"
-                            placeholder="E-mail do novo ADM"
-                            className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            value={newAdminEmail}
-                            onChange={(e) => setNewAdminEmail(e.target.value)}
-                          />
-                          <button
-                            onClick={() => addAdminToRanking(activeRanking.id, newAdminEmail)}
-                            className="w-11 h-11 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 active:scale-95 transition-all shrink-0"
-                          >
-                            <Check size={18} />
-                          </button>
-                        </div>
+
                         <div className="space-y-3">
-                          {activeRanking.adminIds.map((aid: string) => {
+                          {activeRanking.adminIds.map((aid, idx) => {
                             const profile = adminProfiles[aid];
                             return (
-                              <div key={aid} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden relative">
-                                  {profile?.photoURL ? (
-                                    <Image src={profile.photoURL} alt="" fill className="object-cover" referrerPolicy="no-referrer" unoptimized />
-                                  ) : <UserIcon size={14} />}
-                                  {profile?.isPremium && <PremiumBadge size={12} />}
+                              <div key={`admin-item-${aid || idx}`} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="flex items-center gap-3 min-w-0">
+                                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 overflow-hidden relative">
+                                     {profile?.photoURL ? (
+                                       <Image src={profile.photoURL} alt="" fill className="object-cover" referrerPolicy="no-referrer" />
+                                     ) : (
+                                       <UserIcon size={14} />
+                                     )}
+                                     {profile?.isPremium && <PremiumBadge size={12} />}
+                                   </div>
+                                   <div className="min-w-0">
+                                      <p className="text-[10px] font-black text-slate-700 uppercase italic truncate pr-1">{profile?.displayName || aid}</p>
+                                      <p className="text-[8px] font-medium text-slate-400 truncate">{profile?.email || profile?.userTag || "ADM"}</p>
+                                   </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-black text-on-surface uppercase italic truncate">{profile?.displayName || aid}</p>
-                                  <p className="text-[9px] text-slate-400 truncate">{profile?.email || ''}</p>
-                                </div>
-                                <span className="text-[8px] font-black text-primary uppercase tracking-widest shrink-0">
-                                  {aid === activeRanking.ownerId ? 'FUNDADOR' : 'ADM'}
-                                </span>
+                                {aid === activeRanking.ownerId && (
+                                   <span className="text-[8px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg uppercase italic whitespace-nowrap">Fundador</span>
+                                )}
                               </div>
                             );
                           })}
@@ -3662,33 +3940,34 @@ export default function BeachProApp() {
                       </div>
                     )}
 
-                    {/* 5. ZONA DE PERIGO */}
-                    <div className="bg-rose-50 rounded-[2.5rem] p-6 border border-rose-100">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-9 h-9 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-500 shrink-0">
-                          <Trash2 size={16} />
+                    <div className="bg-white rounded-[2.5rem] p-8 border-2 border-rose-100 shadow-xl shadow-rose-500/5">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500">
+                                {activeRanking.ownerId === user?.uid ? <Trash2 size={20} /> : <LogOut size={20} />}
+                            </div>
+                            <h3 className="text-xs font-black text-on-surface uppercase italic">
+                              {activeRanking.ownerId === user?.uid ? "Zona de Perigo" : "Sair da Liga"}
+                            </h3>
                         </div>
-                        <h3 className="text-xs font-black text-rose-700 uppercase italic">Zona de Perigo</h3>
-                      </div>
-                      <p className="text-[9px] font-black text-rose-400 uppercase tracking-tight leading-relaxed mb-5">
-                        {activeRanking.ownerId === user?.uid
-                          ? 'A exclusão da liga é permanente. Todos os rankings, torneios e históricos vinculados serão perdidos.'
-                          : 'Ao sair da liga, todos os seus dados nesta liga serão apagados permanentemente.'}
-                      </p>
-                      <button
-                        onClick={() => {
-                          if (activeRanking.ownerId === user?.uid) {
-                            setLeagueToDelete(activeRanking.id);
-                          } else {
-                            setLeagueToExit(activeRanking.id);
+                        <p className="text-[10px] font-black text-on-surface-variant/40 mb-8 uppercase tracking-tight leading-relaxed">
+                          {activeRanking.ownerId === user?.uid 
+                            ? "A exclusão da liga é permanente. Todos os rankings, torneios e históricos vinculados serão perdidos."
+                            : "Você deixará de fazer parte desta liga. Aviso: Todos os seus pontos acumulados no ranking serão permanentemente perdidos."
                           }
-                        }}
-                        className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-rose-500/20"
-                      >
-                        {activeRanking.ownerId === user?.uid ? 'EXCLUIR LIGA PERMANENTEMENTE' : 'SAIR DA LIGA'}
-                      </button>
+                        </p>
+                        <button 
+                          onClick={() => {
+                            if (activeRanking.ownerId === user?.uid) {
+                              setLeagueToDelete(activeRanking.id);
+                            } else {
+                              setLeagueToExit(activeRanking.id);
+                            }
+                          }}
+                          className="w-full py-6 bg-rose-500 text-white rounded-3xl font-black text-xs uppercase tracking-[0.2em] active:scale-95 transition-all shadow-lg shadow-rose-500/20"
+                        >
+                          {activeRanking.ownerId === user?.uid ? "EXCLUIR LIGA PERMANENTEMENTE" : "SAIR DA LIGA"}
+                        </button>
                     </div>
-
                   </div>
                 )}
               </div>
@@ -4686,26 +4965,34 @@ export default function BeachProApp() {
               const n = players.length;
               const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
               const teams = isIndividual ? n : Math.floor(n / 2);
+              const matchesPerRound = Math.floor(teams / 2);
 
-              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 2, reason: `${n} atletas individuais — 1 quadra roda todas as 5 rodadas sem problemas.` };
-              if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 2, min: 1, max: 2, reason: `${n} atletas — 2 quadras garantem fluxo contínuo nas 7 rodadas.` };
-              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 2, max: 3, reason: `${n} atletas — 2 quadras por rodada, com 2 descansando. 3 quadras aceleram o torneio.` };
-              if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 2, max: 4, reason: `${n} atletas — 3 quadras para rodar as 3 partidas simultâneas por rodada.` };
-              if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: Math.max(1, Math.floor(n / 4)), min: 1, max: Math.ceil(n / 4), reason: `${n} atletas — ${Math.max(1, Math.floor(n / 4))} quadra(s) para rodadas contínuas no Rei da Quadra.` };
+              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 3, min: 1, max: 3, reason: `${n} atletas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
+              if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 4, min: 1, max: 4, reason: `${n} atletas — 4 partidas simultâneas por rodada, ideal 4 quadras.` };
+              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 2, max: 3, reason: `${n} atletas — 2 partidas por rodada (2 descansam). 3 quadras aceleram.` };
+              if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 2, max: 4, reason: `${n} atletas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
+              if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: 1, min: 1, max: 1, reason: `4 atletas — 1 partida por vez, 1 quadra suficiente.` };
+              if (tournamentFormat === 'SUPER_3_FIXED')       return { ideal: 1, min: 1, max: 1, reason: `3 duplas — 1 partida por rodada, 1 quadra suficiente.` };
+              if (tournamentFormat === 'SUPER_4_FIXED')       return { ideal: 2, min: 1, max: 2, reason: `4 duplas — 2 partidas simultâneas por rodada, ideal 2 quadras.` };
+              if (tournamentFormat === 'SUPER_5_FIXED')       return { ideal: 2, min: 1, max: 2, reason: `5 duplas — 2 partidas por rodada (1 dupla descansa), ideal 2 quadras.` };
+              if (tournamentFormat === 'SUPER_6_FIXED')       return { ideal: 3, min: 1, max: 3, reason: `6 duplas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
+              if (tournamentFormat === 'SUPER_8_FIXED')       return { ideal: 4, min: 2, max: 4, reason: `8 duplas — 4 partidas simultâneas por rodada, ideal 4 quadras.` };
+              if (tournamentFormat === 'SUPER_10_FIXED')      return { ideal: 5, min: 2, max: 6, reason: `10 duplas — 5 partidas simultâneas por rodada, ideal 5 quadras.` };
+              if (tournamentFormat === 'SUPER_12_FIXED')      return { ideal: 6, min: 2, max: 6, reason: `12 duplas — 6 partidas simultâneas por rodada, ideal 6 quadras.` };
               if (tournamentFormat === 'ROUND_ROBIN') {
                 const matches = (teams * (teams - 1)) / 2;
-                const ideal = Math.min(Math.max(1, Math.floor(teams / 2)), 4);
-                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas = ${matches} partidas no total. ${ideal} quadra(s) é o equilíbrio ideal.` };
+                const ideal = Math.min(matchesPerRound, 6);
+                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${matchesPerRound} partidas simultâneas por rodada. ${ideal} quadra(s) ideal.` };
               }
               if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') {
                 const ideal = Math.min(Math.max(2, Math.floor(teams / 4)), 6);
-                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras para rodadas simultâneas entre grupos diferentes.` };
+                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras para rodadas simultâneas entre grupos.` };
               }
               if (tournamentFormat === 'MATA_MATA') {
-                const ideal = Math.min(Math.max(1, Math.floor(teams / 2)), 4);
-                return { ideal, min: 1, max: 4, reason: `${teams} duplas no eliminatório — ${ideal} quadra(s) para rodadas paralelas.` };
+                const ideal = Math.min(matchesPerRound, 6);
+                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${matchesPerRound} partidas simultâneas no mata-mata, ideal ${ideal} quadra(s).` };
               }
-              return { ideal: 2, min: 1, max: 4, reason: 'Selecione as quadras disponíveis.' };
+              return { ideal: Math.min(matchesPerRound || 2, 6), min: 1, max: 6, reason: 'Selecione as quadras disponíveis.' };
             };
 
             const rec = getCourtRecommendation();
@@ -5085,7 +5372,64 @@ export default function BeachProApp() {
                       matchesByCourt[m.table].push(m);
                     });
                   
+                  const allAvailableRounds = Array.from(new Set(
+                    activeTournament.matches.map(m => m.round)
+                  )).sort((a, b) => a - b).filter(r => r < 100);
+                  const isViewingPast = currentViewRound < activeTournament.currentRound;
+
                   return (<>
+                    {/* Round navigation dots */}
+                    {allAvailableRounds.length > 1 && (
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Pencil size={11} className="text-primary" />
+                          <p className="text-[10px] font-black text-primary uppercase tracking-widest">NAVEGAR E EDITAR RODADAS</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {allAvailableRounds.map(r => {
+                            const rMatches = activeTournament.matches.filter(m => m.round === r);
+                            const done = rMatches.every(m => m.isCompleted);
+                            const isCurrent = r === activeTournament.currentRound;
+                            const isViewing = r === currentViewRound;
+                            // Block: can only navigate to completed rounds or current
+                            const isBlocked = !done && !isCurrent;
+
+                            return (
+                              <button
+                                key={r}
+                                disabled={isBlocked}
+                                onClick={() => !isBlocked && navigateTo('TOURNAMENT', { tab: 'MATCHES', round: r })}
+                                className={cn(
+                                  "w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-black transition-all border-2",
+                                  isBlocked
+                                    ? "bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed opacity-40"
+                                    : isViewing
+                                    ? "bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-110 active:scale-100"
+                                    : isCurrent
+                                    ? "bg-primary/15 border-primary/40 text-primary active:scale-90"
+                                    : done
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-600 active:scale-90"
+                                    : "bg-slate-50 border-slate-100 text-slate-300"
+                                )}
+                              >
+                                {r}
+                              </button>
+                            );
+                          })}
+
+                          {isViewingPast && (
+                            <button
+                              onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES', round: activeTournament.currentRound })}
+                              className="ml-1 flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-primary text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                            >
+                              <ChevronRight size={10} />
+                              RODADA ATUAL
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Resting players banner — Super format only */}
                     {restingPlayers.length > 0 && (
                       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-3 mb-2">
@@ -5244,7 +5588,7 @@ export default function BeachProApp() {
                 })()}
 
                 {tournamentTab === 'MATCHES' && (
-                  <div className="flex flex-col gap-4 max-w-xs mx-auto pb-10">
+                  <div className="flex flex-col gap-4 max-w-xs mx-auto pb-28">
                     {(() => {
                       const currentViewRound = tournamentViewRound ?? activeTournament.currentRound;
                       const matchesInView = activeTournament.matches.filter(m => m.round === currentViewRound);
@@ -5429,98 +5773,261 @@ export default function BeachProApp() {
             </motion.div>
           )}
 
-          {step === 'ALL_ROUNDS' && activeTournament && (
-            <motion.div 
+          {step === 'ALL_ROUNDS' && activeTournament && (() => {
+
+            // Use the same matchFormat from the tournament (same as normal scoring)
+            const mFmt = activeTournament.matchFormat || '6_GAMES_TIEBREAK';
+
+            // Returns whether score is final/valid for this format
+            const isScoreComplete = (p1: number, p2: number): boolean => {
+              return validateSetScore(p1, p2, mFmt).isValid;
+            };
+
+            // Max possible value for display hint
+            const getFormatLabel = (): string => {
+              switch (mFmt) {
+                case '6_GAMES_TIEBREAK': return 'até 7 games (tie-break)';
+                case '6_GAMES_MAX': return 'máx 6 games';
+                case '5_GAMES_MAX': return 'máx 5 games';
+                case 'SUM_9_GAMES': return 'soma = 9';
+                case 'SUM_7_GAMES': return 'soma = 7';
+                case 'SUM_5_GAMES': return 'soma = 5';
+                default: return '';
+              }
+            };
+
+            const adjustScore = (matchId: string, side: 'p1'|'p2', delta: number) => {
+              setInlineEdits(prev => {
+                const cur = prev[matchId] || { p1: 0, p2: 0 };
+                let newP1 = cur.p1, newP2 = cur.p2;
+                if (delta > 0) {
+                  // Use canIncrementScore — same logic as normal match
+                  if (side === 'p1' && canIncrementScore(cur.p1, cur.p2, 1, mFmt)) newP1 = cur.p1 + 1;
+                  if (side === 'p2' && canIncrementScore(cur.p1, cur.p2, 2, mFmt)) newP2 = cur.p2 + 1;
+                } else {
+                  // Decrement freely (min 0)
+                  if (side === 'p1') newP1 = Math.max(0, cur.p1 - 1);
+                  if (side === 'p2') newP2 = Math.max(0, cur.p2 - 1);
+                }
+                return { ...prev, [matchId]: { p1: newP1, p2: newP2 } };
+              });
+            };
+
+            const saveInlineEdit = async (matchId: string) => {
+              const edit = inlineEdits[matchId];
+              if (!edit || !activeTournament) return;
+              // Validate using the same rules as normal match
+              const validation = validateSetScore(edit.p1, edit.p2, mFmt);
+              if (!validation.isValid) {
+                setSnackMessage(validation.error || 'Placar inválido');
+                setTimeout(() => setSnackMessage(null), 3000);
+                return;
+              }
+              setSavingMatch(matchId);
+              try {
+                const match = activeTournament.matches.find(m => m.id === matchId);
+                if (!match) return;
+                // Determine new winner based on updated score
+                const p1Wins = edit.p1 > edit.p2;
+                const newWinnerId = p1Wins
+                  ? (match.player1PartnerId ? 'TEAM1' : match.player1Id)
+                  : (match.player2PartnerId ? 'TEAM2' : match.player2Id);
+                const newLoserId = p1Wins
+                  ? (match.player2PartnerId ? 'TEAM2' : match.player2Id)
+                  : (match.player1PartnerId ? 'TEAM1' : match.player1Id);
+
+                const updatedMatches = activeTournament.matches.map(m =>
+                  m.id === matchId
+                    ? {
+                        ...m,
+                        isCompleted: true,
+                        sets: [{ player1: edit.p1, player2: edit.p2 }],
+                        currentSet: { player1: edit.p1, player2: edit.p2 },
+                        winnerId: newWinnerId,
+                        loserId: newLoserId,
+                      }
+                    : m
+                );
+                await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: updatedMatches });
+                setInlineEdits(prev => { const n = {...prev}; delete n[matchId]; return n; });
+                setSnackMessage('Resultado atualizado!');
+                setTimeout(() => setSnackMessage(null), 2000);
+              } catch(e) { console.error(e); }
+              finally { setSavingMatch(null); }
+            };
+
+            return (
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-2xl mx-auto space-y-6 pt-16 px-4"
+              className="w-full max-w-2xl mx-auto space-y-6 pt-16 px-4 pb-28"
             >
               <div className="flex items-center justify-between gap-4 mb-2">
                 <button onClick={goBack} className="p-3 bg-surface-container rounded-2xl text-on-surface-variant active:scale-95 transition-all">
                   <ChevronLeft size={20} />
                 </button>
                 <div className="min-w-0 flex-1 text-right">
-                  <h2 className="text-[10px] font-black text-on-surface-variant/70 uppercase tracking-widest truncate">
-                    {activeTournament.name}
-                  </h2>
-                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tighter font-display uppercase italic">
-                    Todas as Rodadas
-                  </h1>
+                  <h2 className="text-[10px] font-black text-on-surface-variant/70 uppercase tracking-widest truncate pr-1">{activeTournament.name}</h2>
+                  <h1 className="text-2xl font-extrabold text-on-surface tracking-tighter font-display uppercase italic">Editar Resultados</h1>
                 </div>
               </div>
+              <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest text-center mb-4">
+                ✏ Toque nos placares para editar · Salve para atualizar o resultado
+              </p>
+
+              {/* SAVE AND BACK — top */}
+              <button
+                onClick={() => navigateTo('FINISHED', { tournamentId: activeTournament.id })}
+                className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-primary/20 active:scale-95 transition-all mb-6"
+              >
+                <CheckCircle2 size={16} />
+                SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO
+              </button>
 
               <div className="space-y-8">
                 {Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b).map((roundNum) => (
-                    <div key={roundNum} className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/5 px-3 py-1 rounded-full">
-                          {(() => {
-                            if (roundNum >= 100) {
-                              const types: { [key: number]: string } = {
-                                100: 'Oitavas de Final',
-                                101: 'Quartas de Final',
-                                102: 'Semi-Final',
-                                103: 'Final'
-                              };
-                              return types[roundNum] || `Playoff ${roundNum}`;
-                            }
-                            return `Rodada ${roundNum}`;
-                          })()}
-                        </span>
-                        <div className="h-[1px] flex-grow bg-surface-container-highest"></div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 gap-3">
-                        {activeTournament.matches
-                          .filter(m => m.round === roundNum)
-                          .map((m) => {
-                            const p1Name = getPlayerName(m.player1Id);
-                            const p2Name = getPlayerName(m.player2Id);
-                            const fp1p = m.player1PartnerId ? (activeTournament.players.find(p => p.id === m.player1PartnerId) || { id: m.player1PartnerId, name: '' }) : null;
-                            const fp2p = m.player2PartnerId ? (activeTournament.players.find(p => p.id === m.player2PartnerId) || { id: m.player2PartnerId, name: '' }) : null;
-                            const p1Games = m.isCompleted ? m.sets[0].player1 : m.currentSet.player1;
-                            const p2Games = m.isCompleted ? m.sets[0].player2 : m.currentSet.player2;
-
-                            return (
-                              <div key={m.id} className="bg-surface-container-low p-4 rounded-2xl shadow-sm flex items-center justify-between gap-4 border border-surface-container/50">
-                                <div className="flex-1 text-right min-w-0">
-                                    <div className="text-[10px] font-bold text-primary leading-tight break-words">
-                                      {p1Name}{fp1p?.name ? ` / ${fp1p.name}` : ''}
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-3 bg-surface-container-lowest px-4 py-1.5 rounded-full border border-surface-container">
-                                  <span className={cn(
-                                    "text-lg font-black font-display",
-                                    m.isCompleted && p1Games < p2Games ? "text-on-surface-variant/20" : "text-primary"
-                                  )}>{p1Games}</span>
-                                  <span className="text-on-surface-variant/40 font-black italic text-[8px] tracking-widest">VS</span>
-                                  <span className={cn(
-                                    "text-lg font-black font-display",
-                                    m.isCompleted && p2Games < p1Games ? "text-on-surface-variant/20" : "text-primary"
-                                  )}>{p2Games}</span>
-                                </div>
-
-                                <div className="flex-1 text-left min-w-0">
-                                  <div className="text-[10px] font-bold text-primary leading-tight break-words">
-                                    {p2Name}{fp2p?.name ? ` / ${fp2p.name}` : ''}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
+                  <div key={roundNum} className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-black text-primary uppercase tracking-widest bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+                        {roundNum >= 100 ? ({100:'Oitavas',101:'Quartas',102:'Semi',103:'Final'} as any)[roundNum] || 'Playoff' : `Rodada ${roundNum}`}
+                      </span>
+                      <div className="h-px flex-grow bg-surface-container-highest" />
                     </div>
+
+                    <div className="space-y-3">
+                      {activeTournament.matches.filter(m => m.round === roundNum).map((m) => {
+                        const p1Name = getPlayerName(m.player1Id);
+                        const p2Name = getPlayerName(m.player2Id);
+                        const fp1p = m.player1PartnerId ? activeTournament.players.find(p => p.id === m.player1PartnerId) : null;
+                        const fp2p = m.player2PartnerId ? activeTournament.players.find(p => p.id === m.player2PartnerId) : null;
+                        const baseP1 = m.isCompleted ? m.sets[0].player1 : m.currentSet.player1;
+                        const baseP2 = m.isCompleted ? m.sets[0].player2 : m.currentSet.player2;
+                        const edit = inlineEdits[m.id];
+                        const ep1 = edit ? edit.p1 : baseP1;
+                        const ep2 = edit ? edit.p2 : baseP2;
+                        const isEditing = !!edit;
+                        const isSaving = savingMatch === m.id;
+
+                        return (
+                          <div key={m.id} className={cn(
+                            "rounded-2xl border transition-all",
+                            isEditing ? "bg-primary/5 border-primary/20 shadow-md" : "bg-surface-container-low border-surface-container/50"
+                          )}>
+                            {/* Names row */}
+                            <div className="flex items-center justify-between px-4 pt-3 pb-1 gap-2">
+                              <p className="text-[10px] font-black text-primary uppercase leading-tight flex-1 text-right pr-1">
+                                {p1Name}{fp1p ? ` / ${fp1p.name}` : ''}
+                              </p>
+                              <span className="text-[8px] font-black text-on-surface-variant/30 uppercase tracking-widest shrink-0">VS</span>
+                              <p className="text-[10px] font-black text-primary uppercase leading-tight flex-1 text-left pl-1">
+                                {p2Name}{fp2p ? ` / ${fp2p.name}` : ''}
+                              </p>
+                            </div>
+
+                            {/* Score row */}
+                            <div className="flex items-center justify-center gap-4 px-4 pb-3">
+                              {/* P1 score */}
+                              <div className="flex flex-col items-center gap-1">
+                                {isEditing && (
+                                  <button onClick={() => adjustScore(m.id, 'p1', 1)}
+                                    className="w-8 h-8 rounded-full bg-primary text-white font-black text-lg flex items-center justify-center active:scale-90 transition-all">+</button>
+                                )}
+                                <span className={cn("text-3xl font-black font-display w-10 text-center", ep1 > ep2 ? "text-primary" : "text-on-surface-variant/30")}>{ep1}</span>
+                                {isEditing && (
+                                  <button onClick={() => adjustScore(m.id, 'p1', -1)}
+                                    className="w-8 h-8 rounded-full bg-surface-container text-on-surface-variant font-black text-lg flex items-center justify-center active:scale-90 transition-all">−</button>
+                                )}
+                              </div>
+
+                              {/* Edit / Save button */}
+                              {!isEditing ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <button
+                                    onClick={() => setInlineEdits(prev => ({...prev, [m.id]: {p1: baseP1, p2: baseP2}}))}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-100 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest active:scale-95 transition-all shadow-sm"
+                                  >
+                                    <Pencil size={10} />
+                                    EDITAR
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-1">
+                                  <p className="text-[8px] font-black text-on-surface-variant/30 uppercase tracking-widest">{getFormatLabel()}</p>
+                                  <button
+                                    onClick={() => saveInlineEdit(m.id)}
+                                    disabled={isSaving || !isScoreComplete(ep1, ep2)}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-full text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                                  >
+                                    {isSaving ? <RefreshCw size={10} className="animate-spin" /> : <CheckCircle2 size={10} />}
+                                    SALVAR
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* P2 score */}
+                              <div className="flex flex-col items-center gap-1">
+                                {isEditing && (
+                                  <button onClick={() => adjustScore(m.id, 'p2', 1)}
+                                    className="w-8 h-8 rounded-full bg-primary text-white font-black text-lg flex items-center justify-center active:scale-90 transition-all">+</button>
+                                )}
+                                <span className={cn("text-3xl font-black font-display w-10 text-center", ep2 > ep1 ? "text-primary" : "text-on-surface-variant/30")}>{ep2}</span>
+                                {isEditing && (
+                                  <button onClick={() => adjustScore(m.id, 'p2', -1)}
+                                    className="w-8 h-8 rounded-full bg-surface-container text-on-surface-variant font-black text-lg flex items-center justify-center active:scale-90 transition-all">−</button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
+              {/* SAVE AND BACK — bottom */}
+              <button
+                onClick={() => navigateTo('FINISHED', { tournamentId: activeTournament.id })}
+                className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-primary/20 active:scale-95 transition-all mt-6"
+              >
+                <CheckCircle2 size={16} />
+                SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO
+              </button>
             </motion.div>
-          )}
+            );
+          })()}
                {step === 'FINISHED' && activeTournament && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-2xl mx-auto space-y-8 pt-4 px-2 flex flex-col justify-center min-h-[calc(100dvh-140px)]"
+              className="w-full max-w-2xl mx-auto pt-4 px-2 pb-28"
             >
+              {/* Quick access menu */}
+              {tournaments.filter(t => !t.isHidden).length > 1 && (
+                <div className="space-y-3 mb-6 px-2">
+                  <div className="flex items-center gap-2 text-on-surface-variant/50">
+                    <Zap size={14} className="text-secondary fill-secondary" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.1em]">ACESSO RÁPIDO AOS SEUS TORNEIOS</span>
+                  </div>
+                  <div className="bg-surface-container-low/50 border border-surface-container rounded-full p-1.5 flex gap-1 shadow-sm overflow-x-auto no-scrollbar">
+                    {tournaments.filter(t => !t.isHidden).map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => t.isFinished ? navigateTo('FINISHED', { tournamentId: t.id }) : navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES' })}
+                        className={cn(
+                          "flex-1 py-3 px-4 rounded-full text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 min-w-fit",
+                          t.id === activeTournament.id
+                            ? "bg-secondary text-primary shadow-lg"
+                            : "text-on-surface-variant hover:bg-surface-container"
+                        )}
+                      >
+                        {t.isFinished && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Classification Header */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -5623,7 +6130,7 @@ export default function BeachProApp() {
                   }}
                   className="w-full py-5 bg-white border-2 border-primary/20 text-primary rounded-full font-black text-sm uppercase tracking-widest hover:bg-primary/5 transition-all flex items-center justify-center gap-3"
                 >
-                  VER RODADAS E RESULTADOS
+                  VER RODADAS E EDITAR RESULTADOS
                   <History size={20} />
                 </button>
 
@@ -5746,9 +6253,17 @@ export default function BeachProApp() {
                     )}
                   </h2>
                   {userProfile?.userTag && (
-                    <div className="mb-2 px-3 py-1 bg-white text-primary text-sm font-mono font-bold rounded-full tracking-wider shadow-md">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(userProfile.userTag);
+                        setSnackMessage('@ copiado!');
+                        setTimeout(() => setSnackMessage(null), 2000);
+                      }}
+                      className="mb-2 px-3 py-1 bg-white text-primary text-sm font-mono font-bold rounded-full tracking-wider shadow-md flex items-center gap-2 active:scale-95 transition-all hover:shadow-lg"
+                    >
                       {userProfile.userTag}
-                    </div>
+                      <Copy size={12} className="text-primary/50" />
+                    </button>
                   )}
                   <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">
                     {user?.email}
@@ -5758,68 +6273,184 @@ export default function BeachProApp() {
 
               <div className="wave-container px-6 pt-10 pb-32">
                 <div className="max-w-xl mx-auto space-y-6">
-                  {/* 2. Call to Action de Monetização (DESTAQUE MÁXIMO) */}
-                  <motion.button 
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
-                    onClick={() => {
-                      if (!isPremium) setUpgradeReason('VERIFIED_BADGE');
-                      setShowUpgradeModal(true);
-                    }}
-                    className={cn(
-                      "w-full relative overflow-hidden p-6 rounded-[2rem] shadow-xl group flex items-center justify-between transition-all",
-                      isPremium 
-                        ? "bg-slate-900 border border-amber-500/30 shadow-amber-900/10" 
-                        : "bg-[#cdf03b] shadow-secondary/10"
-                    )}
-                  >
-                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    
-                    {isPremium && (
-                      <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-400/10 rounded-full blur-2xl" />
-                    )}
 
-                    <div className="relative z-10 flex items-center gap-4">
-                      <div className={cn(
-                        "w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm relative overflow-hidden",
-                        isPremium ? "bg-amber-500 text-slate-950" : "bg-primary/10 text-primary"
-                      )}>
-                        {isPremium && (
-                          <motion.div 
+                  {/* ── Stats consolidadas ──────────────────────────────── */}
+                  <div>
+                    <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-3 px-1">Estatísticas nas Ligas</p>
+                  {(() => {
+                    // Aggregate stats across all leagues
+                    const allStats = rankings.flatMap(r => {
+                      const stat = rankingStats.find ? null : null; // fallback
+                      return [];
+                    });
+                    // Get from userProfile tournament history across all leagues
+                    const allHistory: any[] = [];
+                    rankings.forEach(r => {
+                      // We'll use the data from the active ranking stats
+                    });
+
+                    // Compute from tournaments the user participated in
+                    const userTournaments = tournaments.filter(t =>
+                      t.players.some((p: any) => p.id === user?.uid)
+                    );
+                    const totalTournaments = userTournaments.length;
+                    const totalWins = userTournaments.reduce((acc, t) => {
+                      const rankings2 = calculateRankings(t.players, t.matches, t.rankingCriteria || 'WINS');
+                      return acc + (rankings2[0]?.id === user?.uid ? 1 : 0);
+                    }, 0);
+                    const totalPoints = userTournaments.reduce((acc, t) => {
+                      const ranks = calculateRankings(t.players, t.matches, t.rankingCriteria || 'WINS');
+                      const me = ranks.find((p: any) => p.id === user?.uid);
+                      return acc + (me?.gamesWon || 0);
+                    }, 0);
+
+                    const stats = [
+                      { label: 'Torneios', value: totalTournaments, icon: '🏟️' },
+                      { label: 'Vitórias', value: totalWins, icon: '🏆' },
+                      { label: 'Pontos', value: totalPoints, icon: '⚡' },
+                    ];
+
+                    return (
+                      <div className="grid grid-cols-3 gap-3">
+                        {stats.map(s => (
+                          <div key={s.label} className="bg-white rounded-[1.75rem] p-4 border border-surface-container shadow-sm text-center">
+                            <div className="text-xl mb-1">{s.icon}</div>
+                            <p className="text-xl font-black text-primary leading-none mb-1">{s.value}</p>
+                            <p className="text-[8px] font-black text-on-surface-variant/40 uppercase tracking-widest">{s.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  </div>
+
+                  {/* ── Ligas que participa ──────────────────────────────── */}
+                  {rankings.filter(r => r.athleteIds?.includes(user?.uid || '')).length > 0 && (
+                    <div className="bg-white rounded-[2.5rem] p-5 border border-surface-container shadow-sm">
+                      <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-4 px-1">Minhas Ligas</p>
+                      <div className="space-y-3">
+                        {rankings.filter(r => r.athleteIds?.includes(user?.uid || '')).map(r => {
+                          // Find user position in this ranking
+                          const leagueStats = rankingStats;
+                          const sorted = [...leagueStats].sort((a, b) => b.totalPoints - a.totalPoints);
+                          const pos = sorted.findIndex(s => s.id === user?.uid);
+                          const myStats = sorted.find(s => s.id === user?.uid);
+                          const medals = ['🥇','🥈','🥉'];
+
+                          return (
+                            <button
+                              key={r.id}
+                              onClick={() => navigateTo('RANKING_DETAILS', { rankingId: r.id })}
+                              className="w-full flex items-center gap-3 p-3 bg-slate-50 rounded-2xl hover:bg-primary/5 transition-all active:scale-98 text-left"
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
+                                {r.coverUrl && !r.coverUrl.startsWith('data:') ? (
+                                  <Image src={r.coverUrl} alt={r.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <Award size={18} className="text-primary" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-black text-on-surface uppercase italic truncate pr-1">{r.name}</p>
+                                {myStats && myStats.totalPoints > 0 && (
+                                  <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">
+                                    {myStats.totalPoints} pts
+                                  </p>
+                                )}
+                              </div>
+                              {pos >= 0 && pos < 3 ? (
+                                <span className="text-lg shrink-0">{medals[pos]}</span>
+                              ) : pos >= 0 ? (
+                                <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-1 rounded-full shrink-0">#{pos + 1}</span>
+                              ) : null}
+                              <ChevronRight size={14} className="text-on-surface-variant/20 shrink-0" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Histórico recente ────────────────────────────────── */}
+                  {(() => {
+                    const recent = tournaments
+                      .filter(t => t.isFinished && t.players.some((p: any) => p.id === user?.uid))
+                      .slice(0, 4);
+                    if (recent.length === 0) return null;
+                    return (
+                      <div className="bg-white rounded-[2.5rem] p-5 border border-surface-container shadow-sm">
+                        <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-4 px-1">Histórico Recente</p>
+                        <div className="space-y-2">
+                          {recent.map(t => {
+                            const ranks = calculateRankings(t.players, t.matches, t.rankingCriteria || 'WINS');
+                            const pos = ranks.findIndex((p: any) => p.id === user?.uid);
+                            const medals = ['🥇','🥈','🥉'];
+                            const me = ranks.find((p: any) => p.id === user?.uid);
+                            return (
+                              <button
+                                key={t.id}
+                                onClick={() => navigateTo('FINISHED', { tournamentId: t.id })}
+                                className="w-full flex items-center gap-3 p-3 bg-slate-50 rounded-2xl hover:bg-primary/5 transition-all text-left active:scale-98"
+                              >
+                                <span className="text-xl shrink-0">{pos >= 0 && pos < 3 ? medals[pos] : `#${pos + 1}`}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-black text-on-surface uppercase italic truncate pr-1">{t.name}</p>
+                                  <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">
+                                    {me ? `${me.gamesWon} pts · ${me.wins}V` : ''}
+                                  </p>
+                                </div>
+                                <ChevronRight size={14} className="text-on-surface-variant/20 shrink-0" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Premium CTA — shown only to free users */}
+                  {!isPremium && (
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => { setUpgradeReason('GENERIC'); setShowUpgradeModal(true); }}
+                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-[2rem] p-5 flex items-center justify-between shadow-xl shadow-amber-400/30 active:scale-95 transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+                          <Zap size={24} className="fill-slate-900 text-slate-900" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black text-slate-900 uppercase italic tracking-tight leading-none mb-1">SEJA BEACH PRÓ PREMIUM</p>
+                          <p className="text-[9px] font-black text-slate-900/60 uppercase tracking-widest">A partir de R$ 9,90/mês</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={20} className="text-slate-900/70 shrink-0" />
+                    </motion.button>
+                  )}
+
+                  {/* Premium status card — only for premium users */}
+                  {isPremium && (
+                    <motion.div
+                      className="w-full relative overflow-hidden p-6 rounded-[2rem] shadow-xl bg-slate-900 border border-amber-500/30"
+                    >
+                      <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-400/10 rounded-full blur-2xl" />
+                      <div className="relative z-10 flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm relative overflow-hidden bg-amber-500 text-slate-950">
+                          <motion.div
                             animate={{ x: [-20, 100] }}
                             transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
                             className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-12"
                           />
-                        )}
-                        {isPremium ? <TrophyIcon size={28} /> : <Sparkles size={28} className="fill-primary" />}
-                      </div>
-                      <div className="text-left">
-                        <p className={cn(
-                          "font-black text-xs uppercase italic tracking-tighter leading-none mb-1",
-                          isPremium ? "text-amber-400" : "text-primary"
-                        )}>
-                          {isPremium ? "STATUS: BEACH PRO PREMIUM" : "SEJA BEACH PRÓ PREMIUM"}
-                        </p>
-                        <p className={cn(
-                          "text-[8px] font-black uppercase tracking-widest leading-none",
-                          isPremium ? "text-slate-400" : "text-primary/60"
-                        )}>
-                          {isPremium ? "SUA EXPERIÊNCIA É ILIMITADA" : "CRIE TORNEIOS E RANKINGS SEM LIMITES"}
-                        </p>
-                      </div>
-                    </div>
-                    {isPremium ? (
-                      <div className="relative z-10 flex flex-col items-end">
-                        <div className="bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
-                          ATIVO
+                          <TrophyIcon size={28} />
                         </div>
+                        <div className="text-left flex-1">
+                          <p className="font-black text-xs uppercase italic tracking-tighter leading-none mb-1 text-amber-400">STATUS: BEACH PRO PREMIUM</p>
+                          <p className="text-[8px] font-black uppercase tracking-widest leading-none text-slate-400">SUA EXPERIÊNCIA É ILIMITADA</p>
+                        </div>
+                        <div className="bg-amber-500/20 text-amber-500 px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase shrink-0">ATIVO</div>
                       </div>
-                    ) : (
-                      <div className="relative z-10 bg-primary/10 p-2 rounded-full text-primary">
-                        <ChevronRight size={20} />
-                      </div>
-                    )}
-                  </motion.button>
+                    </motion.div>
+                  )}
 
                   <div className="bg-white rounded-[2.5rem] p-4 border border-surface-container shadow-sm space-y-1">
                     <button 
@@ -6041,85 +6672,81 @@ export default function BeachProApp() {
               <div className="wave-container px-6 pt-10 pb-32">
                 <div className="max-w-2xl mx-auto space-y-4">
                   {tournaments.filter(t => !t.isHidden).length > 0 ? (
-                    tournaments.filter(t => !t.isHidden).sort((a, b) => b.createdAt - a.createdAt).map(t => (
-                      <div 
-                        key={t.id} 
-                        className="bg-white rounded-[2rem] p-6 border border-surface-container shadow-sm hover:shadow-md transition-all group"
+                    tournaments.filter(t => !t.isHidden).sort((a, b) => { if(a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1; return b.createdAt - a.createdAt; }).map(t => (
+                      <div
+                        key={t.id}
+                        className={cn(
+                          "rounded-[2rem] border shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer group",
+                          t.isFinished ? "bg-slate-50 border-slate-100" : "bg-white border-primary/10"
+                        )}
+                        onClick={() => navigateTo(t.isFinished ? 'FINISHED' : 'TOURNAMENT', { tournamentId: t.id, tab: t.isFinished ? undefined : 'MATCHES', round: null })}
                       >
-                              <div className="flex justify-between items-start mb-2">
-                                <h3 className="text-xl font-display font-black text-primary uppercase italic leading-none break-words pr-4">
-                                  {t.name}
-                                </h3>
-                                <button 
-                                   onClick={() => setTournamentToDelete(t.id)}
-                                   className="p-3 text-rose-500/20 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                                   title="Excluir Torneio"
-                                >
-                                  <Trash2 size={20} />
-                                </button>
-                              </div>
+                        {/* Finished banner */}
+                        {t.isFinished && (
+                          <div className="bg-slate-700 px-5 py-1.5 flex items-center gap-2">
+                            <CheckCircle2 size={10} className="text-emerald-400" />
+                            <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">Torneio Finalizado</span>
+                          </div>
+                        )}
 
-                              <div className="flex items-center gap-2 mb-4">
-                                <span className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest">
-                                  {(t.athleteCount || t.players.length)} Atletas
+                        <div className="p-5">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className={cn(
+                                "text-lg font-display font-black uppercase italic leading-none truncate pr-1 mb-1.5",
+                                t.isFinished ? "text-slate-400" : "text-primary"
+                              )}>
+                                {t.name}
+                              </h3>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">
+                                  {(t.athleteCount || t.players.length)} atletas
                                 </span>
-                                <span className="w-1 h-1 bg-on-surface-variant/20 rounded-full" />
-                                <span className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest">
+                                <span className="text-on-surface-variant/20 text-[9px]">·</span>
+                                <span className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">
                                   {(() => {
                                     if (t.currentRound >= 100) {
-                                      const types: { [key: number]: string } = {
-                                        100: 'Oitavas',
-                                        101: 'Quartas',
-                                        102: 'Semi',
-                                        103: 'Final'
-                                      };
-                                      return types[t.currentRound] || `Playoff ${t.currentRound}`;
+                                      const types: { [key: number]: string } = { 100: 'Oitavas', 101: 'Quartas', 102: 'Semi', 103: 'Final' };
+                                      return types[t.currentRound] || `Playoff`;
                                     }
                                     const totalRegular = Math.max(...t.matches.map(m => m.round).filter(r => r < 100), 0) || t.totalRounds;
                                     return `Rodada ${t.currentRound}/${totalRegular}`;
                                   })()}
                                 </span>
+                                <span className="text-on-surface-variant/20 text-[9px]">·</span>
+                                <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-widest">
+                                  {t.format?.replace('_INDIVIDUAL','').replace(/_/g,' ')}
+                                </span>
                               </div>
-
-                              <div className="flex gap-2 mb-2">
-                                <button 
-                                  onClick={() => {
-                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
-                                  }}
-                                  className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
-                                >
-                                  <Users size={14} />
-                                  Partidas
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'ROUNDS', round: null });
-                                  }}
-                                  className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
-                                >
-                                  <History size={14} />
-                                  Rodadas
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'RANKING', round: null });
-                                  }}
-                                  className="flex-1 py-3 bg-surface-container-low rounded-full font-black text-[9px] text-primary hover:bg-surface-container-high transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
-                                >
-                                  <BarChart size={14} />
-                                  Ranking
-                                </button>
-                              </div>
-                              <button 
-                                onClick={() => {
-                                  navigateTo(t.isFinished ? 'FINISHED' : 'TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null });
-                                }}
-                                className="w-full py-3 border-2 border-black rounded-full font-black text-[10px] text-black hover:bg-black/5 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
-                              >
-                                <Settings size={14} />
-                                Gerenciar
-                              </button>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setTournamentToDelete(t.id); }}
+                              className={cn(
+                                "rounded-xl transition-all shrink-0 flex items-center gap-1.5 active:scale-90",
+                                t.isFinished
+                                  ? "px-3 py-2 bg-rose-500 text-white text-[9px] font-black uppercase tracking-widest shadow-md shadow-rose-500/20"
+                                  : "p-2 text-rose-200 hover:text-rose-500 hover:bg-rose-50"
+                              )}
+                            >
+                              <Trash2 size={13} />
+                              {t.isFinished && <span>EXCLUIR</span>}
+                            </button>
                           </div>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); if (t.isFinished) { navigateTo('FINISHED', { tournamentId: t.id }); } else { navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES', round: null }); } }}
+                            className={cn(
+                              "w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all",
+                              t.isFinished
+                                ? "bg-slate-100 text-slate-400"
+                                : "border-2 border-primary/20 text-primary group-hover:bg-primary group-hover:text-white"
+                            )}
+                          >
+                            <Settings size={13} />
+                            {t.isFinished ? 'VER RESULTADO' : 'GERENCIAR'}
+                          </button>
+                        </div>
+                      </div>
 
                     ))
                   ) : (
@@ -6590,6 +7217,549 @@ export default function BeachProApp() {
                   <button onClick={() => setShowPendingPopup(false)} className="mt-5 w-full py-4 bg-slate-100 text-slate-500 rounded-full font-black text-[10px] uppercase tracking-widest">
                     RESOLVER DEPOIS
                   </button>
+                </motion.div>
+              </div>
+            );
+          })()}
+        </AnimatePresence>
+
+        {/* ─── Support Popup (free users only, rotates 3 variants) ────────── */}
+        <AnimatePresence>
+          {showSupportPopup && !isPremium && step === 'HOME' && (() => {
+            const close = () => setShowSupportPopup(false);
+            const openPremium = () => { close(); setUpgradeReason('GENERIC'); setShowUpgradeModal(true); };
+
+            const variants = [
+              // ── Variant 0: Manifesto ───────────────────────────────────
+              () => (
+                <motion.div
+                  key="support-0"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[800] flex flex-col items-center justify-end p-4 bg-black/70 backdrop-blur-sm"
+                >
+                  <motion.div
+                    initial={{ y: 60, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-[#0a1628] w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10"
+                  >
+                    {/* Art header */}
+                    <div className="relative bg-gradient-to-br from-[#004a8c] to-[#0a1628] px-8 pt-10 pb-8 text-center overflow-hidden">
+                      <div className="absolute inset-0 opacity-10">
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#bef264] rounded-full blur-3xl" />
+                      </div>
+                      <div className="text-5xl mb-4">🎾</div>
+                      <h2 className="text-xl font-black text-white uppercase italic tracking-tight leading-tight mb-2">
+                        Feito por quem <span className="text-[#bef264]">joga</span>, para quem <span className="text-[#bef264]">organiza</span>
+                      </h2>
+                    </div>
+
+                    <div className="px-7 py-6 space-y-5">
+                      <p className="text-sm text-white/70 leading-relaxed text-center">
+                        O BeachPró é um app <span className="text-white font-bold">independente</span>. Não temos investidores, não vendemos dados e — orgulho total — <span className="text-[#bef264] font-bold">não colocamos nenhum anúncio</span> na sua cara enquanto você organiza um torneio.
+                      </p>
+                      <p className="text-sm text-white/70 leading-relaxed text-center">
+                        Se o app está facilitando sua vida na quadra, considere assinar o Premium. É a forma direta de manter esse projeto vivo e crescendo.
+                      </p>
+
+                      <button
+                        onClick={openPremium}
+                        className="w-full py-4 bg-[#bef264] text-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-[#bef264]/20 active:scale-95 transition-all"
+                      >
+                        APOIAR COM PREMIUM ⚡
+                      </button>
+
+                      <button
+                        onClick={close}
+                        className="w-full py-3 text-white/30 text-[10px] font-black uppercase tracking-widest text-center"
+                      >
+                        AGORA NÃO, PULAR →
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ),
+
+              // ── Variant 1: Free vs Premium ────────────────────────────
+              () => (
+                <motion.div
+                  key="support-1"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[800] flex flex-col items-center justify-end p-4 bg-black/70 backdrop-blur-sm"
+                >
+                  <motion.div
+                    initial={{ y: 60, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl"
+                  >
+                    <div className="bg-slate-900 px-7 pt-8 pb-6 text-center">
+                      <p className="text-[9px] font-black text-white/30 uppercase tracking-[3px] mb-2">Sem anúncios. Nunca.</p>
+                      <h2 className="text-xl font-black text-white uppercase italic tracking-tight">O que você ainda pode desbloquear</h2>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-3">Você tem agora</p>
+                          {['1 torneio ativo', 'Até 8 atletas', 'Participa de 2 ligas'].map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 mb-1.5">
+                              <div className="w-2 h-2 rounded-full bg-slate-200 shrink-0" />
+                              <p className="text-[8px] font-black text-slate-500">{f}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+                          <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-3">Com Premium</p>
+                          {['Torneios ilimitados', 'Atletas ilimitados', 'Criar ligas', 'Grupos + Mata-Mata'].map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 mb-1.5">
+                              <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                              <p className="text-[8px] font-black text-amber-800">{f}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-center">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">A partir de</p>
+                        <p className="text-2xl font-black text-slate-900">R$ 9,90<span className="text-sm text-slate-400">/mês</span></p>
+                        <p className="text-[8px] text-slate-400 font-black">· sem anúncios · sem dados vendidos</p>
+                      </div>
+
+                      <button onClick={openPremium} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2">
+                        VER PLANOS <span className="text-amber-400">⚡</span>
+                      </button>
+                      <button onClick={close} className="w-full py-2 text-slate-300 text-[10px] font-black uppercase tracking-widest text-center">
+                        PULAR POR AGORA →
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ),
+
+              // ── Variant 2: Bolinha ou Raquete ─────────────────────────
+              () => (
+                <motion.div
+                  key="support-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[800] flex flex-col items-center justify-end p-4 bg-black/70 backdrop-blur-sm"
+                >
+                  <motion.div
+                    initial={{ y: 60, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-[#0a1628] w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10"
+                  >
+                    <div className="px-7 pt-8 pb-4 text-center">
+                      <p className="text-[9px] font-black text-white/30 uppercase tracking-[3px] mb-3">SOMOS INDEPENDENTES · SEM ANÚNCIOS</p>
+                      <h2 className="text-xl font-black text-white uppercase italic tracking-tight leading-tight">
+                        Nos ajude a pagar as contas 🙏
+                      </h2>
+                      <p className="text-xs text-white/55 mt-3 leading-relaxed">
+                        O BeachPró foi criado nas horas vagas por desenvolvedores que jogam beach tennis e sentiam falta de uma ferramenta decente. Não colocamos anúncio nenhum porque odiamos isso tanto quanto você.
+                      </p>
+                      <p className="text-xs text-white/55 mt-2 leading-relaxed">
+                        Se o app está sendo útil, que tal nos ajudar a comprar uma bolinha nova ou pagar a parcela da raquete que parcelamos no cartão? 😅
+                      </p>
+                    </div>
+
+                    <div className="px-6 pb-2 grid grid-cols-2 gap-3">
+                      {/* Bolinha */}
+                      <button
+                        onClick={openPremium}
+                        className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center active:scale-95 transition-all hover:border-[#bef264]/40"
+                      >
+                        <div className="text-4xl mb-2">🎾</div>
+                        <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">Uma bolinha</p>
+                        <p className="text-xl font-black text-white">R$ 19,90</p>
+                        <p className="text-[7px] text-white/30 font-black uppercase tracking-widest">/mês · mensal</p>
+                        <p className="text-[7px] text-white/40 mt-1 leading-tight">Cancele quando quiser</p>
+                      </button>
+
+                      {/* Raquete */}
+                      <button
+                        onClick={openPremium}
+                        className="bg-[#bef264]/10 border-2 border-[#bef264]/40 rounded-2xl p-4 text-center active:scale-95 transition-all relative"
+                      >
+                        <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-[#bef264] text-slate-900 text-[6px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">MELHOR</div>
+                        <div className="text-4xl mb-2">🏸</div>
+                        <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">A parcela da raquete</p>
+                        <p className="text-xl font-black text-white">R$ 9,90</p>
+                        <p className="text-[7px] text-white/30 font-black uppercase tracking-widest">/mês · anual</p>
+                        <p className="text-[7px] text-white/40 mt-1 leading-tight">R$ 118,80/ano · 7 dias grátis</p>
+                      </button>
+                    </div>
+
+                    <div className="px-6 pb-7 pt-4 space-y-2">
+                      <button onClick={close} className="w-full py-3 text-white/25 text-[10px] font-black uppercase tracking-widest text-center">
+                        AINDA NÃO, OBRIGADO →
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ),
+            ];
+
+            const VariantComponent = variants[supportPopupVariant % 3];
+            return <VariantComponent />;
+          })()}
+        </AnimatePresence>
+
+        {/* ─── Onboarding Modal ──────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showOnboarding && (() => {
+            type TSlide =
+              | { type: 'manifesto' }
+              | { type: 'screen'; imgIdx: number; section: string; title: string; desc: string; features: {icon: string; label: string; desc: string}[] }
+              | { type: 'premium' };
+
+            const SLIDES: TSlide[] = [
+              { type: 'manifesto' },
+              { type: 'screen', imgIdx: 0, section: 'Home', title: 'Sua central de comando', desc: 'Torneios ativos, acesso rápido às ligas e criação de novas disputas — tudo na primeira tela.', features: [{ icon: '➕', label: 'Novo Torneio', desc: 'Crie em segundos com vários formatos' }, { icon: '📋', label: 'Torneios Ativos', desc: 'Acompanhe o andamento em tempo real' }] },
+              { type: 'screen', imgIdx: 1, section: 'Torneios', title: 'Crie torneios em segundos', desc: 'Super 4, 6, 8, 10, 12 duplas, individual e eliminatórias. Histórico completo de ativos e finalizados.', features: [{ icon: '🎯', label: 'Vários formatos', desc: 'Round Robin, Grupos, Mata-Mata e mais' }, { icon: '📁', label: 'Histórico completo', desc: 'Resultados salvos para sempre' }] },
+              { type: 'screen', imgIdx: 2, section: 'Partidas', title: 'Placares ao vivo', desc: 'Lance resultados enquanto as partidas acontecem. Edite rodadas anteriores sem sair da tela.', features: [{ icon: '➕', label: 'Lançar placar', desc: 'Botões + e − para cada dupla' }, { icon: '✏️', label: 'Editar rodadas', desc: 'Corrija qualquer resultado anterior' }] },
+              { type: 'screen', imgIdx: 3, section: 'Resultado Final', title: 'Pódio e compartilhamento', desc: 'Campeão em destaque. Gere o card do pódio e compartilhe no WhatsApp ou Instagram.', features: [{ icon: '🏆', label: 'Classificação final', desc: 'Vitórias, saldo e pontos' }, { icon: '📲', label: 'Card do pódio', desc: 'Imagem para compartilhar nas redes' }] },
+              { type: 'screen', imgIdx: 4, section: 'Ligas', title: 'Crie ligas oficiais', desc: 'Monte seu ranking, convide atletas pelo código exclusivo e controle quem entra.', features: [{ icon: '🔑', label: 'Código de convite', desc: '6 letras para compartilhar' }, { icon: '✅', label: 'Aprovação pelo admin', desc: 'Você controla quem participa' }] },
+              { type: 'screen', imgIdx: 5, section: 'Ranking da Liga', title: 'Tabela atualizada automaticamente', desc: 'Pontos entram no ranking após cada torneio. Sem planilha, sem cálculo manual.', features: [{ icon: '🥇', label: 'Ranking ao vivo', desc: 'Pontos, vitórias e participações' }, { icon: '📊', label: 'Histórico da liga', desc: 'Todos os torneios com pódio' }] },
+              { type: 'screen', imgIdx: 6, section: 'Perfil', title: 'Seu histórico pessoal', desc: 'Estatísticas consolidadas em todas as ligas — torneios, vitórias, pontos e posição no ranking.', features: [{ icon: '⚡', label: 'Stats pessoais', desc: 'Torneios, vitórias e pontos' }, { icon: '🏅', label: 'Posição no ranking', desc: 'Sua colocação em cada liga' }] },
+              { type: 'premium' },
+            ];
+
+            const TOTAL = SLIDES.length;
+            const cur = onboardingSlide;
+            const slide = SLIDES[cur];
+            const isLast = cur === TOTAL - 1;
+
+            const finish = () => {
+              localStorage.setItem('btpro_onboarding_done', '1');
+              setShowOnboarding(false);
+              setOnboardingSlide(0);
+            };
+
+            // Inline imgs stored as const (loaded from public script tag)
+            const tutImgs: string[] = typeof window !== 'undefined' && (window as any).__TUTORIAL_IMGS__ ? (window as any).__TUTORIAL_IMGS__ : [];
+
+            return (
+              <motion.div
+                key="onboarding"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[900] flex flex-col overflow-hidden"
+                style={{ background: '#0a1628' }}
+              >
+                {/* Progress bar */}
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10 z-10">
+                  <div className="h-full bg-[#bef264] transition-all duration-400" style={{ width: `${((cur+1)/TOTAL)*100}%` }} />
+                </div>
+
+                {/* Header */}
+                <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-5 pt-12 pb-3 z-10 bg-gradient-to-b from-[#0a1628] to-transparent">
+                  <span className="font-black italic text-white text-base tracking-tight">BEACH<span className="text-[#bef264]">PRÓ</span></span>
+                  <button onClick={finish} className="text-white/30 text-[10px] font-black uppercase tracking-widest">PULAR →</button>
+                </div>
+
+                {/* Slide content */}
+                <div className="flex-1 flex flex-col items-center overflow-y-auto pt-24 pb-28 px-5">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={cur}
+                      initial={{ opacity: 0, x: 30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -30 }}
+                      transition={{ duration: 0.28 }}
+                      className="w-full flex flex-col items-center"
+                    >
+                      {slide.type === 'manifesto' && (
+                        <>
+                          <Image src="/logo2.png" alt="BeachPró" width={220} height={124} className="object-contain drop-shadow-2xl mb-6" priority />
+                          <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-5">
+                            <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">01 / {String(TOTAL).padStart(2,'0')} — Bem-vindo</span>
+                          </div>
+                          <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter text-center leading-tight mb-3">
+                            Feito de <span className="text-[#bef264]">jogador</span> para jogador
+                          </h1>
+                          <div className="space-y-3 w-full mt-2">
+                            {[
+                              { icon: '🎾', label: 'Somos jogadores', desc: 'Criamos o BeachPró porque sentimos falta de uma ferramenta decente. Chega de planilhas e confusão.' },
+                              { icon: '🚫', label: 'Zero anúncios. Nunca.', desc: 'Odiamos anúncios tanto quanto você. Eles nunca aparecerão aqui — é uma promessa.' },
+                              { icon: '🤝', label: 'Independentes', desc: 'Não temos investidores. Nosso objetivo é ajudar jogadores a organizar seus torneios.' },
+                            ].map((f, i) => (
+                              <div key={i} className="flex items-start gap-3 bg-white/4 border border-white/6 rounded-2xl p-3">
+                                <div className="w-8 h-8 rounded-xl bg-[#bef264] flex items-center justify-center text-sm shrink-0">{f.icon}</div>
+                                <div>
+                                  <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-1">{f.label}</p>
+                                  <p className="text-xs text-white/50 leading-relaxed">{f.desc}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {slide.type === 'screen' && (() => {
+                        const s = slide as Extract<TSlide, {type:'screen'}>;
+                        return (
+                          <>
+                            {/* Phone mockup */}
+                            <div className="mb-5 relative">
+                              <div className="w-[180px] bg-[#0d0d0d] rounded-[28px] p-2 shadow-2xl border border-white/8 relative">
+                                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#0d0d0d] rounded-full z-10" />
+                                <div className="rounded-[22px] overflow-hidden" style={{aspectRatio:'9/19.5'}}>
+                                  {tutImgs[s.imgIdx] ? (
+                                    <img src={tutImgs[s.imgIdx]} alt={s.section} className="w-full h-full object-cover object-top" />
+                                  ) : (
+                                    <div className="w-full h-full bg-slate-800 flex items-center justify-center text-white/20 text-xs font-black uppercase">{s.section}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-3">
+                              <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">{String(cur+1).padStart(2,'0')} / {String(TOTAL).padStart(2,'0')} — {s.section}</span>
+                            </div>
+                            <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter text-center mb-2">{s.title}</h2>
+                            <p className="text-xs text-white/50 text-center leading-relaxed mb-4">{s.desc}</p>
+                            <div className="space-y-2 w-full">
+                              {s.features.map((f, i) => (
+                                <div key={i} className="flex items-start gap-3 bg-white/4 border border-white/6 rounded-2xl p-3">
+                                  <div className="w-7 h-7 rounded-xl bg-[#bef264] flex items-center justify-center text-sm shrink-0">{f.icon}</div>
+                                  <div>
+                                    <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">{f.label}</p>
+                                    <p className="text-[11px] text-white/45 leading-tight">{f.desc}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {slide.type === 'premium' && (
+                        <>
+                          <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-5">
+                            <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">{String(cur+1).padStart(2,'0')} / {String(TOTAL).padStart(2,'0')} — Apoie o projeto</span>
+                          </div>
+                          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter text-center mb-2">
+                            Ajude a gente a <span className="text-[#bef264]">continuar</span>
+                          </h2>
+                          <p className="text-xs text-white/50 text-center leading-relaxed mb-4">Somos independentes. Se o app está sendo útil, considere apoiar — ou simplesmente aproveite sem gastar nada.</p>
+                          <div className="bg-white/4 border border-white/8 rounded-2xl p-4 flex items-center gap-3 w-full mb-4">
+                            <span className="text-2xl">🚫</span>
+                            <div>
+                              <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest">Zero anúncios. Para sempre.</p>
+                              <p className="text-[11px] text-white/40 leading-tight">Isso é uma promessa que mantemos.</p>
+                            </div>
+                          </div>
+                          <div className="space-y-3 w-full">
+                            <div className="bg-white/4 border border-white/10 rounded-2xl p-4 flex items-center gap-3">
+                              <span className="text-3xl">🎾</span>
+                              <div className="flex-1">
+                                <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">Uma bolinha</p>
+                                <p className="text-xl font-black text-white">R$ 19,90<span className="text-sm font-normal text-white/30">/mês</span></p>
+                                <p className="text-[10px] text-white/30">Plano mensal · cancele quando quiser</p>
+                              </div>
+                            </div>
+                            <div className="bg-[#bef264]/8 border-2 border-[#bef264]/30 rounded-2xl p-4 flex items-center gap-3 relative">
+                              <div className="absolute -top-2.5 left-4 bg-[#bef264] text-slate-900 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">MELHOR VALOR</div>
+                              <span className="text-3xl">🏸</span>
+                              <div className="flex-1">
+                                <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">A parcela da raquete</p>
+                                <p className="text-xl font-black text-white">R$ 9,90<span className="text-sm font-normal text-white/30">/mês</span></p>
+                                <p className="text-[10px] text-white/30">Anual · R$ 118,80/ano · 7 dias grátis</p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+
+                {/* Bottom nav */}
+                <div className="absolute bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-[#0a1628] to-transparent flex items-center justify-between gap-3">
+                  {/* Dots */}
+                  <div className="flex gap-1.5 items-center">
+                    {SLIDES.map((_, i) => (
+                      <button key={i} onClick={() => setOnboardingSlide(i)}>
+                        <div className="h-1.5 rounded-full transition-all" style={{ width: i === cur ? 20 : 5, background: i === cur ? '#bef264' : 'rgba(255,255,255,0.2)' }} />
+                      </button>
+                    ))}
+                  </div>
+                  {/* Buttons */}
+                  <div className="flex gap-2">
+                    {cur > 0 && (
+                      <button onClick={() => setOnboardingSlide(s => s - 1)} className="h-12 px-4 rounded-full border border-white/15 text-white/40 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">
+                        ←
+                      </button>
+                    )}
+                    <button
+                      onClick={isLast ? finish : () => setOnboardingSlide(s => s + 1)}
+                      className="h-12 px-6 rounded-full font-black text-[11px] uppercase tracking-widest text-slate-900 shadow-xl active:scale-95 transition-all"
+                      style={{ background: '#bef264', boxShadow: '0 4px 20px rgba(190,242,100,0.3)' }}
+                    >
+                      {isLast ? 'COMEÇAR!' : 'PRÓXIMO →'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
+        {/* ─── Cover Crop Modal ──────────────────────────────────────────── */}
+        <AnimatePresence>
+          {coverCropImage && (
+            <motion.div
+              key="cover-crop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[600] flex flex-col bg-black"
+            >
+              <div className="flex items-center justify-between px-5 pt-12 pb-4">
+                <button onClick={() => setCoverCropImage(null)} className="text-white/50 text-[10px] font-black uppercase tracking-widest active:scale-95">
+                  CANCELAR
+                </button>
+                <p className="text-white text-[10px] font-black uppercase tracking-widest">Ajustar Foto</p>
+                <button
+                  onClick={handleCoverCropConfirm}
+                  className="bg-[#bef264] text-slate-900 px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  CONFIRMAR
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col items-center justify-center px-4 gap-5">
+                {/* 3:1 crop window */}
+                <div
+                  className="relative w-full overflow-hidden rounded-2xl border-2 border-[#bef264]/60 select-none"
+                  style={{ aspectRatio: '3/1' }}
+                  onMouseDown={(e) => { (e.currentTarget as any)._drag = true; (e.currentTarget as any)._lx = e.clientX; (e.currentTarget as any)._ly = e.clientY; }}
+                  onMouseMove={(e) => {
+                    if (!(e.currentTarget as any)._drag) return;
+                    const dx = e.clientX - (e.currentTarget as any)._lx;
+                    const dy = e.clientY - (e.currentTarget as any)._ly;
+                    setCropOffset(p => ({ x: p.x + dx, y: p.y + dy }));
+                    (e.currentTarget as any)._lx = e.clientX;
+                    (e.currentTarget as any)._ly = e.clientY;
+                  }}
+                  onMouseUp={(e) => { (e.currentTarget as any)._drag = false; }}
+                  onMouseLeave={(e) => { (e.currentTarget as any)._drag = false; }}
+                  onTouchStart={(e) => { (e.currentTarget as any)._lx = e.touches[0].clientX; (e.currentTarget as any)._ly = e.touches[0].clientY; }}
+                  onTouchMove={(e) => {
+                    const dx = e.touches[0].clientX - (e.currentTarget as any)._lx;
+                    const dy = e.touches[0].clientY - (e.currentTarget as any)._ly;
+                    setCropOffset(p => ({ x: p.x + dx, y: p.y + dy }));
+                    (e.currentTarget as any)._lx = e.touches[0].clientX;
+                    (e.currentTarget as any)._ly = e.touches[0].clientY;
+                  }}
+                >
+                  <img
+                    src={coverCropImage}
+                    alt="crop"
+                    draggable={false}
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    style={{ transform: `translate(${cropOffset.x}px, ${cropOffset.y}px) scale(${cropScale})`, transformOrigin: 'center' }}
+                  />
+                </div>
+
+                {/* Zoom */}
+                <div className="w-full px-2 flex items-center gap-3">
+                  <span className="text-white/40 text-sm font-black">−</span>
+                  <input type="range" min="1" max="3" step="0.05" value={cropScale}
+                    onChange={(e) => setCropScale(parseFloat(e.target.value))}
+                    className="flex-1 accent-[#bef264]"
+                  />
+                  <span className="text-white/40 text-sm font-black">+</span>
+                </div>
+                <p className="text-white/25 text-[9px] font-black uppercase tracking-widest">Arraste · Zoom com o slider</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── Round Selector Modal ──────────────────────────────────────── */}
+        <AnimatePresence>
+          {showRoundSelector && activeTournament && (() => {
+            const allRounds = Array.from(new Set(
+              activeTournament.matches
+                .filter(m => m.round < 100 && m.isCompleted)
+                .map(m => m.round)
+            )).sort((a, b) => a - b);
+
+            if (allRounds.length === 0) {
+              setShowRoundSelector(false);
+              setSnackMessage('Nenhuma rodada concluída ainda.');
+              setTimeout(() => setSnackMessage(null), 2500);
+              return null;
+            }
+            const totalRounds = Math.max(...allRounds, 0) || activeTournament.totalRounds;
+            const currentView = tournamentViewRound ?? activeTournament.currentRound;
+
+            return (
+              <div className="fixed inset-0 z-[500] flex items-end justify-center p-4 bg-black/50 backdrop-blur-sm">
+                <motion.div
+                  initial={{ y: 40, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 40, opacity: 0 }}
+                  className="bg-white w-full max-w-sm rounded-[2.5rem] p-7 shadow-2xl"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-sm font-black text-on-surface uppercase italic">Selecionar Rodada</h3>
+                      <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mt-0.5">Toque para ver e editar</p>
+                    </div>
+                    <button onClick={() => setShowRoundSelector(false)} className="p-2 bg-slate-100 rounded-xl text-slate-400">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-3">
+                    {allRounds.map(r => {
+                      const roundMatches = activeTournament.matches.filter(m => m.round === r);
+                      const completed = roundMatches.every(m => m.isCompleted);
+                      const isCurrent = r === activeTournament.currentRound;
+                      const isViewing = r === currentView;
+
+                      return (
+                        <button
+                          key={r}
+                          onClick={() => {
+                            navigateTo('TOURNAMENT', { tab: 'MATCHES', round: r });
+                            setShowRoundSelector(false);
+                          }}
+                          className={cn(
+                            "aspect-square rounded-2xl flex flex-col items-center justify-center gap-1 border-2 transition-all active:scale-90",
+                            isViewing
+                              ? "bg-primary border-primary text-white shadow-lg shadow-primary/20"
+                              : isCurrent
+                              ? "bg-primary/10 border-primary/30 text-primary"
+                              : completed
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                              : "bg-slate-50 border-slate-100 text-slate-400"
+                          )}
+                        >
+                          <span className="text-lg font-black leading-none">{r}</span>
+                          {completed && !isViewing && (
+                            <Pencil size={8} className="opacity-50" />
+                          )}
+                          {isCurrent && !completed && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-5 text-center">
+                    Toque em qualquer rodada para ver e editar os resultados
+                  </p>
                 </motion.div>
               </div>
             );

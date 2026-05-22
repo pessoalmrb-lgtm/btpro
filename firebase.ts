@@ -2,7 +2,8 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, writeBatch } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, writeBatch } from 'firebase/firestore';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // As variáveis NEXT_PUBLIC_ são seguras para o browser — não contêm segredos.
@@ -28,6 +29,54 @@ const getFirebaseApp = () => {
 export const auth    = typeof window !== 'undefined' ? getAuth(getFirebaseApp())                              : null as any;
 export const db      = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(), firestoreDatabaseId)   : null as any;
 export const storage = typeof window !== 'undefined' ? getStorage(getFirebaseApp())                          : null as any;
+
+// ─── Cache offline ───────────────────────────────────────────────────────────
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // Multiple tabs open — persistence only works in one tab at a time
+      console.warn('Firestore offline persistence: multiple tabs open');
+    } else if (err.code === 'unimplemented') {
+      // Browser doesn't support persistence
+      console.warn('Firestore offline persistence: not supported in this browser');
+    }
+  });
+}
+
+// ─── Firebase Cloud Messaging ────────────────────────────────────────────────
+export const getMessagingInstance = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return getMessaging(getFirebaseApp());
+  } catch {
+    return null;
+  }
+};
+
+export const requestNotificationPermission = async (): Promise<string | null> => {
+  if (typeof window === 'undefined' || !('Notification' in window)) return null;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return null;
+    const messaging = getMessagingInstance();
+    if (!messaging) return null;
+    const token = await getToken(messaging, {
+      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+    });
+    return token || null;
+  } catch (err) {
+    console.warn('FCM token error:', err);
+    return null;
+  }
+};
+
+export const onForegroundMessage = (callback: (payload: any) => void) => {
+  const messaging = getMessagingInstance();
+  if (!messaging) return () => {};
+  return onMessage(messaging, callback);
+};
+
+export { getToken, onMessage };
 
 export const getGoogleProvider = () => new GoogleAuthProvider();
 
