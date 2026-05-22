@@ -105,6 +105,7 @@ export type PlayerStats = {
   name: string;
   photo?: string;
   userTag?: string;
+  isPremium?: boolean;
   totalPoints: number;
   victories: number;
   pneus: number;
