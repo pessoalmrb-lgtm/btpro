@@ -228,8 +228,6 @@ export default function BeachProApp() {
   const [showDuplicatePopup, setShowDuplicatePopup] = useState(false);
   const [showManualAthletePopup, setShowManualAthletePopup] = useState(false);
   const [showLowCourtsPopup, setShowLowCourtsPopup] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingSlide, setOnboardingSlide] = useState(0);
   const [showSupportPopup, setShowSupportPopup] = useState(false);
   const [supportPopupVariant, setSupportPopupVariant] = useState(0);
   const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
@@ -407,9 +405,10 @@ export default function BeachProApp() {
     if (!splashDone || !user) return;
     if (typeof window === 'undefined') return;
     const seen = localStorage.getItem('btpro_onboarding_done');
-    if (!seen) {
-      setShowOnboarding(true);
-    } else {
+    if (seen !== null) {
+      // onboarding removed
+    }
+    {
       const lastVariant = parseInt(localStorage.getItem('btpro_support_variant') || '-1');
       const nextVariant = (lastVariant + 1) % 3;
       setSupportPopupVariant(nextVariant);
@@ -1246,8 +1245,8 @@ export default function BeachProApp() {
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     const teams = isIndividual ? n : Math.floor(n / 2);
     const matchesPerRound = Math.floor(teams / 2);
-    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 3;
-    if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 4;
+    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 1;
+    if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 2;
     if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return 2;
     if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return 3;
     if (tournamentFormat === 'REI_DA_QUADRA')       return 1;
@@ -4961,36 +4960,41 @@ O play na palma da mão! 🏆`;
 
           {isAuthReady && user && step === 'TABLE_COUNT' && (() => {
             // Recomendação de quadras baseada no formato e número de jogadores
-            const getCourtRecommendation = (): { ideal: number; min: number; max: number; reason: string } => {
+            const getCourtRecommendation = (): { ideal: number; min: number; max: number; reason: string; hasWaiting?: boolean } => {
               const n = players.length;
               const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
               const teams = isIndividual ? n : Math.floor(n / 2);
               const matchesPerRound = Math.floor(teams / 2);
 
-              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 3, min: 1, max: 3, reason: `${n} atletas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
-              if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 4, min: 1, max: 4, reason: `${n} atletas — 4 partidas simultâneas por rodada, ideal 4 quadras.` };
-              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 2, max: 3, reason: `${n} atletas — 2 partidas por rodada (2 descansam). 3 quadras aceleram.` };
-              if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 2, max: 4, reason: `${n} atletas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
-              if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: 1, min: 1, max: 1, reason: `4 atletas — 1 partida por vez, 1 quadra suficiente.` };
-              if (tournamentFormat === 'SUPER_3_FIXED')       return { ideal: 1, min: 1, max: 1, reason: `3 duplas — 1 partida por rodada, 1 quadra suficiente.` };
-              if (tournamentFormat === 'SUPER_4_FIXED')       return { ideal: 2, min: 1, max: 2, reason: `4 duplas — 2 partidas simultâneas por rodada, ideal 2 quadras.` };
-              if (tournamentFormat === 'SUPER_5_FIXED')       return { ideal: 2, min: 1, max: 2, reason: `5 duplas — 2 partidas por rodada (1 dupla descansa), ideal 2 quadras.` };
-              if (tournamentFormat === 'SUPER_6_FIXED')       return { ideal: 3, min: 1, max: 3, reason: `6 duplas — 3 partidas simultâneas por rodada, ideal 3 quadras.` };
-              if (tournamentFormat === 'SUPER_8_FIXED')       return { ideal: 4, min: 2, max: 4, reason: `8 duplas — 4 partidas simultâneas por rodada, ideal 4 quadras.` };
-              if (tournamentFormat === 'SUPER_10_FIXED')      return { ideal: 5, min: 2, max: 6, reason: `10 duplas — 5 partidas simultâneas por rodada, ideal 5 quadras.` };
-              if (tournamentFormat === 'SUPER_12_FIXED')      return { ideal: 6, min: 2, max: 6, reason: `12 duplas — 6 partidas simultâneas por rodada, ideal 6 quadras.` };
+              // Individual formats
+              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 3, reason: `6 atletas — 1 quadra por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 2, min: 1, max: 4, reason: `8 atletas — 2 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 1, max: 3, reason: `10 atletas — 2 quadras por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
+              if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 1, max: 4, reason: `12 atletas — 3 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: 1, min: 1, max: 1, reason: `4 atletas — 1 quadra suficiente.` };
+
+              // Fixed duplas formats
+              if (tournamentFormat === 'SUPER_3_FIXED')  return { ideal: 1, min: 1, max: 1, reason: `3 duplas — 1 quadra por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
+              if (tournamentFormat === 'SUPER_4_FIXED')  return { ideal: 2, min: 1, max: 2, reason: `4 duplas — 2 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_5_FIXED')  return { ideal: 2, min: 1, max: 2, reason: `5 duplas — 2 quadras por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
+              if (tournamentFormat === 'SUPER_6_FIXED')  return { ideal: 3, min: 1, max: 3, reason: `6 duplas — 3 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_8_FIXED')  return { ideal: 4, min: 2, max: 4, reason: `8 duplas — 4 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_10_FIXED') return { ideal: 5, min: 2, max: 5, reason: `10 duplas — 5 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_12_FIXED') return { ideal: 6, min: 2, max: 6, reason: `12 duplas — 6 quadras por rodada (sem espera).` };
+
+              // Variable formats
               if (tournamentFormat === 'ROUND_ROBIN') {
-                const matches = (teams * (teams - 1)) / 2;
                 const ideal = Math.min(matchesPerRound, 6);
-                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${matchesPerRound} partidas simultâneas por rodada. ${ideal} quadra(s) ideal.` };
+                const waiting = teams % 2 !== 0;
+                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${ideal} quadra(s) por rodada${waiting ? '. 1 dupla descansa por rodada.' : ' (sem espera).'}`, hasWaiting: waiting };
               }
               if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') {
                 const ideal = Math.min(Math.max(2, Math.floor(teams / 4)), 6);
-                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras para rodadas simultâneas entre grupos.` };
+                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras recomendadas.` };
               }
               if (tournamentFormat === 'MATA_MATA') {
                 const ideal = Math.min(matchesPerRound, 6);
-                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${matchesPerRound} partidas simultâneas no mata-mata, ideal ${ideal} quadra(s).` };
+                return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${ideal} quadra(s) por rodada no mata-mata.` };
               }
               return { ideal: Math.min(matchesPerRound || 2, 6), min: 1, max: 6, reason: 'Selecione as quadras disponíveis.' };
             };
@@ -5024,6 +5028,14 @@ O play na palma da mão! 🏆`;
                         MÁXIMO: {rec.max}
                       </span>
                     </div>
+                    {rec.hasWaiting && (
+                      <div className="flex items-center gap-2 mt-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        <span className="text-sm">⏳</span>
+                        <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest leading-tight">
+                          Neste formato, 1 dupla descansa por rodada
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -7399,207 +7411,6 @@ O play na palma da mão! 🏆`;
 
             const VariantComponent = variants[supportPopupVariant % 3];
             return <VariantComponent />;
-          })()}
-        </AnimatePresence>
-
-        {/* ─── Onboarding Modal ──────────────────────────────────────────── */}
-        <AnimatePresence>
-          {showOnboarding && (() => {
-            type TSlide =
-              | { type: 'manifesto' }
-              | { type: 'screen'; imgIdx: number; section: string; title: string; desc: string; features: {icon: string; label: string; desc: string}[] }
-              | { type: 'premium' };
-
-            const SLIDES: TSlide[] = [
-              { type: 'manifesto' },
-              { type: 'screen', imgIdx: 0, section: 'Home', title: 'Sua central de comando', desc: 'Torneios ativos, acesso rápido às ligas e criação de novas disputas — tudo na primeira tela.', features: [{ icon: '➕', label: 'Novo Torneio', desc: 'Crie em segundos com vários formatos' }, { icon: '📋', label: 'Torneios Ativos', desc: 'Acompanhe o andamento em tempo real' }] },
-              { type: 'screen', imgIdx: 1, section: 'Torneios', title: 'Crie torneios em segundos', desc: 'Super 4, 6, 8, 10, 12 duplas, individual e eliminatórias. Histórico completo de ativos e finalizados.', features: [{ icon: '🎯', label: 'Vários formatos', desc: 'Round Robin, Grupos, Mata-Mata e mais' }, { icon: '📁', label: 'Histórico completo', desc: 'Resultados salvos para sempre' }] },
-              { type: 'screen', imgIdx: 2, section: 'Partidas', title: 'Placares ao vivo', desc: 'Lance resultados enquanto as partidas acontecem. Edite rodadas anteriores sem sair da tela.', features: [{ icon: '➕', label: 'Lançar placar', desc: 'Botões + e − para cada dupla' }, { icon: '✏️', label: 'Editar rodadas', desc: 'Corrija qualquer resultado anterior' }] },
-              { type: 'screen', imgIdx: 3, section: 'Resultado Final', title: 'Pódio e compartilhamento', desc: 'Campeão em destaque. Gere o card do pódio e compartilhe no WhatsApp ou Instagram.', features: [{ icon: '🏆', label: 'Classificação final', desc: 'Vitórias, saldo e pontos' }, { icon: '📲', label: 'Card do pódio', desc: 'Imagem para compartilhar nas redes' }] },
-              { type: 'screen', imgIdx: 4, section: 'Ligas', title: 'Crie ligas oficiais', desc: 'Monte seu ranking, convide atletas pelo código exclusivo e controle quem entra.', features: [{ icon: '🔑', label: 'Código de convite', desc: '6 letras para compartilhar' }, { icon: '✅', label: 'Aprovação pelo admin', desc: 'Você controla quem participa' }] },
-              { type: 'screen', imgIdx: 5, section: 'Ranking da Liga', title: 'Tabela atualizada automaticamente', desc: 'Pontos entram no ranking após cada torneio. Sem planilha, sem cálculo manual.', features: [{ icon: '🥇', label: 'Ranking ao vivo', desc: 'Pontos, vitórias e participações' }, { icon: '📊', label: 'Histórico da liga', desc: 'Todos os torneios com pódio' }] },
-              { type: 'screen', imgIdx: 6, section: 'Perfil', title: 'Seu histórico pessoal', desc: 'Estatísticas consolidadas em todas as ligas — torneios, vitórias, pontos e posição no ranking.', features: [{ icon: '⚡', label: 'Stats pessoais', desc: 'Torneios, vitórias e pontos' }, { icon: '🏅', label: 'Posição no ranking', desc: 'Sua colocação em cada liga' }] },
-              { type: 'premium' },
-            ];
-
-            const TOTAL = SLIDES.length;
-            const cur = onboardingSlide;
-            const slide = SLIDES[cur];
-            const isLast = cur === TOTAL - 1;
-
-            const finish = () => {
-              localStorage.setItem('btpro_onboarding_done', '1');
-              setShowOnboarding(false);
-              setOnboardingSlide(0);
-            };
-
-            // Inline imgs stored as const (loaded from public script tag)
-            const tutImgs: string[] = typeof window !== 'undefined' && (window as any).__TUTORIAL_IMGS__ ? (window as any).__TUTORIAL_IMGS__ : [];
-
-            return (
-              <motion.div
-                key="onboarding"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[900] flex flex-col overflow-hidden"
-                style={{ background: '#0a1628' }}
-              >
-                {/* Progress bar */}
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10 z-10">
-                  <div className="h-full bg-[#bef264] transition-all duration-400" style={{ width: `${((cur+1)/TOTAL)*100}%` }} />
-                </div>
-
-                {/* Header */}
-                <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-5 pt-12 pb-3 z-10 bg-gradient-to-b from-[#0a1628] to-transparent">
-                  <span className="font-black italic text-white text-base tracking-tight">BEACH<span className="text-[#bef264]">PRÓ</span></span>
-                  <button onClick={finish} className="text-white/30 text-[10px] font-black uppercase tracking-widest">PULAR →</button>
-                </div>
-
-                {/* Slide content */}
-                <div className="flex-1 flex flex-col items-center overflow-y-auto pt-24 pb-28 px-5">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={cur}
-                      initial={{ opacity: 0, x: 30 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -30 }}
-                      transition={{ duration: 0.28 }}
-                      className="w-full flex flex-col items-center"
-                    >
-                      {slide.type === 'manifesto' && (
-                        <>
-                          <Image src="/logo2.png" alt="BeachPró" width={220} height={124} className="object-contain drop-shadow-2xl mb-6" priority />
-                          <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-5">
-                            <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">01 / {String(TOTAL).padStart(2,'0')} — Bem-vindo</span>
-                          </div>
-                          <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter text-center leading-tight mb-3">
-                            Feito de <span className="text-[#bef264]">jogador</span> para jogador
-                          </h1>
-                          <div className="space-y-3 w-full mt-2">
-                            {[
-                              { icon: '🎾', label: 'Somos jogadores', desc: 'Criamos o BeachPró porque sentimos falta de uma ferramenta decente. Chega de planilhas e confusão.' },
-                              { icon: '🚫', label: 'Zero anúncios. Nunca.', desc: 'Odiamos anúncios tanto quanto você. Eles nunca aparecerão aqui — é uma promessa.' },
-                              { icon: '🤝', label: 'Independentes', desc: 'Não temos investidores. Nosso objetivo é ajudar jogadores a organizar seus torneios.' },
-                            ].map((f, i) => (
-                              <div key={i} className="flex items-start gap-3 bg-white/4 border border-white/6 rounded-2xl p-3">
-                                <div className="w-8 h-8 rounded-xl bg-[#bef264] flex items-center justify-center text-sm shrink-0">{f.icon}</div>
-                                <div>
-                                  <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-1">{f.label}</p>
-                                  <p className="text-xs text-white/50 leading-relaxed">{f.desc}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {slide.type === 'screen' && (() => {
-                        const s = slide as Extract<TSlide, {type:'screen'}>;
-                        return (
-                          <>
-                            {/* Phone mockup */}
-                            <div className="mb-5 relative">
-                              <div className="w-[180px] bg-[#0d0d0d] rounded-[28px] p-2 shadow-2xl border border-white/8 relative">
-                                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#0d0d0d] rounded-full z-10" />
-                                <div className="rounded-[22px] overflow-hidden" style={{aspectRatio:'9/19.5'}}>
-                                  {tutImgs[s.imgIdx] ? (
-                                    <img src={tutImgs[s.imgIdx]} alt={s.section} className="w-full h-full object-cover object-top" />
-                                  ) : (
-                                    <div className="w-full h-full bg-slate-800 flex items-center justify-center text-white/20 text-xs font-black uppercase">{s.section}</div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-3">
-                              <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">{String(cur+1).padStart(2,'0')} / {String(TOTAL).padStart(2,'0')} — {s.section}</span>
-                            </div>
-                            <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter text-center mb-2">{s.title}</h2>
-                            <p className="text-xs text-white/50 text-center leading-relaxed mb-4">{s.desc}</p>
-                            <div className="space-y-2 w-full">
-                              {s.features.map((f, i) => (
-                                <div key={i} className="flex items-start gap-3 bg-white/4 border border-white/6 rounded-2xl p-3">
-                                  <div className="w-7 h-7 rounded-xl bg-[#bef264] flex items-center justify-center text-sm shrink-0">{f.icon}</div>
-                                  <div>
-                                    <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">{f.label}</p>
-                                    <p className="text-[11px] text-white/45 leading-tight">{f.desc}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-
-                      {slide.type === 'premium' && (
-                        <>
-                          <div className="inline-flex items-center gap-2 bg-[#bef264]/10 border border-[#bef264]/20 rounded-full px-3 py-1.5 mb-5">
-                            <span className="text-[9px] font-black text-[#bef264] uppercase tracking-[3px]">{String(cur+1).padStart(2,'0')} / {String(TOTAL).padStart(2,'0')} — Apoie o projeto</span>
-                          </div>
-                          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter text-center mb-2">
-                            Ajude a gente a <span className="text-[#bef264]">continuar</span>
-                          </h2>
-                          <p className="text-xs text-white/50 text-center leading-relaxed mb-4">Somos independentes. Se o app está sendo útil, considere apoiar — ou simplesmente aproveite sem gastar nada.</p>
-                          <div className="bg-white/4 border border-white/8 rounded-2xl p-4 flex items-center gap-3 w-full mb-4">
-                            <span className="text-2xl">🚫</span>
-                            <div>
-                              <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest">Zero anúncios. Para sempre.</p>
-                              <p className="text-[11px] text-white/40 leading-tight">Isso é uma promessa que mantemos.</p>
-                            </div>
-                          </div>
-                          <div className="space-y-3 w-full">
-                            <div className="bg-white/4 border border-white/10 rounded-2xl p-4 flex items-center gap-3">
-                              <span className="text-3xl">🎾</span>
-                              <div className="flex-1">
-                                <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">Uma bolinha</p>
-                                <p className="text-xl font-black text-white">R$ 19,90<span className="text-sm font-normal text-white/30">/mês</span></p>
-                                <p className="text-[10px] text-white/30">Plano mensal · cancele quando quiser</p>
-                              </div>
-                            </div>
-                            <div className="bg-[#bef264]/8 border-2 border-[#bef264]/30 rounded-2xl p-4 flex items-center gap-3 relative">
-                              <div className="absolute -top-2.5 left-4 bg-[#bef264] text-slate-900 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">MELHOR VALOR</div>
-                              <span className="text-3xl">🏸</span>
-                              <div className="flex-1">
-                                <p className="text-[10px] font-black text-[#bef264] uppercase tracking-widest mb-0.5">A parcela da raquete</p>
-                                <p className="text-xl font-black text-white">R$ 9,90<span className="text-sm font-normal text-white/30">/mês</span></p>
-                                <p className="text-[10px] text-white/30">Anual · R$ 118,80/ano · 7 dias grátis</p>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-
-                {/* Bottom nav */}
-                <div className="absolute bottom-0 left-0 right-0 px-5 pb-10 pt-4 bg-gradient-to-t from-[#0a1628] to-transparent flex items-center justify-between gap-3">
-                  {/* Dots */}
-                  <div className="flex gap-1.5 items-center">
-                    {SLIDES.map((_, i) => (
-                      <button key={i} onClick={() => setOnboardingSlide(i)}>
-                        <div className="h-1.5 rounded-full transition-all" style={{ width: i === cur ? 20 : 5, background: i === cur ? '#bef264' : 'rgba(255,255,255,0.2)' }} />
-                      </button>
-                    ))}
-                  </div>
-                  {/* Buttons */}
-                  <div className="flex gap-2">
-                    {cur > 0 && (
-                      <button onClick={() => setOnboardingSlide(s => s - 1)} className="h-12 px-4 rounded-full border border-white/15 text-white/40 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">
-                        ←
-                      </button>
-                    )}
-                    <button
-                      onClick={isLast ? finish : () => setOnboardingSlide(s => s + 1)}
-                      className="h-12 px-6 rounded-full font-black text-[11px] uppercase tracking-widest text-slate-900 shadow-xl active:scale-95 transition-all"
-                      style={{ background: '#bef264', boxShadow: '0 4px 20px rgba(190,242,100,0.3)' }}
-                    >
-                      {isLast ? 'COMEÇAR!' : 'PRÓXIMO →'}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            );
           })()}
         </AnimatePresence>
 

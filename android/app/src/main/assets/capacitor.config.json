@@ -1,8 +1,19 @@
 {
-	"appId": "com.ligabeachpro.app",
-	"appName": "Liga Beach Pro",
+	"appId": "com.beachpro.app",
+	"appName": "BeachPró",
 	"webDir": "out",
 	"server": {
 		"androidScheme": "https"
+	},
+	"android": {
+		"allowMixedContent": true,
+		"backgroundColor": "#0a1628"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 2500,
+			"backgroundColor": "#0a1628",
+			"showSpinner": false
+		}
 	}
 }
