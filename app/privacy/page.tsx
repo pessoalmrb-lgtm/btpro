@@ -3,27 +3,20 @@ export default function PrivacyPolicy() {
     <main style={{ maxWidth: 680, margin: '0 auto', padding: '40px 24px', fontFamily: 'sans-serif', lineHeight: 1.7, color: '#1e293b' }}>
       <h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>Política de Privacidade</h1>
       <p style={{ color: '#64748b', marginBottom: 32 }}>Última atualização: maio de 2026</p>
-
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>1. Informações coletadas</h2>
       <p>O BeachPró coleta nome, endereço de e-mail e foto de perfil fornecidos no cadastro. Também armazenamos os dados de torneios, ligas e resultados criados pelo usuário.</p>
-
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>2. Uso das informações</h2>
-      <p>As informações são usadas exclusivamente para fornecer as funcionalidades do aplicativo, como criação de torneios, rankings e perfil de atleta. Não vendemos nem compartilhamos seus dados com terceiros.</p>
-
+      <p>As informações são usadas exclusivamente para fornecer as funcionalidades do aplicativo. Não vendemos nem compartilhamos seus dados com terceiros.</p>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>3. Armazenamento</h2>
       <p>Os dados são armazenados de forma segura no Google Firebase, com autenticação e regras de acesso que garantem que cada usuário acessa apenas seus próprios dados.</p>
-
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>4. Cookies e rastreamento</h2>
       <p>O aplicativo não utiliza cookies de rastreamento nem compartilha dados com redes de publicidade.</p>
-
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>5. Direitos do usuário</h2>
-      <p>Você pode solicitar a exclusão da sua conta e de todos os seus dados a qualquer momento pelo e-mail: <a href="mailto:btpro.app@gmail.com" style={{ color: '#0f172a' }}>btpro.app@gmail.com</a></p>
-
+      <p>Você pode solicitar a exclusão da sua conta e de todos os seus dados pelo e-mail: btpro.app@gmail.com</p>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>6. Menores de idade</h2>
       <p>O BeachPró não é direcionado a menores de 13 anos e não coleta intencionalmente dados de crianças.</p>
-
       <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 32 }}>7. Contato</h2>
-      <p>Para dúvidas sobre esta política, entre em contato: <a href="mailto:btpro.app@gmail.com" style={{ color: '#0f172a' }}>btpro.app@gmail.com</a></p>
+      <p>Para dúvidas: btpro.app@gmail.com</p>
     </main>
   );
 }
