@@ -1,4 +1,4 @@
-package com.ligabeachpro.app;
+package com.beachpro.app;
 
 import com.getcapacitor.BridgeActivity;
 

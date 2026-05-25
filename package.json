@@ -13,9 +13,11 @@
     "mobile:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor-community/in-app-review": "^8.0.0",
     "@capacitor/android": "^8.3.1",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
+    "@emailjs/browser": "^4.4.1",
     "@eslint/eslintrc": "^3.3.5",
     "@google/genai": "^1.17.0",
     "@hookform/resolvers": "^5.2.1",

@@ -59,6 +59,7 @@ import { Header } from './Header';
 import { StepContainer } from './StepContainer';
 import { BottomNav } from './BottomNav';
 import { PremiumUpgrade } from './PremiumUpgrade';
+import { SuggestionModal } from './SuggestionModal';
 
 // ─── Premium Badge ──────────────────────────────────────────────────────────
 const PremiumBadge = ({ size = 14 }: { size?: number }) => (
@@ -230,6 +231,7 @@ export default function BeachProApp() {
   const [showLowCourtsPopup, setShowLowCourtsPopup] = useState(false);
   const [showSupportPopup, setShowSupportPopup] = useState(false);
   const [supportPopupVariant, setSupportPopupVariant] = useState(0);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
   const [requestSent, setRequestSent] = useState<string | null>(null);
   const [showPendingPopup, setShowPendingPopup] = useState(false);
@@ -598,6 +600,58 @@ export default function BeachProApp() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTournamentId, showMatchHistory, tournamentTab, tournamentViewRound, tournaments]);
+
+  // --- Capacitor Android Back Button ---
+  React.useEffect(() => {
+    let removeListener: (() => void) | null = null;
+
+    const setupBackButton = async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+
+        const handle = await App.addListener('backButton', ({ canGoBack }) => {
+          // 1. Fechar modais/popups abertos primeiro
+          if (showSuggestionModal)       { setShowSuggestionModal(false);       return; }
+          if (showUpgradeModal)          { setShowUpgradeModal(false);           return; }
+          if (showSupportPopup)          { setShowSupportPopup(false);           return; }
+          if (showFinishConfirmPopup)    { setShowFinishConfirmPopup(false);     return; }
+          if (showLimitPopup)            { setShowLimitPopup(false);             return; }
+          if (tournamentToDelete)        { setTournamentToDelete(null);          return; }
+          if (leagueToDelete)            { setLeagueToDelete(null);              return; }
+          if (leagueToExit)              { setLeagueToExit(null);                return; }
+          if (courtWarning)              { setCourtWarning(null);                return; }
+          if (coverCropImage)            { setCoverCropImage(null);              return; }
+
+          // 2. Se está na HOME, minimiza em vez de fechar
+          if (step === 'HOME') {
+            App.minimizeApp();
+            return;
+          }
+
+          // 3. Navega para trás normalmente
+          if (canGoBack) {
+            window.history.back();
+          } else {
+            setStep('HOME');
+            setActiveTournamentId(null);
+            setActiveRankingId(null);
+          }
+        });
+
+        removeListener = () => handle.remove();
+      } catch {
+        // Silencioso em browser/web — @capacitor/app não disponível
+      }
+    };
+
+    setupBackButton();
+    return () => { removeListener?.(); };
+  }, [
+    step,
+    showSuggestionModal, showUpgradeModal, showSupportPopup, showFinishConfirmPopup,
+    showLimitPopup, tournamentToDelete, leagueToDelete, leagueToExit,
+    courtWarning, coverCropImage,
+  ]);
 
   // --- Actions ---
 
@@ -1367,6 +1421,22 @@ export default function BeachProApp() {
       await batch.commit();
 
       navigateTo('FINISHED');
+      // Pede avaliação na Play Store após evento positivo
+      (async () => {
+        try {
+          const count = parseInt(localStorage.getItem('btpro_tournaments_finished') || '0', 10) + 1;
+          localStorage.setItem('btpro_tournaments_finished', String(count));
+          if (count >= 2) {
+            const lastAsked = parseInt(localStorage.getItem('btpro_review_last_asked') || '0', 10);
+            const daysSince = (Date.now() - lastAsked) / (1000 * 60 * 60 * 24);
+            if (lastAsked === 0 || daysSince >= 30) {
+              const { InAppReview } = await import('@capacitor-community/in-app-review');
+              await InAppReview.requestReview();
+              localStorage.setItem('btpro_review_last_asked', String(Date.now()));
+            }
+          }
+        } catch { /* silencioso em browser */ }
+      })();
       const confetti = (await import('canvas-confetti')).default;
       confetti({
         particleCount: 150,
@@ -6457,6 +6527,21 @@ O play na palma da mão! 🏆`;
 
                   <div className="bg-white rounded-[2.5rem] p-4 border border-surface-container shadow-sm space-y-1">
                     <button 
+                      onClick={() => setShowSuggestionModal(true)}
+                      className="w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest rounded-2xl transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 group-hover:bg-amber-100 transition-colors">
+                          <Lightbulb size={20} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-on-surface font-black text-xs uppercase tracking-widest leading-none mb-1">Sugestões</p>
+                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Nos ajude a melhorar o app</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={18} className="text-on-surface-variant/20" />
+                    </button>
+                    <button 
                       onClick={() => {
                         setEditName(user?.displayName || '');
                         setEditEmail(user?.email || '');
@@ -7743,6 +7828,17 @@ O play na palma da mão! 🏆`;
             }}
           />
         )}
+
+        {/* Suggestion Modal */}
+        <AnimatePresence>
+          {showSuggestionModal && user && (
+            <SuggestionModal
+              onClose={() => setShowSuggestionModal(false)}
+              userEmail={user.email || ''}
+              userName={userProfile?.displayName || user.displayName || ''}
+            />
+          )}
+        </AnimatePresence>
     </div>
 
     <BottomNav 
