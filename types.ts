@@ -49,6 +49,7 @@ export type TournamentFormat =
 
 export type MatchFormat = 
   | '6_GAMES_TIEBREAK' 
+  | '8_GAMES_MAX'
   | '6_GAMES_MAX' 
   | '5_GAMES_MAX' 
   | 'SUM_9_GAMES' 

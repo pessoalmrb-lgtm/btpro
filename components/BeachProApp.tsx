@@ -115,6 +115,14 @@ export default function BeachProApp() {
   const [drawnTeams, setDrawnTeams] = useState<{p1: Player, p2: Player}[]>([]);
   const [courtWarning, setCourtWarning] = useState<{ court: number; tournamentName: string } | null>(null);
   const [showLimitPopup, setShowLimitPopup] = useState(false);
+  const [showFinishedLimitPopup, setShowFinishedLimitPopup] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [viewedTournamentIds, setViewedTournamentIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try { return new Set(JSON.parse(localStorage.getItem('btpro_viewed_tournaments') || '[]')); } catch { return new Set(); }
+  });
+  const [shareBackgroundImage, setShareBackgroundImage] = useState<string | null>(null);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showFinishConfirmPopup, setShowFinishConfirmPopup] = useState(false);
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
   const [leagueToDelete, setLeagueToDelete] = useState<string | null>(null);
@@ -244,6 +252,14 @@ export default function BeachProApp() {
   const [historyDetailTab, setHistoryDetailTab] = useState<'RESULTS' | 'MATCHES'>('RESULTS');
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId);
+
+  // Torneios que o usuário pode gerenciar (próprios ou de ligas onde é admin)
+  const manageableTournaments = tournaments.filter(t => {
+    if (!t.rankingId) return true;
+    const r = rankings.find(rk => rk.id === t.rankingId);
+    if (!r) return true;
+    return r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '');
+  });
   const activeRanking = rankings.find(r => r.id === activeRankingId);
 
   // --- Navigation Helper ---
@@ -400,6 +416,19 @@ export default function BeachProApp() {
     testConnection();
 
     return () => unsubscribe();
+  }, []);
+
+  // Captura resultado do signInWithRedirect (Android/Capacitor)
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const { getRedirectResult } = await import('firebase/auth');
+        await getRedirectResult(auth);
+      } catch {
+        // silencioso
+      }
+    };
+    handleRedirectResult();
   }, []);
 
   // Show onboarding or support popup after splash (must be outside auth effect)
@@ -615,6 +644,7 @@ export default function BeachProApp() {
           if (showUpgradeModal)          { setShowUpgradeModal(false);           return; }
           if (showSupportPopup)          { setShowSupportPopup(false);           return; }
           if (showFinishConfirmPopup)    { setShowFinishConfirmPopup(false);     return; }
+          if (showFinishedLimitPopup)    { setShowFinishedLimitPopup(false);     return; }
           if (showLimitPopup)            { setShowLimitPopup(false);             return; }
           if (tournamentToDelete)        { setTournamentToDelete(null);          return; }
           if (leagueToDelete)            { setLeagueToDelete(null);              return; }
@@ -628,7 +658,32 @@ export default function BeachProApp() {
             return;
           }
 
-          // 3. Navega para trás normalmente
+          // 3. Mapeamento explícito para fluxo de criação de torneio
+          const creationBackMap: Partial<Record<string, string>> = {
+            'TOURNAMENT_NAME':      'HOME',
+            'PLAYER_COUNT':         'TOURNAMENT_NAME',
+            'FORMAT_SELECTION':     'PLAYER_COUNT',
+            'GROUP_CONFIG':         'FORMAT_SELECTION',
+            'PLAYOFF_CONFIG':       'GROUP_CONFIG',
+            'MATCH_FORMAT':         'FORMAT_SELECTION',
+            'RANKING_CRITERIA':     'MATCH_FORMAT',
+            'TABLE_COUNT':          'RANKING_CRITERIA',
+            'REGISTRATION_TYPE':    'TABLE_COUNT',
+            'ATHLETE_REGISTRATION': 'REGISTRATION_TYPE',
+            'DRAWING':              'ATHLETE_REGISTRATION',
+            'GROUPS_DISPLAY':       'ATHLETE_REGISTRATION',
+            'CREATE_RANKING':       'MY_RANKINGS',
+            'EDIT_PROFILE':         'PROFILE',
+            'FIND_LEAGUES':         'MY_RANKINGS',
+            'TOURNAMENTS_LIST':     'HOME',
+          };
+
+          if (creationBackMap[step]) {
+            navigateTo(creationBackMap[step] as any);
+            return;
+          }
+
+          // 4. Navega para trás normalmente
           if (canGoBack) {
             window.history.back();
           } else {
@@ -649,7 +704,7 @@ export default function BeachProApp() {
   }, [
     step,
     showSuggestionModal, showUpgradeModal, showSupportPopup, showFinishConfirmPopup,
-    showLimitPopup, tournamentToDelete, leagueToDelete, leagueToExit,
+    showLimitPopup, showFinishedLimitPopup, tournamentToDelete, leagueToDelete, leagueToExit,
     courtWarning, coverCropImage,
   ]);
 
@@ -769,18 +824,44 @@ export default function BeachProApp() {
     setAuthError(null);
     setIsAuthLoading(true);
     try {
-      await signInWithPopup(auth, getGoogleProvider());
+      const { Capacitor } = await import('@capacitor/core');
+      const isNative = Capacitor.isNativePlatform();
+
+      if (isNative) {
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+        await GoogleAuth.initialize({
+          clientId: '931735521781-6bdlejsqic1l4lt7odfl5p7h44pkv7jo.apps.googleusercontent.com',
+          scopes: ['profile', 'email'],
+        });
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser?.authentication?.idToken;
+        if (!idToken) {
+          setAuthError("Não foi possível obter o token do Google. Tente novamente.");
+          return;
+        }
+        const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+      } else {
+        await signInWithPopup(auth, getGoogleProvider());
+      }
     } catch (err) {
-      const error = err as { code?: string };
-      console.error("Google login error:", error);
+      const error = err as { code?: string; message?: string };
+      console.error("Google login error:", JSON.stringify(error), err);
       if (error.code === 'auth/popup-blocked') {
         setAuthError("O popup de login foi bloqueado pelo seu navegador.");
       } else if (error.code === 'auth/cancelled-popup-request') {
-        // User closed the popup, ignore
+        // ignorar
       } else if (error.code === 'auth/unauthorized-domain') {
-        setAuthError("Este domínio não está autorizado no Firebase Console. Adicione este domínio às 'Authorized Domains' nas configurações de Autenticação do Firebase.");
+        setAuthError("Este domínio não está autorizado no Firebase Console.");
+      } else if (
+        error.message?.toLowerCase().includes('cancel') ||
+        error.message?.toLowerCase().includes('closed') ||
+        error.message?.toLowerCase().includes('dismissed')
+      ) {
+        // usuário cancelou, ignorar
       } else {
-        setAuthError("Erro ao tentar entrar com o Google. Verifique se os popups estão permitidos.");
+        setAuthError(`Erro: ${error.message || error.code || 'Tente novamente.'}`);
       }
     } finally {
       setIsAuthLoading(false);
@@ -985,10 +1066,20 @@ export default function BeachProApp() {
   };
 
   const startNewTournament = () => {
-    const limit = isPremium ? 100 : 1;
-    if (tournaments.length >= limit) {
+    if (isPremium) {
+      setTournamentName('');
+      navigateTo('TOURNAMENT_NAME');
+      return;
+    }
+    const activeTournaments = manageableTournaments.filter(t => !t.isFinished && !t.isHidden);
+    const finishedTournaments = manageableTournaments.filter(t => t.isFinished && !t.isHidden);
+    if (activeTournaments.length >= 1) {
       setUpgradeReason('TOURNAMENT_LIMIT');
       setShowUpgradeModal(true);
+      return;
+    }
+    if (finishedTournaments.length >= 1) {
+      setShowFinishedLimitPopup(true);
       return;
     }
     setTournamentName('');
@@ -1067,6 +1158,18 @@ export default function BeachProApp() {
       setError(`O campo "${label}" é obrigatório.`);
       return;
     }
+
+    // Verificar nomes duplicados apenas em atletas preenchidos manualmente
+    // (atletas da liga têm IDs únicos, não precisam de verificação por nome)
+    const manualPlayers = players.filter(p => !p.id.startsWith('manual-') ? p.name.trim() : p.name.trim());
+    const names = manualPlayers.map(p => p.name.trim().toUpperCase());
+    const duplicateIndex = names.findIndex((name, idx) => names.indexOf(name) !== idx);
+    if (duplicateIndex !== -1) {
+      const label = registrationType === 'RANDOM_DRAW' ? `Atleta ${duplicateIndex + 1}` : `Dupla ${duplicateIndex + 1}`;
+      setError(`Nome duplicado em "${label}". Cada atleta precisa ter um nome diferente.`);
+      return;
+    }
+
     setError(null);
     
     if (!user) {
@@ -2419,6 +2522,15 @@ export default function BeachProApp() {
                       )}
                     </div>
                   </div>
+
+                  {/* Botão de sugestões — lado oposto ao perfil */}
+                  <button
+                    onClick={() => setShowSuggestionModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white/15 hover:bg-white/25 rounded-full transition-all active:scale-95 border border-white/20 shadow-sm backdrop-blur-sm"
+                  >
+                    <Lightbulb size={14} className="text-[#bef264]" />
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest">Sugestões</span>
+                  </button>
                 </div>
 
                 <div className="mb-6">
@@ -2436,12 +2548,20 @@ export default function BeachProApp() {
                   <button 
                     onClick={() => {
                       const limit = isPremium ? 100 : 1;
-                      if (tournaments.length >= limit) {
-                        setUpgradeReason('TOURNAMENT_LIMIT');
-                        setShowUpgradeModal(true);
-                      } else {
-                        navigateTo('TOURNAMENT_NAME');
+                      if (!isPremium) {
+                        const activeTournaments = manageableTournaments.filter(t => !t.isFinished && !t.isHidden);
+                        const finishedTournaments = manageableTournaments.filter(t => t.isFinished && !t.isHidden);
+                        if (activeTournaments.length >= 1) {
+                          setUpgradeReason('TOURNAMENT_LIMIT');
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        if (finishedTournaments.length >= 1) {
+                          setShowFinishedLimitPopup(true);
+                          return;
+                        }
                       }
+                      navigateTo('TOURNAMENT_NAME');
                     }}
                     className="btn-hero-neon group h-20"
                   >
@@ -2456,21 +2576,35 @@ export default function BeachProApp() {
                     </div>
                   </button>
 
-                  <button 
-                    onClick={() => navigateTo('MY_RANKINGS', { rankingId: null })}
-                    className="btn-hero-secondary group h-20"
-                  >
-                    <div className="bg-white/20 w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg">
-                      <Award size={24} />
-                    </div>
-                    <span className="text-white font-black text-sm uppercase tracking-widest flex-1">
-                      MINHAS LIGAS
-                    </span>
-                    <div className="w-14 h-14 flex items-center justify-center bg-black/5 rounded-full mr-1">
-                      <ChevronRight size={22} className="text-white group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  </button>
+                  {(() => {
+                    // Dot: active tournaments not yet viewed OR pending requests
+                    const hasActiveTournamentNotSeen = rankings.some(r =>
+                      tournaments.some(t => t.rankingId === r.id && !t.isFinished && !t.isHidden && !viewedTournamentIds.has(t.id))
+                    );
+                    const hasPendingRequests = Object.values(pendingRequests).some(arr => arr.length > 0);
+                    const showDot = hasActiveTournamentNotSeen || hasPendingRequests;
+                    return (
+                      <button 
+                        onClick={() => navigateTo('MY_RANKINGS', { rankingId: null })}
+                        className="btn-hero-secondary group h-20 relative"
+                      >
+                        {showDot && (
+                          <span className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-md z-10 animate-pulse" />
+                        )}
+                        <div className="bg-white/20 w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg">
+                          <Award size={24} />
+                        </div>
+                        <span className="text-white font-black text-sm uppercase tracking-widest flex-1">
+                          MINHAS LIGAS
+                        </span>
+                        <div className="w-14 h-14 flex items-center justify-center bg-black/5 rounded-full mr-1">
+                          <ChevronRight size={22} className="text-white group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </button>
+                    );
+                  })()}
                 </div>
+
               </div>
 
               <div className="wave-container px-6 pt-10 pb-32">
@@ -2482,7 +2616,7 @@ export default function BeachProApp() {
                         <h3 className="text-xs font-black text-on-surface uppercase italic tracking-tight">Torneios Ativos</h3>
                       </div>
                       <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest pl-3">
-                        {tournaments.filter(t => !t.isHidden && !t.isFinished).length} em andamento · {tournaments.filter(t => !t.isHidden && t.isFinished).length} finalizados
+                        {manageableTournaments.filter(t => !t.isHidden && !t.isFinished).length} em andamento · {manageableTournaments.filter(t => !t.isHidden && t.isFinished).length} finalizados
                       </p>
                     </div>
                     {tournaments.length > 0 && (
@@ -2494,9 +2628,9 @@ export default function BeachProApp() {
                       </button>
                     )}
                   </div>
-                  {tournaments.filter(t => !t.isHidden).length > 0 ? (
+                  {manageableTournaments.filter(t => !t.isHidden).length > 0 ? (
                     <div className="grid gap-5">
-                      {tournaments.filter(t => !t.isHidden).sort((a, b) => { if(a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1; return b.createdAt - a.createdAt; }).map((t, _tIdx) => {
+                      {manageableTournaments.filter(t => !t.isHidden).sort((a, b) => { if(a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1; return b.createdAt - a.createdAt; }).map((t, _tIdx) => {
                         const totalRegular = t.matches.length > 0 ? Math.max(...t.matches.map(m => m.round).filter(r => r < 100), 0) : 0;
                         const roundLabel = t.currentRound >= 100 ? (() => {
                           const types: { [key: number]: string } = { 100: 'Oitavas', 101: 'Quartas', 102: 'Semi', 103: 'Final' };
@@ -2662,6 +2796,8 @@ export default function BeachProApp() {
                     rankings.map((r, idx) => {
                       const isAdmin = r.ownerId === user?.uid || r.adminIds.includes(user?.uid || '');
                       const memberCount = r.leagueAthletes?.length || r.athleteIds?.length || 0;
+                      const activeTournamentInLeague = tournaments.find(t => t.rankingId === r.id && !t.isFinished && !t.isHidden);
+                      const hasUnseenTournament = !!activeTournamentInLeague && !viewedTournamentIds.has(activeTournamentInLeague.id);
                       return (
                         <div
                           key={`ranking-item-${r.id || idx}`}
@@ -2676,12 +2812,20 @@ export default function BeachProApp() {
                               {/* Name overlay on cover */}
                               <div className="absolute bottom-0 left-0 right-0 px-5 pb-3 flex items-end justify-between">
                                 <h4 className="text-base font-black text-white uppercase italic tracking-tight truncate drop-shadow pr-1">{r.name}</h4>
-                                <span className={cn(
-                                  "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0",
-                                  isAdmin ? "bg-primary text-white" : "bg-white/20 text-white backdrop-blur-sm"
-                                )}>
-                                  {isAdmin ? 'ADM' : 'ATLETA'}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {activeTournamentInLeague && (
+                                    <span className="text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest bg-emerald-400 text-slate-900 flex items-center gap-1">
+                                      {hasUnseenTournament && <span className="w-1.5 h-1.5 bg-slate-900 rounded-full animate-pulse" />}
+                                      AO VIVO
+                                    </span>
+                                  )}
+                                  <span className={cn(
+                                    "text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0",
+                                    isAdmin ? "bg-primary text-white" : "bg-white/20 text-white backdrop-blur-sm"
+                                  )}>
+                                    {isAdmin ? 'ADM' : 'ATLETA'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -3233,7 +3377,40 @@ O play na palma da mão! 🏆`;
                     </div>
 
                     {/* Action Buttons Side-by-Side (almost) */}
-                    <div className="flex gap-4 mb-8">
+                    <div className="flex flex-col gap-3 mb-8">
+                       {/* Torneio Ativo — visível para todos os membros */}
+                       {(() => {
+                         const activeTournament = tournaments.find(t => t.rankingId === activeRanking.id && !t.isFinished && !t.isHidden);
+                         if (!activeTournament) return null;
+                         return (
+                           <motion.button
+                             whileTap={{ scale: 0.98 }}
+                             onClick={() => {
+                               // Marca como visto
+                               const newViewed = new Set(viewedTournamentIds);
+                               newViewed.add(activeTournament.id);
+                               setViewedTournamentIds(newViewed);
+                               localStorage.setItem('btpro_viewed_tournaments', JSON.stringify([...newViewed]));
+                               navigateTo('TOURNAMENT', { tournamentId: activeTournament.id, tab: 'MATCHES' });
+                             }}
+                             className="w-full bg-emerald-500 p-5 rounded-[2.5rem] flex items-center justify-between group shadow-xl shadow-emerald-500/30 active:scale-[0.98] transition-all relative overflow-hidden"
+                           >
+                             <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/20 to-transparent" />
+                             <div className="flex items-center gap-4 relative z-10">
+                               <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-white shadow-sm relative">
+                                 <LayoutGrid size={22} />
+                                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full animate-pulse" />
+                               </div>
+                               <div className="text-left">
+                                 <h4 className="text-[9px] font-black text-white/70 uppercase tracking-widest leading-none mb-1">🟢 TORNEIO AO VIVO</h4>
+                                 <p className="text-[13px] font-black text-white uppercase italic leading-tight truncate max-w-[180px]">{activeTournament.name}</p>
+                               </div>
+                             </div>
+                             <ChevronRight size={20} className="text-white/60 group-hover:translate-x-1 transition-all relative z-10" />
+                           </motion.button>
+                         );
+                       })()}
+
                        {activeRanking.adminIds.includes(user?.uid || '') && (
                          <button 
                            onClick={() => {
@@ -4527,32 +4704,95 @@ O play na palma da mão! 🏆`;
               subtitle="Escolha a quantidade de games que quer disputar."
               currentStep={4}
             >
-              <div className="space-y-4">
-                {[
-                  { id: '6_GAMES_TIEBREAK', title: '6 games com tie-break', desc: 'Disputa padrão de 6 games. Em caso de empate 6x6, haverá um tie-break.' },
-                  { id: '6_GAMES_MAX', title: '6 games máximos', desc: 'Partida decidida em 6 games diretos. Quem fizer 6 primeiro vence.' },
-                  { id: '5_GAMES_MAX', title: '5 games máximos', desc: 'Partida rápida de 5 games. Quem fizer 5 primeiro vence.' },
-                  { id: 'SUM_9_GAMES', title: 'Soma de 9 games', desc: 'Disputa por pontos corridos onde a soma total dos games deve ser 9.' },
-                  { id: 'SUM_7_GAMES', title: 'Soma de 7 games', desc: 'Disputa por pontos corridos onde a soma total dos games deve ser 7.' },
-                  { id: 'SUM_5_GAMES', title: 'Soma de 5 games', desc: 'Disputa por pontos corridos onde a soma total dos games deve ser 5.' },
-                ].map((f) => (
-                  <div 
-                    key={f.id}
-                    onClick={() => handleMatchFormatConfirm(f.id as MatchFormat)}
-                    className={cn(
-                      "p-6 rounded-[2rem] border-2 transition-all cursor-pointer flex items-center justify-between group bg-white shadow-sm",
-                      matchFormat === f.id ? "border-primary bg-primary/5" : "border-surface-container hover:border-primary/20"
-                    )}
-                  >
-                    <div>
-                      <h3 className="text-xs font-black text-primary uppercase tracking-widest">{f.title}</h3>
-                      <p className="text-on-surface-variant/30 text-[10px] font-black uppercase tracking-tight mt-1">{f.desc}</p>
-                    </div>
-                    {matchFormat === f.id && <CheckCircle2 className="text-primary" size={28} />}
-                  </div>
-                ))}
+              <div className="space-y-6">
 
-                <div className="pt-6">
+                {/* Categoria: Com Tie-Break */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <p className="text-[9px] font-black text-primary uppercase tracking-widest">Com Tie-Break</p>
+                  </div>
+                  {[
+                    { id: '6_GAMES_TIEBREAK', title: '6 games com tie-break', desc: 'Padrão de 6 games. Em caso de 6x6, tie-break decide.' },
+                  ].map((f) => (
+                    <div
+                      key={f.id}
+                      onClick={() => handleMatchFormatConfirm(f.id as MatchFormat)}
+                      className={cn(
+                        "p-5 rounded-[2rem] border-2 transition-all cursor-pointer flex items-center justify-between bg-white shadow-sm",
+                        matchFormat === f.id ? "border-primary bg-primary/5" : "border-surface-container hover:border-primary/20"
+                      )}
+                    >
+                      <div>
+                        <h3 className="text-xs font-black text-primary uppercase tracking-widest">{f.title}</h3>
+                        <p className="text-on-surface-variant/30 text-[10px] font-black uppercase tracking-tight mt-1">{f.desc}</p>
+                      </div>
+                      {matchFormat === f.id && <CheckCircle2 className="text-primary shrink-0 ml-3" size={24} />}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Categoria: Games Máximos */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <p className="text-[9px] font-black text-primary uppercase tracking-widest">Games Máximos</p>
+                  </div>
+                  <div className="space-y-3">
+                    {[
+                      { id: '8_GAMES_MAX', title: '8 games máximos', desc: 'Quem fizer 8 primeiro vence. Empate 8x8 não permitido.' },
+                      { id: '6_GAMES_MAX', title: '6 games máximos', desc: 'Quem fizer 6 primeiro vence. Empate 6x6 não permitido.' },
+                      { id: '5_GAMES_MAX', title: '5 games máximos', desc: 'Partida rápida. Quem fizer 5 primeiro vence.' },
+                    ].map((f) => (
+                      <div
+                        key={f.id}
+                        onClick={() => handleMatchFormatConfirm(f.id as MatchFormat)}
+                        className={cn(
+                          "p-5 rounded-[2rem] border-2 transition-all cursor-pointer flex items-center justify-between bg-white shadow-sm",
+                          matchFormat === f.id ? "border-primary bg-primary/5" : "border-surface-container hover:border-primary/20"
+                        )}
+                      >
+                        <div>
+                          <h3 className="text-xs font-black text-primary uppercase tracking-widest">{f.title}</h3>
+                          <p className="text-on-surface-variant/30 text-[10px] font-black uppercase tracking-tight mt-1">{f.desc}</p>
+                        </div>
+                        {matchFormat === f.id && <CheckCircle2 className="text-primary shrink-0 ml-3" size={24} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Categoria: Soma de Games */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <p className="text-[9px] font-black text-primary uppercase tracking-widest">Soma de Games</p>
+                  </div>
+                  <div className="space-y-3">
+                    {[
+                      { id: 'SUM_9_GAMES', title: 'Soma de 9 games', desc: 'Pontos corridos. A soma dos games deve ser exatamente 9.' },
+                      { id: 'SUM_7_GAMES', title: 'Soma de 7 games', desc: 'Pontos corridos. A soma dos games deve ser exatamente 7.' },
+                      { id: 'SUM_5_GAMES', title: 'Soma de 5 games', desc: 'Pontos corridos. A soma dos games deve ser exatamente 5.' },
+                    ].map((f) => (
+                      <div
+                        key={f.id}
+                        onClick={() => handleMatchFormatConfirm(f.id as MatchFormat)}
+                        className={cn(
+                          "p-5 rounded-[2rem] border-2 transition-all cursor-pointer flex items-center justify-between bg-white shadow-sm",
+                          matchFormat === f.id ? "border-primary bg-primary/5" : "border-surface-container hover:border-primary/20"
+                        )}
+                      >
+                        <div>
+                          <h3 className="text-xs font-black text-primary uppercase tracking-widest">{f.title}</h3>
+                          <p className="text-on-surface-variant/30 text-[10px] font-black uppercase tracking-tight mt-1">{f.desc}</p>
+                        </div>
+                        {matchFormat === f.id && <CheckCircle2 className="text-primary shrink-0 ml-3" size={24} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 pb-4">
                   <button 
                     onClick={() => navigateTo('FORMAT_SELECTION', { replace: true })}
                     className="w-full py-4 bg-surface-container rounded-full font-black text-xs text-on-surface-variant uppercase tracking-widest hover:bg-surface-container-high transition-all"
@@ -5245,7 +5485,113 @@ O play na palma da mão! 🏆`;
           })()}
 
 
-          {isAuthReady && user && step === 'TOURNAMENT' && activeTournament && (
+          {isAuthReady && user && step === 'TOURNAMENT' && activeTournament && (() => {
+            // Verifica se o usuário é admin do torneio
+            const isAdminView = !activeTournament.rankingId || (() => {
+              const r = rankings.find(rk => rk.id === activeTournament.rankingId);
+              return !r || r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '');
+            })();
+
+            // Se não é admin e o torneio é de uma liga, mostra view somente leitura
+            if (!isAdminView) return (
+              <motion.div
+                key={`readonly-${activeTournament.id}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full max-w-2xl mx-auto pt-4 px-4 pb-32"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-6">
+                  <button onClick={goBack} className="p-3 bg-surface-container rounded-2xl text-on-surface-variant active:scale-95 transition-all">
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">Ao Vivo</p>
+                    <h1 className="text-lg font-black text-on-surface uppercase italic truncate pr-1">{activeTournament.name}</h1>
+                  </div>
+                  <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    AO VIVO
+                  </span>
+                </div>
+
+                {/* Rodada atual */}
+                <div className="bg-primary rounded-[2rem] p-5 mb-6 text-white text-center shadow-lg shadow-primary/20">
+                  <p className="text-[9px] font-black text-white/50 uppercase tracking-widest mb-1">Rodada atual</p>
+                  <p className="text-2xl font-black italic">
+                    {activeTournament.currentRound >= 100 ? (
+                      ({100:'Oitavas', 101:'Quartas', 102:'Semi-Final', 103:'Final'} as any)[activeTournament.currentRound] || 'Playoff'
+                    ) : (
+                      `${activeTournament.currentRound} de ${Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds}`
+                    )}
+                  </p>
+                </div>
+
+                {/* Todas as rodadas */}
+                <div className="space-y-6">
+                  {Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b).map(roundNum => {
+                    const roundMatches = activeTournament.matches.filter(m => m.round === roundNum);
+                    const isCurrent = roundNum === activeTournament.currentRound;
+                    return (
+                      <div key={roundNum}>
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className={cn(
+                            "text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full",
+                            isCurrent ? "bg-primary text-white" : "bg-surface-container text-on-surface-variant"
+                          )}>
+                            {roundNum >= 100 ? ({100:'Oitavas', 101:'Quartas', 102:'Semi', 103:'Final'} as any)[roundNum] || 'Playoff' : `Rodada ${roundNum}`}
+                            {isCurrent && ' • Atual'}
+                          </span>
+                          <div className="h-px flex-1 bg-surface-container" />
+                        </div>
+                        <div className="space-y-2">
+                          {roundMatches.map(m => {
+                            const p1 = activeTournament.players.find(p => p.id === m.player1Id);
+                            const p2 = activeTournament.players.find(p => p.id === m.player2Id);
+                            const p1p = m.player1PartnerId ? activeTournament.players.find(p => p.id === m.player1PartnerId) : null;
+                            const p2p = m.player2PartnerId ? activeTournament.players.find(p => p.id === m.player2PartnerId) : null;
+                            const s1 = m.isCompleted ? m.sets[0]?.player1 : m.currentSet.player1;
+                            const s2 = m.isCompleted ? m.sets[0]?.player2 : m.currentSet.player2;
+                            const resolveName = (id: string | undefined, player: any) => {
+                              if (!id || id.startsWith('TBD')) return 'A Definir';
+                              return player?.name || id;
+                            };
+                            const p1Base = resolveName(m.player1Id, p1);
+                            const p2Base = resolveName(m.player2Id, p2);
+                            const p1Name = p1p ? `${p1Base} / ${p1p.name}` : p1Base;
+                            const p2Name = p2p ? `${p2Base} / ${p2p.name}` : p2Base;
+                            return (
+                              <div key={m.id} className={cn(
+                                "bg-white rounded-2xl border p-4 flex items-center gap-3",
+                                m.isCompleted ? "border-emerald-100 bg-emerald-50/30" : "border-surface-container"
+                              )}>
+                                <div className="flex-1 min-w-0 text-right">
+                                  <p className={cn("text-[10px] font-black uppercase truncate", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-600")}>{p1Name}</p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 px-3 py-1.5 rounded-xl">
+                                  <span className={cn("text-sm font-black font-display", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-400")}>{s1}</span>
+                                  <span className="text-[9px] text-slate-300 font-black">×</span>
+                                  <span className={cn("text-sm font-black font-display", m.isCompleted && s2 > s1 ? "text-primary" : "text-slate-400")}>{s2}</span>
+                                </div>
+                                <div className="flex-1 min-w-0 text-left">
+                                  <p className={cn("text-[10px] font-black uppercase truncate", m.isCompleted && s2 > s1 ? "text-primary" : "text-slate-600")}>{p2Name}</p>
+                                </div>
+                                {m.isCompleted && (
+                                  <span className="shrink-0 text-[8px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-md uppercase">✓</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            );
+
+            return (
             <motion.div 
               key={activeTournament.id}
               initial={{ opacity: 0 }}
@@ -5583,7 +5929,7 @@ O play na palma da mão! 🏆`;
                                       <div className="absolute left-0 flex flex-col items-center justify-center gap-1.5 h-full">
                                         <button 
                                           onClick={() => updateMatchScore(match.id, 1, 1)} 
-                                          disabled={match.isCompleted}
+                                          disabled={match.isCompleted || !!activeTournament.rankingId && !(() => { const r = rankings.find(rk => rk.id === activeTournament.rankingId); return r && (r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '')); })()}
                                           className={cn(
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
                                             match.isCompleted 
@@ -5679,24 +6025,30 @@ O play na palma da mão! 🏆`;
                       
                       return (
                         <>
-                          {currentViewRound === activeTournament.currentRound && allPlayedInView && (
-                            <button 
-                              onClick={() => {
-                                const availableRounds = Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b);
-                                const currentIndex = availableRounds.indexOf(activeTournament.currentRound);
-                                const nextRoundNum = currentIndex !== -1 && currentIndex < availableRounds.length - 1 ? availableRounds[currentIndex + 1] : activeTournament.currentRound;
-                                
-                                nextRound();
-                                navigateTo('TOURNAMENT', { round: nextRoundNum });
-                              }}
-                              className="btn-primary w-full shadow-xl shadow-primary/20 flex items-center justify-center gap-3 py-6"
-                            >
-                              <span className="text-xs font-black uppercase tracking-widest">
-                                {isLastRound ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
-                              </span>
-                              <ChevronRight size={18} />
-                            </button>
-                          )}
+                          {currentViewRound === activeTournament.currentRound && allPlayedInView && (() => {
+                            const isAdminOfTournament = !activeTournament.rankingId || (() => {
+                              const r = rankings.find(rk => rk.id === activeTournament.rankingId);
+                              return !r || r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '');
+                            })();
+                            if (!isAdminOfTournament) return null;
+                            return (
+                              <button 
+                                onClick={() => {
+                                  const availableRounds = Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b);
+                                  const currentIndex = availableRounds.indexOf(activeTournament.currentRound);
+                                  const nextRoundNum = currentIndex !== -1 && currentIndex < availableRounds.length - 1 ? availableRounds[currentIndex + 1] : activeTournament.currentRound;
+                                  nextRound();
+                                  navigateTo('TOURNAMENT', { round: nextRoundNum });
+                                }}
+                                className="btn-primary w-full shadow-xl shadow-primary/20 flex items-center justify-center gap-3 py-6"
+                              >
+                                <span className="text-xs font-black uppercase tracking-widest">
+                                  {isLastRound ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
+                                </span>
+                                <ChevronRight size={18} />
+                              </button>
+                            );
+                          })()}
                           
                           {currentViewRound > Math.min(...activeTournament.matches.map(m => m.round)) && (
                             <button 
@@ -5853,7 +6205,8 @@ O play na palma da mão! 🏆`;
 
                 {/* Removed Bottom Actions as requested */}
             </motion.div>
-          )}
+            );
+          })()}
 
           {step === 'ALL_ROUNDS' && activeTournament && (() => {
 
@@ -6132,6 +6485,8 @@ O play na palma da mão! 🏆`;
                 const champion = rankings[0];
                 const totalGames = activeTournament.matches.reduce((acc, m) => acc + (m.sets[0]?.player1 || 0) + (m.sets[0]?.player2 || 0), 0);
 
+                if (!champion) return null;
+
                 return (
                   <>
                     <section>
@@ -6206,6 +6561,21 @@ O play na palma da mão! 🏆`;
 
               {/* Bottom Actions */}
               <div className="flex flex-col gap-4 pt-8">
+                {/* Compartilhar Resultado */}
+                {(() => {
+                  const rkgs = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
+                  if (!rkgs[0]) return null;
+                  return (
+                    <button
+                      onClick={() => { setShareBackgroundImage(null); setShowSharePopup(true); }}
+                      className="w-full py-5 bg-[#bef264] text-slate-900 rounded-full font-black text-sm uppercase tracking-widest shadow-lg shadow-[#bef264]/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
+                    >
+                      <Share2 size={20} />
+                      COMPARTILHAR RESULTADO
+                    </button>
+                  );
+                })()}
+
                 <button 
                   onClick={() => {
                     navigateTo('ALL_ROUNDS');
@@ -6567,7 +6937,24 @@ O play na palma da mão! 🏆`;
                   {/* 4. Rodapé (Ação Destrutiva) */}
                   <div className="pt-4 flex justify-center">
                     <button 
-                      onClick={() => signOut(auth)}
+                      onClick={async () => {
+                        try {
+                          const { Capacitor } = await import('@capacitor/core');
+                          if (Capacitor.isNativePlatform()) {
+                            try {
+                              const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+                              await GoogleAuth.signOut();
+                            } catch {
+                              // Google sign out falhou silenciosamente — não fecha o app
+                            }
+                          }
+                        } catch {}
+                        await signOut(auth);
+                        setStep('HOME');
+                        setActiveTournamentId(null);
+                        setActiveRankingId(null);
+                        setUserProfile(null);
+                      }}
                       className="flex items-center gap-2 px-8 py-4 text-red-500 hover:bg-red-50 rounded-full transition-all group"
                     >
                       <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -6921,6 +7308,52 @@ O play na palma da mão! 🏆`;
 
         {/* Tournament Limit Popup */}
         <AnimatePresence>
+          {showFinishedLimitPopup && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl border border-surface-container"
+              >
+                <div className="bg-amber-50 w-20 h-20 rounded-[2rem] flex items-center justify-center text-amber-500 mb-6 mx-auto shadow-sm">
+                  <AlertTriangle size={40} />
+                </div>
+                <h3 className="text-sm font-black text-slate-900 text-center mb-2 uppercase italic tracking-tight">
+                  Torneio finalizado pendente
+                </h3>
+                <p className="text-[11px] font-black text-slate-500 text-center mb-3 uppercase tracking-tight leading-relaxed">
+                  Você tem um torneio finalizado. <span className="text-slate-800">Exclua-o</span> para criar um novo.
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-6 text-center">
+                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-tight leading-relaxed">
+                    🎾 O BeachPró <span className="text-amber-900">não tem anúncios</span>. Se o app está sendo útil, considere o Premium — ajuda o projeto a continuar.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => { setShowFinishedLimitPopup(false); setUpgradeReason('TOURNAMENT_LIMIT'); setShowUpgradeModal(true); }}
+                    className="w-full py-4 bg-primary text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all"
+                  >
+                    ⚡ Ver Premium — torneios ilimitados
+                  </button>
+                  <button
+                    onClick={() => { setShowFinishedLimitPopup(false); navigateTo('TOURNAMENTS_LIST'); }}
+                    className="w-full py-4 bg-slate-100 text-slate-600 rounded-full font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
+                  >
+                    Excluir torneio finalizado
+                  </button>
+                  <button
+                    onClick={() => setShowFinishedLimitPopup(false)}
+                    className="w-full py-3 text-slate-300 font-black text-[10px] uppercase tracking-widest text-center"
+                  >
+                    Agora não
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
           {showLimitPopup && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
               <motion.div 
@@ -6962,9 +7395,11 @@ O play na palma da mão! 🏆`;
                   <CheckCircle2 size={40} />
                 </div>
                 <h3 className="text-xs font-black text-primary text-center mb-2 uppercase tracking-widest">Finalizar Torneio?</h3>
-                <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-10 uppercase tracking-tight leading-relaxed">
-                  O que você deseja fazer? <br/>
-                  <span className="text-primary italic">&quot;Excluir&quot; removerá das listas (Home e Global) mas manterá os resultados no Histórico da Liga.</span>
+                <p className="text-[10px] font-black text-on-surface-variant/40 text-center mb-6 uppercase tracking-tight leading-relaxed">
+                  {activeTournament.rankingId
+                    ? <span>Ao excluir, o torneio será removido das listas mas os resultados serão mantidos no <span className="text-primary">Histórico da Liga</span>.</span>
+                    : <span>Ao excluir, todos os dados deste torneio serão <span className="text-red-500">permanentemente apagados</span>.</span>
+                  }
                 </p>
                 <div className="flex flex-col gap-3">
                   <button 
@@ -7318,55 +7753,42 @@ O play na palma da mão! 🏆`;
             const openPremium = () => { close(); setUpgradeReason('GENERIC'); setShowUpgradeModal(true); };
 
             const variants = [
-              // ── Variant 0: Manifesto ───────────────────────────────────
+              // ── Variant 0: Card suave (não bloqueia tela) ─────────────
               () => (
                 <motion.div
                   key="support-0"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[800] flex flex-col items-center justify-end p-4 bg-black/70 backdrop-blur-sm"
+                  initial={{ opacity: 0, y: 80 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 80 }}
+                  transition={{ delay: 3, type: 'spring', damping: 28, stiffness: 200 }}
+                  className="fixed bottom-24 left-4 right-4 z-[800] max-w-sm mx-auto"
                 >
-                  <motion.div
-                    initial={{ y: 60, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="bg-[#0a1628] w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10"
-                  >
-                    {/* Art header */}
-                    <div className="relative bg-gradient-to-br from-[#004a8c] to-[#0a1628] px-8 pt-10 pb-8 text-center overflow-hidden">
-                      <div className="absolute inset-0 opacity-10">
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#bef264] rounded-full blur-3xl" />
+                  <div className="bg-white rounded-[2rem] shadow-2xl shadow-black/20 border border-slate-100 overflow-hidden">
+                    <div className="flex items-center gap-4 px-5 pt-5 pb-4">
+                      <div className="w-11 h-11 bg-amber-400 rounded-2xl flex items-center justify-center shrink-0 text-xl">⚡</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">Desbloqueie o BeachPró Premium</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Torneios e atletas ilimitados</p>
                       </div>
-                      <div className="text-5xl mb-4">🎾</div>
-                      <h2 className="text-xl font-black text-white uppercase italic tracking-tight leading-tight mb-2">
-                        Feito por quem <span className="text-[#bef264]">joga</span>, para quem <span className="text-[#bef264]">organiza</span>
-                      </h2>
+                      <button onClick={close} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0">
+                        <X size={16} />
+                      </button>
                     </div>
-
-                    <div className="px-7 py-6 space-y-5">
-                      <p className="text-sm text-white/70 leading-relaxed text-center">
-                        O BeachPró é um app <span className="text-white font-bold">independente</span>. Não temos investidores, não vendemos dados e — orgulho total — <span className="text-[#bef264] font-bold">não colocamos nenhum anúncio</span> na sua cara enquanto você organiza um torneio.
-                      </p>
-                      <p className="text-sm text-white/70 leading-relaxed text-center">
-                        Se o app está facilitando sua vida na quadra, considere assinar o Premium. É a forma direta de manter esse projeto vivo e crescendo.
-                      </p>
-
+                    <div className="px-5 pb-5 flex gap-3">
                       <button
                         onClick={openPremium}
-                        className="w-full py-4 bg-[#bef264] text-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-[#bef264]/20 active:scale-95 transition-all"
+                        className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
                       >
-                        APOIAR COM PREMIUM ⚡
+                        Ver planos
                       </button>
-
                       <button
                         onClick={close}
-                        className="w-full py-3 text-white/30 text-[10px] font-black uppercase tracking-widest text-center"
+                        className="px-5 py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
                       >
-                        AGORA NÃO, PULAR →
+                        Agora não
                       </button>
                     </div>
-                  </motion.div>
+                  </div>
                 </motion.div>
               ),
 
@@ -7389,7 +7811,6 @@ O play na palma da mão! 🏆`;
                       <p className="text-[9px] font-black text-white/30 uppercase tracking-[3px] mb-2">Sem anúncios. Nunca.</p>
                       <h2 className="text-xl font-black text-white uppercase italic tracking-tight">O que você ainda pode desbloquear</h2>
                     </div>
-
                     <div className="p-6 space-y-4">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
@@ -7411,13 +7832,11 @@ O play na palma da mão! 🏆`;
                           ))}
                         </div>
                       </div>
-
                       <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-center">
                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">A partir de</p>
                         <p className="text-2xl font-black text-slate-900">R$ 9,90<span className="text-sm text-slate-400">/mês</span></p>
                         <p className="text-[8px] text-slate-400 font-black">· sem anúncios · sem dados vendidos</p>
                       </div>
-
                       <button onClick={openPremium} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2">
                         VER PLANOS <span className="text-amber-400">⚡</span>
                       </button>
@@ -7456,25 +7875,15 @@ O play na palma da mão! 🏆`;
                         Se o app está sendo útil, que tal nos ajudar a comprar uma bolinha nova ou pagar a parcela da raquete que parcelamos no cartão? 😅
                       </p>
                     </div>
-
                     <div className="px-6 pb-2 grid grid-cols-2 gap-3">
-                      {/* Bolinha */}
-                      <button
-                        onClick={openPremium}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center active:scale-95 transition-all hover:border-[#bef264]/40"
-                      >
+                      <button onClick={openPremium} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center active:scale-95 transition-all hover:border-[#bef264]/40">
                         <div className="text-4xl mb-2">🎾</div>
                         <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">Uma bolinha</p>
                         <p className="text-xl font-black text-white">R$ 19,90</p>
                         <p className="text-[7px] text-white/30 font-black uppercase tracking-widest">/mês · mensal</p>
                         <p className="text-[7px] text-white/40 mt-1 leading-tight">Cancele quando quiser</p>
                       </button>
-
-                      {/* Raquete */}
-                      <button
-                        onClick={openPremium}
-                        className="bg-[#bef264]/10 border-2 border-[#bef264]/40 rounded-2xl p-4 text-center active:scale-95 transition-all relative"
-                      >
+                      <button onClick={openPremium} className="bg-[#bef264]/10 border-2 border-[#bef264]/40 rounded-2xl p-4 text-center active:scale-95 transition-all relative">
                         <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-[#bef264] text-slate-900 text-[6px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">MELHOR</div>
                         <div className="text-4xl mb-2">🏸</div>
                         <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">A parcela da raquete</p>
@@ -7483,7 +7892,6 @@ O play na palma da mão! 🏆`;
                         <p className="text-[7px] text-white/40 mt-1 leading-tight">R$ 118,80/ano · 7 dias grátis</p>
                       </button>
                     </div>
-
                     <div className="px-6 pb-7 pt-4 space-y-2">
                       <button onClick={close} className="w-full py-3 text-white/25 text-[10px] font-black uppercase tracking-widest text-center">
                         AINDA NÃO, OBRIGADO →
@@ -7831,6 +8239,216 @@ O play na palma da mão! 🏆`;
 
         {/* Suggestion Modal */}
         <AnimatePresence>
+          {/* Share Result Popup */}
+          <AnimatePresence>
+            {showSharePopup && activeTournament && (() => {
+              const rkgs = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
+              const champion = rkgs[0];
+              const top3 = rkgs.slice(0, 3);
+              if (!champion) return null;
+
+              const generateAndShare = async () => {
+                setIsGeneratingCard(true);
+                try {
+                  const canvas = document.createElement('canvas');
+                  const W = 1080, H = 1920;
+                  canvas.width = W; canvas.height = H;
+                  const ctx = canvas.getContext('2d')!;
+
+                  // 1. Background photo (if selected)
+                  if (shareBackgroundImage) {
+                    await new Promise<void>((resolve) => {
+                      const bg = new window.Image();
+                      bg.onload = () => {
+                        // Cover fill
+                        const scale = Math.max(W / bg.width, H / bg.height);
+                        const sw = bg.width * scale;
+                        const sh = bg.height * scale;
+                        const dx = (W - sw) / 2;
+                        const dy = (H - sh) / 2;
+                        ctx.drawImage(bg, dx, dy, sw, sh);
+                        resolve();
+                      };
+                      bg.onerror = () => resolve();
+                      bg.src = shareBackgroundImage;
+                    });
+                  }
+
+                  // 2. Template overlay (transparent PNG)
+                  await new Promise<void>((resolve, reject) => {
+                    const tmpl = new window.Image();
+                    tmpl.onload = () => { ctx.drawImage(tmpl, 0, 0, W, H); resolve(); };
+                    tmpl.onerror = reject;
+                    tmpl.src = '/cardcampeao.png';
+                  });
+
+                  // 3. Text overlays
+                  const drawText = (
+                    text: string,
+                    px: number, py: number,
+                    fontSize: number,
+                    color: string,
+                    anchor: 'left' | 'center' | 'right' = 'center',
+                    maxPx?: number
+                  ) => {
+                    ctx.fillStyle = color;
+                    ctx.textAlign = anchor;
+                    let fs = fontSize;
+                    ctx.font = `bold ${fs}px sans-serif`;
+                    if (maxPx) {
+                      while (ctx.measureText(text).width > maxPx && fs > 28) {
+                        fs -= 2;
+                        ctx.font = `bold ${fs}px sans-serif`;
+                      }
+                    }
+                    ctx.fillText(text, px, py);
+                  };
+
+                  const ligaNome = activeTournament.rankingId
+                    ? (rankings.find(r => r.id === activeTournament.rankingId)?.name || activeTournament.name)
+                    : activeTournament.name;
+
+                  // Coordenadas reais 1080x1920 (sem escala — direto em pixels reais)
+                  const champPoints = activeTournament.finalResults?.find(r => r.placement === 1)?.points;
+                  const totalMatches = activeTournament.matches.filter(m => m.isCompleted).length;
+                  const totalPoints = activeTournament.matches.reduce((acc, m) => acc + (m.sets[0]?.player1 || 0) + (m.sets[0]?.player2 || 0), 0);
+                  const athleteCount = activeTournament.athleteCount || activeTournament.players.length;
+                  const date = new Date(activeTournament.createdAt).toLocaleDateString('pt-BR');
+
+                  // ① Liga
+                  drawText(ligaNome.toUpperCase(), 42, 297, 42, '#ffffff', 'left', 900);
+                  // ② Campeão
+                  drawText(champion.name.toUpperCase(), 531, 1167, 72, '#ffffff', 'center', 900);
+                  // ③ Vitórias
+                  drawText(String(champion.wins), 426, 1317, 58, '#bef264', 'center');
+                  // ④ Pts campeão
+                  drawText(champPoints != null ? String(champPoints) : String(champion.gamesWon), 636, 1317, 58, '#bef264', 'center');
+                  // ⑤ Jogos
+                  drawText(String(totalMatches), 168, 1545, 50, '#ffffff', 'center');
+                  // ⑥ Pontos totais
+                  drawText(String(totalPoints), 411, 1545, 50, '#ffffff', 'center');
+                  // ⑦ Atletas
+                  drawText(String(athleteCount), 636, 1542, 50, '#ffffff', 'center');
+                  // ⑧ Data
+                  drawText(date, 879, 1545, 44, '#ffffff', 'center');
+                  // ⑨ 2º lugar
+                  if (top3[1]) drawText(top3[1].name.toUpperCase(), 357, 1782, 38, '#ffffff', 'center', 500);
+                  // ⑩ 3º lugar
+                  if (top3[2]) drawText(top3[2].name.toUpperCase(), 843, 1782, 38, '#ffffff', 'center', 500);
+
+                  // 4. Share via Capacitor (Android nativo)
+                  const base64 = canvas.toDataURL('image/png').split(',')[1];
+                  try {
+                    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+                    const { Share } = await import('@capacitor/share');
+                    const fileName = 'campeao-beachpro.png';
+                    await Filesystem.writeFile({
+                      path: fileName,
+                      data: base64,
+                      directory: Directory.Cache,
+                    });
+                    const fileUri = await Filesystem.getUri({
+                      path: fileName,
+                      directory: Directory.Cache,
+                    });
+                    await Share.share({
+                      title: `${activeTournament.name} — Resultado`,
+                      text: `🏆 Campeão: ${champion.name} | ${activeTournament.name} via BeachPró`,
+                      url: fileUri.uri,
+                      dialogTitle: 'Compartilhar resultado',
+                    });
+                  } catch {
+                    // Fallback web
+                    const url = 'data:image/png;base64,' + base64;
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'campeao-beachpro.png'; a.click();
+                  }
+                  setShowSharePopup(false);
+                } catch (err) {
+                  console.error('Share error:', err);
+                } finally {
+                  setIsGeneratingCard(false);
+                }
+              };
+
+              return (
+                <div className="fixed inset-0 z-[500] flex items-end justify-center p-4 bg-black/70 backdrop-blur-md">
+                  <motion.div
+                    initial={{ y: 60, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 60, opacity: 0 }}
+                    className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 pt-6 pb-4">
+                      <h3 className="text-sm font-black text-slate-900 uppercase italic tracking-tight">Compartilhar Resultado</h3>
+                      <button onClick={() => setShowSharePopup(false)} className="p-2 bg-slate-100 rounded-xl text-slate-400">
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="px-6 pb-7 space-y-5">
+                      {/* Preview da foto selecionada */}
+                      {shareBackgroundImage && (
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                          <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-slate-200">
+                            <img src={shareBackgroundImage} alt="preview" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-black text-primary uppercase tracking-tight">Foto selecionada ✓</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Ficará atrás do card</p>
+                          </div>
+                          <button type="button" onClick={() => setShareBackgroundImage(null)} className="p-2 bg-red-50 rounded-xl text-red-400 shrink-0">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Foto de fundo */}
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Foto de fundo (opcional)</p>
+                        <label className="w-full flex items-center gap-3 p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-primary/40 transition-all active:scale-95">
+                          <Camera size={20} className="text-slate-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            {shareBackgroundImage
+                              ? <p className="text-xs font-black text-primary uppercase tracking-tight truncate">Foto selecionada ✓</p>
+                              : <p className="text-xs font-black text-slate-400 uppercase tracking-tight">Selecionar foto da galeria</p>
+                            }
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-0.5">Ficará atrás do template</p>
+                          </div>
+
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = (ev) => setShareBackgroundImage(ev.target?.result as string);
+                              reader.readAsDataURL(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      {/* Botões */}
+                      <button
+                        onClick={generateAndShare}
+                        disabled={isGeneratingCard}
+                        className="w-full py-4 bg-[#bef264] text-slate-900 rounded-full font-black text-xs uppercase tracking-widest shadow-lg shadow-[#bef264]/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60"
+                      >
+                        {isGeneratingCard ? <RefreshCw size={16} className="animate-spin" /> : <Share2 size={16} />}
+                        {isGeneratingCard ? 'GERANDO...' : 'GERAR E COMPARTILHAR'}
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              );
+            })()}
+          </AnimatePresence>
+
           {showSuggestionModal && user && (
             <SuggestionModal
               onClose={() => setShowSuggestionModal(false)}

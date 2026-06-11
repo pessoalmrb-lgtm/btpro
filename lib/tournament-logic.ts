@@ -741,6 +741,11 @@ export function validateSetScore(s1: number, s2: number, format: MatchFormat): {
       }
       return { isValid: false, error: "Placar inválido (Máx: 7)." };
 
+    case '8_GAMES_MAX':
+      if (s1 === 8 && s2 === 8) return { isValid: false, error: "Placar de 8x8 não é permitido." };
+      if (max === 8) return { isValid: true };
+      return { isValid: false, error: "O set termina quando uma dupla faz 8 games." };
+
     case '6_GAMES_MAX':
       if (s1 === 6 && s2 === 6) return { isValid: false, error: "Placar de 6x6 não é permitido." };
       if (max === 6) return { isValid: true };
@@ -785,6 +790,14 @@ export function canIncrementScore(s1: number, s2: number, player: 1 | 2, format:
         if (s2 >= 7 || s1 >= 7) return false;
         if (s2 === 6) return s1 >= 5; // Só vai para 7 se estiver 5-6 ou 6-6
         return true;
+      }
+
+    case '8_GAMES_MAX':
+      // Regra: Máximo 8. Proibido 8x8.
+      if (player === 1) {
+        return s1 < 8 && (s1 < 7 || s2 < 8);
+      } else {
+        return s2 < 8 && (s2 < 7 || s1 < 8);
       }
 
     case '6_GAMES_MAX':

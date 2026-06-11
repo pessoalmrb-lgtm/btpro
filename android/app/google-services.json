@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "931735521781-2l0o1d88q7c7l4rprjgotofj1bmejne6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.beachpro.app",
+            "certificate_hash": "6f2fb3372a518592bd9278c449c0020013553cfd"
+          }
+        },
+        {
+          "client_id": "931735521781-vgu663uirqkddg1ukmo56ihm5fpeao0d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.beachpro.app",
+            "certificate_hash": "c3653cb46fbc878c8b75bd319a4bd29e4f1bbf97"
+          }
+        },
+        {
           "client_id": "931735521781-6bdlejsqic1l4lt7odfl5p7h44pkv7jo.apps.googleusercontent.com",
           "client_type": 3
         }

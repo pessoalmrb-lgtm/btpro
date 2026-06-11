@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Zap, Trophy, BarChart3, Users, Star, Check } from 'lucide-react';
 import { db, doc, updateDoc } from '../firebase';
+import { auth } from '../firebase';
 
 interface PremiumUpgradeProps {
   uid: string;
@@ -14,6 +15,8 @@ interface PremiumUpgradeProps {
 
 export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: PremiumUpgradeProps) => {
   const [selectedPlan, setSelectedPlan] = useState<'annual' | 'monthly'>('annual');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const getReasonConfig = () => {
     switch (reason) {
@@ -29,16 +32,72 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
   const reasonConfig = getReasonConfig();
 
   const handleUpgrade = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
     try {
-      const days = selectedPlan === 'annual' ? 365 : 30;
-      await updateDoc(doc(db, 'users', uid), {
-        isPremium: true,
-        subscriptionPlan: selectedPlan,
-        subscriptionExpiresAt: Date.now() + (days * 24 * 60 * 60 * 1000),
-      });
-      onSuccess();
-    } catch (error) {
-      console.error('Error upgrading:', error);
+      const { Capacitor } = await import('@capacitor/core');
+      const isNative = Capacitor.isNativePlatform();
+
+      if (isNative) {
+        const { Purchases, LOG_LEVEL } = await import('@revenuecat/purchases-capacitor');
+
+        // Configura o SDK com a API key do BeachPró
+        await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
+        await Purchases.configure({ apiKey: 'goog_zjhFiEAkdPNxktnZYxXyCFcQMVc' });
+
+        // Identifica o usuário
+        if (uid) {
+          await Purchases.logIn({ appUserID: uid });
+        }
+
+        // Busca os offerings disponíveis
+        const { current } = await Purchases.getOfferings();
+        if (!current) throw new Error('Nenhum plano disponível no momento.');
+
+        // Seleciona o package correto
+        const packageToBuy = selectedPlan === 'annual'
+          ? current.annual ?? current.availablePackages.find(p => p.packageType === 'ANNUAL')
+          : current.monthly ?? current.availablePackages.find(p => p.packageType === 'MONTHLY');
+
+        if (!packageToBuy) throw new Error('Plano não encontrado.');
+
+        // Inicia a compra
+        const { customerInfo } = await Purchases.purchasePackage({ aPackage: packageToBuy });
+
+        // Verifica se o entitlement foi concedido
+        const entitlement = customerInfo.entitlements.active['com.beachpro.app Pro'];
+        if (entitlement) {
+          // Atualiza Firestore
+          await updateDoc(doc(db, 'users', uid), {
+            isPremium: true,
+            subscriptionPlan: selectedPlan,
+            subscriptionExpiresAt: entitlement.expirationDate
+              ? new Date(entitlement.expirationDate).getTime()
+              : Date.now() + (365 * 24 * 60 * 60 * 1000),
+          });
+          onSuccess();
+        } else {
+          throw new Error('Assinatura não ativada. Tente novamente.');
+        }
+      } else {
+        // Fallback web: simula para testes no browser
+        const days = selectedPlan === 'annual' ? 365 : 30;
+        await updateDoc(doc(db, 'users', uid), {
+          isPremium: true,
+          subscriptionPlan: selectedPlan,
+          subscriptionExpiresAt: Date.now() + (days * 24 * 60 * 60 * 1000),
+        });
+        onSuccess();
+      }
+    } catch (error: any) {
+      console.error('Purchase error:', error);
+      if (error?.code === 'PURCHASE_CANCELLED' || error?.message?.includes('cancel')) {
+        // usuário cancelou — silencioso
+      } else {
+        setErrorMsg(error?.message || 'Erro ao processar assinatura. Tente novamente.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -181,12 +240,21 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
 
           {/* CTA */}
           <div className="space-y-2">
+            {errorMsg && (
+              <p className="text-[9px] font-black text-red-500 uppercase tracking-tight text-center px-2">{errorMsg}</p>
+            )}
             <button
               onClick={handleUpgrade}
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              {selectedPlan === 'annual' ? 'COMEÇAR 7 DIAS GRÁTIS' : 'ASSINAR AGORA'}
-              <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+              {isLoading
+                ? <span className="animate-spin text-lg">⏳</span>
+                : <>
+                    {selectedPlan === 'annual' ? 'COMEÇAR 7 DIAS GRÁTIS' : 'ASSINAR AGORA'}
+                    <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  </>
+              }
             </button>
             <button onClick={onClose} className="w-full py-2.5 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">
               Talvez mais tarde
