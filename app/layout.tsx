@@ -1,0 +1,47 @@
+import Script from 'next/script';
+import type { Metadata, Viewport } from 'next';
+import { Inter, Epilogue } from 'next/font/google';
+import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const epilogue = Epilogue({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+});
+
+export const viewport: Viewport = {
+  themeColor: '#0f172a',
+};
+
+export const metadata: Metadata = {
+  title: 'Beach Pró - Gestão de Torneios',
+  description: 'Aplicativo moderno e intuitivo para gerenciamento de torneios de Beach Tennis.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="pt-BR" className={`${inter.variable} ${epilogue.variable}`}>
+      <>
+      <Script src="/tutorial-imgs.js" strategy="lazyOnload" />
+      <body className="antialiased font-sans">
+        {children}
+      </body>
+    </>
+    </html>
+  );
+}

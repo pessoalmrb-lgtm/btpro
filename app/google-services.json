@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "931735521781",
+    "project_id": "btsuper-d8521",
+    "storage_bucket": "btsuper-d8521.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931735521781:android:0e49009da49feca79478bc",
+        "android_client_info": {
+          "package_name": "com.beachpro.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "931735521781-6bdlejsqic1l4lt7odfl5p7h44pkv7jo.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeCR_HtdbfXZIllhWFa_uph3URRSbLPIk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "931735521781-6bdlejsqic1l4lt7odfl5p7h44pkv7jo.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

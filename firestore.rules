@@ -1,0 +1,186 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "pamonhashouse@gmail.com" &&
+        request.auth.token.email_verified == true
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isNum(value) {
+      return value is int || value is float;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function rankingExists(rankingId) {
+      return rankingId is string && exists(/databases/$(database)/documents/rankings/$(rankingId));
+    }
+
+    function rankingData(rankingId) {
+      return get(/databases/$(database)/documents/rankings/$(rankingId)).data;
+    }
+
+    function isRankingAdmin(rankingId) {
+      return isSignedIn() && rankingExists(rankingId) && (
+        request.auth.uid == rankingData(rankingId).ownerId ||
+        request.auth.uid in rankingData(rankingId).get('adminIds', []) ||
+        isAdmin()
+      );
+    }
+
+    function isRankingMemberOrAdmin(rankingId) {
+      return isSignedIn() && rankingExists(rankingId) && (
+        request.auth.uid == rankingData(rankingId).ownerId ||
+        request.auth.uid in rankingData(rankingId).get('adminIds', []) ||
+        request.auth.uid in rankingData(rankingId).get('athleteIds', []) ||
+        isAdmin()
+      );
+    }
+
+    function isValidUser(data) {
+      let req = ['uid', 'email', 'userTag', 'userNumericId', 'isPremium', 'createdAt'];
+      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 10) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200 &&
+             data.userTag is string && data.userTag.size() <= 50 &&
+             data.userNumericId is string && data.userNumericId.size() <= 20 &&
+             data.isPremium is bool &&
+             isNum(data.createdAt);
+    }
+
+    function isValidRanking(data) {
+      let req = ['id', 'name', 'ownerId', 'adminIds', 'pointsConfig', 'createdAt'];
+      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 20) &&
+             data.id is string && data.id.size() <= 100 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.ownerId is string &&
+             data.adminIds is list && data.adminIds.size() <= 100 &&
+             data.pointsConfig is map &&
+             isNum(data.createdAt);
+    }
+
+    function isValidTournament(data) {
+      let req = ['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'isFinished', 'createdAt'];
+      return data.keys().hasAll(req) && (data.keys().size() >= 13 && data.keys().size() <= 30) &&
+             data.id is string && data.id.size() <= 100 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.uid is string &&
+             data.players is list && data.players.size() <= 200 &&
+             data.matches is list && data.matches.size() <= 1500 &&
+             isNum(data.currentRound) &&
+             isNum(data.totalRounds) &&
+             data.tables is list && data.tables.size() <= 100 &&
+             data.isFinished is bool &&
+             isNum(data.createdAt);
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+
+      // Necessário para buscas internas do app por e-mail, ID numérico e userTag.
+      // Se quiser mais privacidade depois, o ideal é criar uma coleção publicUsers.
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() && userId == request.auth.uid && isValidId(userId) && isValidUser(incoming());
+
+      allow update: if isSignedIn() && userId == request.auth.uid && (
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'subscriptionExpiresAt']) &&
+           incoming().isPremium == existing().isPremium)
+        )
+      );
+    }
+
+    match /rankings/{rankingId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(rankingId) && isValidRanking(incoming()) && incoming().ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() && (
+        (existing().ownerId == request.auth.uid || request.auth.uid in existing().adminIds || isAdmin()) &&
+        isValidRanking(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'description', 'arenaName', 'adminIds', 'logoUrl', 'coverUrl',
+            'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address'
+          ])
+        )
+      );
+
+      allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /players/{playerId} {
+        allow read: if isSignedIn();
+        allow write: if isRankingAdmin(rankingId);
+      }
+
+      match /pendingRequests/{requestId} {
+        allow read: if isSignedIn() && (request.auth.uid == requestId || isRankingAdmin(rankingId));
+        allow create: if isSignedIn() && request.auth.uid == requestId && rankingExists(rankingId);
+        allow delete: if isSignedIn() && (request.auth.uid == requestId || isRankingAdmin(rankingId));
+        allow update: if false;
+      }
+    }
+
+    match /tournaments/{tournamentId} {
+      allow list: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        isAdmin() ||
+        (resource.data.get('rankingId', null) != null && isRankingMemberOrAdmin(resource.data.rankingId))
+      );
+
+      allow get: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        resource.data.get('rankingId', null) == null ||
+        isRankingMemberOrAdmin(resource.data.rankingId) ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() && isValidId(tournamentId) && isValidTournament(incoming()) &&
+        incoming().uid == request.auth.uid && (
+          incoming().get('rankingId', null) == null || isRankingAdmin(incoming().rankingId)
+        );
+
+      allow update: if isSignedIn() && (
+        (existing().uid == request.auth.uid ||
+         (existing().get('rankingId', null) != null && isRankingAdmin(existing().rankingId)) ||
+         isAdmin()) &&
+        isValidTournament(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'players', 'matches', 'currentRound', 'totalRounds', 'tables',
+            'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'isHidden',
+            'rankingId', 'championsPhotoUrl', 'finalResults', 'matches_group_stage',
+            'matches_knockout_stage', 'teamsPerGroup', 'playoffRounds', 'athleteCount'
+          ])
+        )
+      );
+
+      allow delete: if isSignedIn() && (
+        existing().uid == request.auth.uid ||
+        (existing().get('rankingId', null) != null && isRankingAdmin(existing().rankingId)) ||
+        isAdmin()
+      );
+    }
+  }
+}

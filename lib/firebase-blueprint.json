@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A beach tennis tournament with players, matches and configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "uid": { "type": "string", "description": "The user ID who created the tournament." },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" }
+            }
+          }
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "player1Id": { "type": "string" },
+              "player1PartnerId": { "type": "string" },
+              "player2Id": { "type": "string" },
+              "player2PartnerId": { "type": "string" },
+              "table": { "type": "number" },
+              "sets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "player1": { "type": "number" },
+                    "player2": { "type": "number" }
+                  }
+                }
+              },
+              "currentSet": {
+                "type": "object",
+                "properties": {
+                  "player1": { "type": "number" },
+                  "player2": { "type": "number" }
+                }
+              },
+              "winnerId": { "type": "string" },
+              "isCompleted": { "type": "boolean" },
+              "round": { "type": "number" },
+              "groupId": { "type": "string" }
+            }
+          }
+        },
+        "currentRound": { "type": "number" },
+        "totalRounds": { "type": "number" },
+        "tables": { "type": "array", "items": { "type": "number" } },
+        "format": { "type": "string" },
+        "matchFormat": { "type": "string" },
+        "registrationType": { "type": "string" },
+        "rankingCriteria": { "type": "array", "items": { "type": "string" } },
+        "teamsPerGroup": { "type": "number" },
+        "playoffRounds": { "type": "array", "items": { "type": "string" } },
+        "isFinished": { "type": "boolean" },
+        "rankingId": { "type": "string", "description": "Optional link to a dynamic ranking." },
+        "championsPhotoUrl": { "type": "string" },
+        "finalResults": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "playerId": { "type": "string" },
+              "playerName": { "type": "string" },
+              "placement": { "type": "number" },
+              "points": { "type": "number" },
+              "hadPneu": { "type": "boolean" }
+            }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "uid", "players", "matches", "currentRound", "totalRounds", "tables", "format", "matchFormat", "registrationType", "rankingCriteria", "isFinished", "createdAt"]
+    },
+    "Ranking": {
+      "title": "Ranking",
+      "description": "A dynamic ranking system for players.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "adminIds": { "type": "array", "items": { "type": "string" } },
+        "logoUrl": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "pointsConfig": {
+          "type": "object",
+          "properties": {
+            "placementPoints": { "type": "object", "description": "Map of rank to points (e.g. {1: 100, 2: 50})" },
+            "pneu": { "type": "number" },
+            "positionsThatScore": { "type": "number" }
+          }
+        },
+        "leagueAthletes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "email": { "type": "string" },
+              "userTag": { "type": "string" },
+              "photo": { "type": "string" },
+              "userNumericId": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "ownerId", "adminIds", "pointsConfig", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "userTag": { "type": "string", "description": "Unique handle e.g. @user1234" },
+        "userNumericId": { "type": "string", "description": "Unique 5-digit number ID" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "subscriptionExpiresAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "isPremium"]
+    }
+  },
+  "firestore": {
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Collection of tournaments."
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Collection of user profiles."
+    },
+    "/rankings/{rankingId}": {
+      "schema": "Ranking",
+      "description": "Collection of dynamic rankings."
+    }
+  }
+}
