@@ -190,6 +190,7 @@ export default function BeachProApp() {
   const [tournamentTab, setTournamentTab] = useState<'MATCHES' | 'RANKING' | 'ROUNDS'>('MATCHES');
   const [tournamentViewRound, setTournamentViewRound] = useState<number | null>(null);
   const [showRoundSelector, setShowRoundSelector] = useState(false);
+  const [showTournamentInfo, setShowTournamentInfo] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // --- Profile Editing State ---
@@ -5601,6 +5602,7 @@ O play na palma da mão! 🏆`;
                                   <p className={cn("text-[10px] font-black uppercase truncate", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-600")}>{p1Name}</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 px-3 py-1.5 rounded-xl">
+                                  <span className="mr-1 rounded-md bg-primary px-1.5 py-0.5 text-[8px] font-black text-white">Q{m.table}</span>
                                   <span className={cn("text-sm font-black font-display", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-400")}>{s1}</span>
                                   <span className="text-[9px] text-slate-300 font-black">×</span>
                                   <span className={cn("text-sm font-black font-display", m.isCompleted && s2 > s1 ? "text-primary" : "text-slate-400")}>{s2}</span>
@@ -5667,11 +5669,12 @@ O play na palma da mão! 🏆`;
                 </div>
 
                 {/* Tournament Hero Card */}
-                <div className="arena-hero-bg rounded-[3rem] p-4 sm:p-6 min-h-[160px] flex flex-col justify-between shadow-2xl mb-4 relative overflow-hidden group transition-all duration-500 hover:shadow-primary/40">
+                <div className="relative overflow-hidden rounded-[1.75rem] border border-surface-container bg-white px-4 py-3.5 shadow-lg shadow-primary/5 mb-4">
+                  <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary to-tertiary" />
                   {/* Illustrations (Simplified) */}
-                  <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden rounded-[3rem]">
+                  <div className="absolute inset-0 pointer-events-none opacity-[0.07] overflow-hidden rounded-[1.75rem] text-primary">
                     <div className="absolute bottom-0 right-0 w-48 h-48 -mr-12 -mb-12">
-                       <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-white">
+                       <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                          <path d="M160 180L160 100M120 180L120 100M120 110H160" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                          <circle cx="140" cy="80" r="15" stroke="currentColor" strokeWidth="2" />
                          <path d="M10 180C10 180 30 110 50 110C70 110 90 180 90 180" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" />
@@ -5680,9 +5683,9 @@ O play na palma da mão! 🏆`;
                   </div>
 
                   <div className="flex justify-between items-start relative z-10 w-full gap-4">
-                    <div className="bg-white/10 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 shrink-0">
+                    <div className="flex min-w-0 items-center gap-2 pl-1">
                        <Sparkles size={12} className="text-secondary" />
-                       <span className="text-[9px] font-black text-white uppercase tracking-widest truncate max-w-[100px]">
+                       <span className="text-[9px] font-black text-primary uppercase tracking-widest truncate max-w-[120px]">
                          {(() => {
                             const formats: { [key: string]: string } = {
                               'REI_DA_QUADRA': 'REI DA QUADRA',
@@ -5700,37 +5703,39 @@ O play na palma da mão! 🏆`;
                             return formats[activeTournament.format] || 'TORNEIO';
                          })()}
                        </span>
+                       <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary/25 text-primary transition-all hover:bg-primary/5 active:scale-90">
+                         <Info size={15} strokeWidth={2.5} />
+                       </button>
                     </div>
 
                     <button 
                       onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="group flex items-center gap-1.5 border border-red-500/20 bg-black/10 backdrop-blur-md px-2.5 py-1 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm shrink-0"
+                      className="group flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shrink-0"
                     >
                       <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
                       <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
                     </button>
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-center relative z-10 py-1">
+                  <div className="flex-1 flex flex-col justify-center relative z-10 py-1 pl-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-black text-white italic tracking-tighter uppercase leading-tight drop-shadow-md break-words max-w-full">
+                      <h1 className="text-[clamp(1.35rem,6vw,2rem)] font-display font-black text-primary italic tracking-tighter uppercase leading-tight truncate max-w-full">
                         {activeTournament.name}
                       </h1>
                       {activeTournament.isFinished && (
-                        <div className="bg-white/20 backdrop-blur-md border border-white/30 px-3 py-1 rounded-full flex items-center gap-2 shadow-lg h-fit">
+                        <div className="bg-primary/5 border border-primary/10 px-3 py-1 rounded-full flex items-center gap-2 h-fit">
                           <CheckCircle2 size={12} className="text-secondary" />
-                          <span className="text-[9px] font-black text-white uppercase tracking-widest italic">FINALIZADO</span>
+                          <span className="text-[9px] font-black text-primary uppercase tracking-widest italic">FINALIZADO</span>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center relative z-10">
-                    <div className="bg-white/5 backdrop-blur-md border border-white/10 p-0.5 rounded-full flex items-center shadow-xl">
-                      <div className="bg-primary/30 px-3 py-1.5 rounded-full flex items-center gap-2 border border-white/5">
+                  <div className="flex items-center gap-2 relative z-10 pl-1">
+                    <div className="flex items-center">
+                      <div className="bg-primary px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm">
                         <div className="relative">
                           <History size={12} className="text-secondary" />
-                          <div className="absolute -top-1 -right-1 w-1 h-1 bg-red-500 rounded-full animate-pulse" />
                         </div>
                         <span className="text-[9px] font-black text-white uppercase tracking-widest">
                           {activeTournament.currentRound >= 100 ? (
@@ -5751,14 +5756,50 @@ O play na palma da mão! 🏆`;
                       
                       {activeTournament.currentRound < 100 && (
                         <div className="px-3">
-                          <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">
-                            DE <span className="text-white/60">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
+                          <span className="text-[8px] font-black text-on-surface-variant/40 uppercase tracking-widest">
+                            DE <span className="text-primary/60">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
                           </span>
                         </div>
                       )}
                     </div>
+                    <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-surface-container">
+                      <div className="h-full rounded-full bg-secondary transition-all duration-500" style={{ width: `${Math.min(100, Math.max(8, (activeTournament.currentRound < 100 ? activeTournament.currentRound : activeTournament.totalRounds) / Math.max(1, Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds) * 100))}%` }} />
+                    </div>
                   </div>
                 </div>
+
+                <AnimatePresence>
+                  {showTournamentInfo && (
+                    <motion.div className="fixed inset-0 z-[500] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentInfo(false)}>
+                      <motion.div role="dialog" aria-modal="true" aria-labelledby="tournament-info-title" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }} className="w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+                        <div className="bg-primary px-5 pb-5 pt-4 text-white">
+                          <div className="flex items-start justify-between gap-4">
+                            <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary">Informações do torneio</p><h2 id="tournament-info-title" className="mt-1 font-display text-2xl font-black italic uppercase leading-tight">{activeTournament.name}</h2></div>
+                            <button type="button" aria-label="Fechar informações" onClick={() => setShowTournamentInfo(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 active:scale-90"><X size={18}/></button>
+                          </div>
+                        </div>
+                        <div className="space-y-4 p-5">
+                          {(() => {
+                            const formatLabels: Record<string, string> = { REI_DA_QUADRA:'Rei da Quadra', SUPER_8_INDIVIDUAL:'Super 8 individual', SUPER_6_INDIVIDUAL:'Super 6 individual', SUPER_10_INDIVIDUAL:'Super 10 individual', SUPER_12_INDIVIDUAL:'Super 12 individual', SUPER_4_FIXED:'Super 4 duplas', SUPER_6_FIXED:'Super 6 duplas', SUPER_8_FIXED:'Super 8 duplas', SUPER_10_FIXED:'Super 10 duplas', SUPER_12_FIXED:'Super 12 duplas', GROUPS_MATA_MATA:'Grupos + mata-mata', GROUPS:'Fase de grupos', MATA_MATA:'Mata-mata', ROUND_ROBIN:'Todos contra todos', INDIVIDUAL:'Individual' };
+                            const matchLabels: Record<string, string> = { '6_GAMES_TIEBREAK':'6 games; em 6 × 6, tie-break', '8_GAMES_MAX':'Até 8 games', '6_GAMES_MAX':'Até 6 games', '5_GAMES_MAX':'Até 5 games', 'SUM_9_GAMES':'Soma de 9 games', 'SUM_7_GAMES':'Soma de 7 games', 'SUM_5_GAMES':'Soma de 5 games' };
+                            const criterionLabels: Record<string, string> = { WINS:'Vitórias', GAME_BALANCE:'Saldo de games', HEAD_TO_HEAD:'Confronto direto', GAMES_WON:'Games pró', SET_BALANCE:'Saldo de sets' };
+                            const regularRounds = Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds;
+                            const infoItems = [
+                              ['Formato', formatLabels[activeTournament.format] || activeTournament.format],
+                              ['Partidas', matchLabels[activeTournament.matchFormat] || activeTournament.matchFormat],
+                              ['Critérios de desempate', activeTournament.rankingCriteria.map(c => criterionLabels[c] || c).join(' → ') || 'Não informado'],
+                              ['Estrutura', `${activeTournament.players.length} atletas · ${regularRounds} rodadas`],
+                              ['Quadras', activeTournament.tables.length ? activeTournament.tables.map(c => `Q${c}`).join(', ') : 'Não informadas'],
+                              ['Modalidade', activeTournament.rankingId ? 'Torneio ranqueado' : 'Torneio sem ranking'],
+                            ];
+                            return <div className="grid grid-cols-1 gap-2.5">{infoItems.map(([label, value]) => <div key={label} className="rounded-2xl border border-surface-container bg-surface-container-low/40 px-4 py-3"><p className="text-[8px] font-black uppercase tracking-widest text-on-surface-variant/45">{label}</p><p className="mt-1 text-[11px] font-black text-primary">{value}</p></div>)}</div>;
+                          })()}
+                          <button type="button" onClick={() => setShowTournamentInfo(false)} className="w-full rounded-2xl bg-primary py-3.5 text-[10px] font-black uppercase tracking-widest text-white active:scale-[0.98]">Entendi</button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Navigation Tabs - New Style */}
                 <div className="bg-white rounded-[2rem] border border-surface-container flex shadow-sm overflow-hidden mb-2">
@@ -6214,6 +6255,7 @@ O play na palma da mão! 🏆`;
                                 </div>
                                   
                                   <div className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1 rounded-full border border-surface-container scale-90">
+                                    <span className="rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white shadow-sm">Q{m.table}</span>
                                     <span className={cn("text-xs font-black font-display", m.isCompleted && p1Games < p2Games ? "text-on-surface-variant/20" : "text-primary")}>{p1Games}</span>
                                     <span className="text-on-surface-variant/20 font-black italic text-[7px] tracking-widest shrink-0">VS</span>
                                     <span className={cn("text-xs font-black font-display", m.isCompleted && p2Games < p1Games ? "text-on-surface-variant/20" : "text-primary")}>{p2Games}</span>
@@ -6388,6 +6430,7 @@ O play na palma da mão! 🏆`;
                               <p className="text-[10px] font-black text-primary uppercase leading-tight flex-1 text-left pl-1">
                                 {p2Name}{fp2p ? ` / ${fp2p.name}` : ''}
                               </p>
+                              <span className="shrink-0 rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white">Q{m.table}</span>
                             </div>
 
                             {/* Score row */}
@@ -8263,6 +8306,10 @@ O play na palma da mão! 🏆`;
             reason={upgradeReason}
             onClose={() => setShowUpgradeModal(false)} 
             onSuccess={() => {
+              // Libera o Premium imediatamente após o RevenueCat confirmar a compra.
+              // O Firestore é apenas espelho; a fonte da verdade é o RevenueCat.
+              rcPremiumRef.current = true;
+              setIsPremium(true);
               setShowUpgradeModal(false);
               setUpgradeReason('GENERIC');
               setSnackMessage("Parabéns! Agora você é Beach Pró Premium!");

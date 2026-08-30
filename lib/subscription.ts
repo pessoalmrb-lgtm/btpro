@@ -12,6 +12,8 @@
 // =====================================================================
 
 export const RC_API_KEY = 'goog_zjhFiEAkdPNxktnZYxXyCFcQMVc';
+// ATENÇÃO: isto precisa bater com o IDENTIFIER do Entitlement no RevenueCat.
+// Se no painel estiver como 'Pro', 'pro' ou 'premium', ajuste aqui.
 export const ENTITLEMENT_ID = 'com.beachpro.app Pro';
 
 export interface SubscriptionStatus {
@@ -51,12 +53,35 @@ export async function initPurchases(uid: string): Promise<void> {
 export function statusFromCustomerInfo(customerInfo: unknown): SubscriptionStatus {
   // eslint-disable-next-line
   const ci = customerInfo as any;
-  const ent = ci?.entitlements?.active?.[ENTITLEMENT_ID];
-  if (!ent) return { isPremium: false, expirationDate: null, productIdentifier: null };
+
+  const activeEntitlements = ci?.entitlements?.active ?? {};
+
+  // 1) Primeiro tenta o entitlement configurado no app.
+  // 2) Depois tenta nomes comuns usados no painel.
+  // 3) Por fim, se existir qualquer entitlement ativo, libera o Premium.
+  //
+  // Isso evita o erro clássico: compra aprovada na Play Store, mas o app
+  // procura um entitlement com nome diferente do cadastrado no RevenueCat.
+  const ent =
+    activeEntitlements?.[ENTITLEMENT_ID] ??
+    activeEntitlements?.Pro ??
+    activeEntitlements?.pro ??
+    activeEntitlements?.premium ??
+    Object.values(activeEntitlements)[0];
+
+  if (!ent) {
+    console.warn('[subscription] Sem entitlement ativo. Entitlements ativos encontrados:', Object.keys(activeEntitlements));
+    return { isPremium: false, expirationDate: null, productIdentifier: null };
+  }
+
+  // eslint-disable-next-line
+  const entitlement = ent as any;
+  console.info('[subscription] Premium ativo via entitlement:', entitlement.identifier ?? ENTITLEMENT_ID);
+
   return {
     isPremium: true,
-    expirationDate: ent.expirationDate ?? null,
-    productIdentifier: ent.productIdentifier ?? null,
+    expirationDate: entitlement.expirationDate ?? null,
+    productIdentifier: entitlement.productIdentifier ?? null,
   };
 }
 
