@@ -55,6 +55,21 @@
   }
 }
 
+/*
+ * O iOS amplia automaticamente a WebView ao focar campos com fonte menor que
+ * 16px. Isso evita o zoom preso depois de digitar nomes, e-mails e placares.
+ * A regra fica restrita a telas de celular com o motor WebKit.
+ */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 768px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+}
+
 .arena-hero-bg {
   background: linear-gradient(180deg, #006eb5 0%, #004a8c 40%, #003a6e 100%);
   position: relative;
