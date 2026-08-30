@@ -129,6 +129,7 @@ export default function BeachProApp() {
   const [shareBackgroundImage, setShareBackgroundImage] = useState<string | null>(null);
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [showFinishConfirmPopup, setShowFinishConfirmPopup] = useState(false);
+  const finishingTournamentRef = useRef(false);
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
   const [leagueToDelete, setLeagueToDelete] = useState<string | null>(null);
   const [leagueToExit, setLeagueToExit] = useState<string | null>(null);
@@ -1513,7 +1514,8 @@ export default function BeachProApp() {
   };
 
   const finishTournament = async () => {
-    if (!activeTournament) return;
+    if (!activeTournament || finishingTournamentRef.current) return;
+    finishingTournamentRef.current = true;
 
     try {
       let finalResults: FinalRankingResult[] = [];
@@ -1585,32 +1587,31 @@ export default function BeachProApp() {
       await batch.commit();
 
       navigateTo('FINISHED');
-      // Pede avaliação na Play Store após evento positivo
-      (async () => {
-        try {
-          const count = parseInt(localStorage.getItem('btpro_tournaments_finished') || '0', 10) + 1;
-          localStorage.setItem('btpro_tournaments_finished', String(count));
-          if (count >= 2) {
-            const lastAsked = parseInt(localStorage.getItem('btpro_review_last_asked') || '0', 10);
-            const daysSince = (Date.now() - lastAsked) / (1000 * 60 * 60 * 24);
-            if (lastAsked === 0 || daysSince >= 30) {
-              const { InAppReview } = await import('@capacitor-community/in-app-review');
-              await InAppReview.requestReview();
-              localStorage.setItem('btpro_review_last_asked', String(Date.now()));
-            }
-          }
-        } catch { /* silencioso em browser */ }
-      })();
-      const confetti = (await import('canvas-confetti')).default;
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#0f172a', '#bef264', '#000000'],
-      });
+      setSnackMessage('Torneio finalizado com sucesso');
+      window.setTimeout(() => setSnackMessage(null), 3000);
+
+      const count = parseInt(localStorage.getItem('btpro_tournaments_finished') || '0', 10) + 1;
+      localStorage.setItem('btpro_tournaments_finished', String(count));
+
+      // Canvas com muitas partículas pode encerrar WebViews com pouca memória,
+      // especialmente em simuladores remotos. Mantém o efeito apenas na web.
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform()) {
+        const confetti = (await import('canvas-confetti')).default;
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#0f172a', '#bef264', '#000000'],
+        });
+      }
     } catch (err) {
       console.error('Error finishing tournament:', err);
-      handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
+      setError('Não foi possível finalizar o torneio. Verifique a conexão e tente novamente.');
+      setSnackMessage('Erro ao finalizar o torneio');
+      window.setTimeout(() => setSnackMessage(null), 4000);
+    } finally {
+      finishingTournamentRef.current = false;
     }
   };
 
