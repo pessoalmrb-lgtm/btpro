@@ -780,15 +780,24 @@ export default function BeachProApp() {
     }
 
     try {
-      if (authMode === 'REGISTER') {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      const authRequest = authMode === 'REGISTER'
+        ? createUserWithEmailAndPassword(auth, email, password)
+        : signInWithEmailAndPassword(auth, email, password);
+
+      await Promise.race([
+        authRequest,
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error('AUTH_TIMEOUT'));
+          }, 15000);
+        }),
+      ]);
     } catch (err) {
       const error = err as { code?: string; message?: string };
       console.error("Auth error:", error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      if (error.message === 'AUTH_TIMEOUT') {
+        setAuthError("O servidor demorou para responder. Verifique a internet e tente novamente.");
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         setAuthError("E-mail ou senha incorretos.");
       } else if (error.code === 'auth/email-already-in-use') {
         setAuthError("Este e-mail já está sendo usado.");

@@ -1,7 +1,8 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
+import { getAuth, initializeAuth, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { getFirestore, enableIndexedDbPersistence, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, writeBatch } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -26,7 +27,25 @@ const getFirebaseApp = () => {
   return getApp();
 };
 
-export const auth    = typeof window !== 'undefined' ? getAuth(getFirebaseApp())                              : null as any;
+const getFirebaseAuth = () => {
+  const app = getFirebaseApp();
+
+  // O armazenamento IndexedDB usado automaticamente pelo Firebase pode ficar
+  // bloqueado em WKWebView/simuladores. No app nativo, localStorage é mais
+  // previsível e ainda preserva a sessão entre as aberturas do aplicativo.
+  if (Capacitor.isNativePlatform()) {
+    try {
+      return initializeAuth(app, { persistence: browserLocalPersistence });
+    } catch {
+      // O Auth já pode ter sido inicializado durante hot reload.
+      return getAuth(app);
+    }
+  }
+
+  return getAuth(app);
+};
+
+export const auth    = typeof window !== 'undefined' ? getFirebaseAuth()                                      : null as any;
 export const db      = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(), firestoreDatabaseId)   : null as any;
 export const storage = typeof window !== 'undefined' ? getStorage(getFirebaseApp())                          : null as any;
 
