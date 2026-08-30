@@ -406,22 +406,44 @@ export default function BeachProApp() {
   }, [activeRankingId, rankings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    // O splash tem duração própria e não pode depender da resposta do Firebase.
+    const splashTimer = window.setTimeout(() => {
+      setSplashDone(true);
+    }, 2500);
+
+    // Em WebViews/simuladores, o Firebase Auth pode demorar para restaurar a
+    // sessão. Evita manter o aplicativo preso no splash indefinidamente.
+    const authFallbackTimer = window.setTimeout(() => {
       setIsAuthReady(true);
-      if (!u) {
+      setStep('HOME');
+    }, 6000);
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (u) => {
+        window.clearTimeout(authFallbackTimer);
+        setUser(u);
+        setIsAuthReady(true);
+        if (!u) {
+          setStep('HOME');
+        }
+      },
+      (error) => {
+        window.clearTimeout(authFallbackTimer);
+        console.error('Falha ao inicializar a autenticação:', error);
+        setIsAuthReady(true);
         setStep('HOME');
       }
-      // Garante tempo mínimo de exibição do splash
-      setTimeout(() => {
-        setSplashDone(true);
-      }, 2500);
-    });
+    );
 
   // Verify Firestore connection on boot
     testConnection();
 
-    return () => unsubscribe();
+    return () => {
+      window.clearTimeout(splashTimer);
+      window.clearTimeout(authFallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Captura resultado do signInWithRedirect (Android/Capacitor)
