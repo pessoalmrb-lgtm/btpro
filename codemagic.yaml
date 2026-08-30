@@ -1,0 +1,52 @@
+workflows:
+  ios-simulator:
+    name: Beach Pro - iOS Simulator
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      node: 22.14.0
+      xcode: latest
+      groups:
+        - firebase
+      vars:
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+
+    cache:
+      cache_paths:
+        - $CM_BUILD_DIR/node_modules
+        - $HOME/Library/Caches/org.swift.swiftpm
+
+    scripts:
+      - name: Install JavaScript dependencies
+        script: npm ci
+
+      - name: Build the Beach Pro web app
+        script: npm run build
+
+      - name: Sync Capacitor with iOS
+        script: npx cap sync ios
+
+      - name: Build the iOS Simulator app
+        script: |
+          set -o pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$CM_BUILD_DIR/ios-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package simulator artifact
+        script: |
+          cd "$CM_BUILD_DIR/ios-build/Build/Products/Debug-iphonesimulator"
+          ditto -c -k --sequesterRsrc --keepParent App.app "$CM_BUILD_DIR/BeachPro-iOS-Simulator.zip"
+
+    artifacts:
+      - BeachPro-iOS-Simulator.zip
+      - ios-build/Build/Products/Debug-iphonesimulator/App.app
+

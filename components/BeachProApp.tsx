@@ -7006,6 +7006,23 @@ O play na palma da mão! 🏆`;
                       </div>
                       <ChevronRight size={18} className="text-on-surface-variant/20" />
                     </button>
+                    <a
+                      href="https://btsuper.vercel.app/delete-account"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-between p-4 hover:bg-red-50 rounded-2xl transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center text-red-500 group-hover:bg-red-100 transition-colors">
+                          <Trash2 size={20} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-red-600 font-black text-xs uppercase tracking-widest leading-none mb-1">Excluir minha conta</p>
+                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Solicitar exclusão dos dados</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={18} className="text-red-300" />
+                    </a>
                   </div>
 
                   {/* 4. Rodapé (Ação Destrutiva) */}
