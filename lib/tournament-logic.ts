@@ -108,7 +108,7 @@ export function getPossibleGroupStructures(totalTeams: number): GroupPossibility
     if (totalTeams % i === 0) {
       const groupsCount = i;
       const teamsPerGroup = totalTeams / i;
-      if (teamsPerGroup >= 3) {
+      if (teamsPerGroup >= 2) {
         possibilities.push({
           groupsCount,
           teamsPerGroup,
@@ -120,9 +120,9 @@ export function getPossibleGroupStructures(totalTeams: number): GroupPossibility
 
   // Fallback if no exact divisors with min 3 teams
   if (possibilities.length === 0) {
-    if (totalTeams >= 6) {
+    if (totalTeams >= 4) {
        // Estimate best fit
-       const suggestedGroups = Math.floor(totalTeams / 4) || 2;
+       const suggestedGroups = Math.max(2, Math.floor(totalTeams / 4));
        const avg = totalTeams / suggestedGroups;
        possibilities.push({
          groupsCount: suggestedGroups,
@@ -316,10 +316,9 @@ export function generateGroupStage(
 export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: number[], selectedRounds: PlayoffRound[]): Match[] {
   const matches: Match[] = [];
   const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-  const rounds = roundsOrder.filter(r => selectedRounds.includes(r));
+  const rounds = normalizePlayoffRounds(selectedRounds);
   
-  const numRounds = rounds.length;
-  if (numRounds === 0) return [];
+  if (rounds.length === 0 || selectedCourts.length === 0) return [];
 
   // Determining courts with balancing awareness
   const courtUsageCount: Record<string, Record<number, number>> = {};
@@ -350,15 +349,21 @@ export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: numbe
   // Create matches
   let currentTeams = [...qualifiedTeams];
   
-  rounds.forEach((roundType, roundIdx) => {
-    const numMatches = Math.pow(2, numRounds - 1 - roundIdx);
+  rounds.forEach((roundType) => {
+    const numMatchesByRound: Record<PlayoffRound, number> = {
+      ROUND_OF_16: 8,
+      QUARTER_FINALS: 4,
+      SEMI_FINALS: 2,
+      FINAL: 1,
+    };
+    const numMatches = numMatchesByRound[roundType];
     let availableCourtsInRound = [...selectedCourts];
     
     for (let i = 0; i < numMatches; i++) {
       let p1Id = `TBD-${roundType}-${i}-1`;
       let p2Id = `TBD-${roundType}-${i}-2`;
 
-      if (roundIdx === 0 && currentTeams.length > 0) {
+      if (roundType === rounds[0] && currentTeams.length > 0) {
         const team1 = currentTeams[i * 2];
         const team2 = currentTeams[i * 2 + 1];
         if (team1) p1Id = team1.id;
@@ -386,6 +391,102 @@ export function generatePlayoffs(qualifiedTeams: Player[], selectedCourts: numbe
   });
 
   return matches;
+}
+
+/**
+ * A fase escolhida representa o início do mata-mata. Todas as fases seguintes
+ * são obrigatórias para que o chaveamento sempre termine em uma final.
+ */
+export function normalizePlayoffRounds(selectedRounds: PlayoffRound[]): PlayoffRound[] {
+  const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
+  if (selectedRounds.length === 0) return [];
+  const firstIndex = Math.min(...selectedRounds.map(round => roundsOrder.indexOf(round)).filter(index => index >= 0));
+  return Number.isFinite(firstIndex) ? roundsOrder.slice(firstIndex) : [];
+}
+
+export function getTournamentGroups(tournament: TournamentState): { id: string; teams: Player[] }[] {
+  if (tournament.groups?.length) return tournament.groups;
+
+  const groupMatches = tournament.matches.filter(match => match.round < 100 && !!match.groupId);
+  const teamById = new Map(tournament.players.map(team => [team.id, team]));
+  const teamIdsByGroup = new Map<string, Set<string>>();
+  const add = (groupId: string, teamId: string) => {
+    if (!teamIdsByGroup.has(groupId)) teamIdsByGroup.set(groupId, new Set());
+    teamIdsByGroup.get(groupId)!.add(teamId);
+  };
+
+  groupMatches.forEach(match => {
+    const label = match.groupId!;
+    if (label.length > 1 && /^[A-Z]+$/.test(label)) {
+      add(label[0], match.player1Id);
+      add(label[1], match.player2Id);
+    } else {
+      add(label, match.player1Id);
+      add(label, match.player2Id);
+    }
+  });
+
+  return Array.from(teamIdsByGroup.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, teamIds]) => ({
+      id,
+      teams: Array.from(teamIds).map(teamId => teamById.get(teamId)).filter((team): team is Player => !!team),
+    }));
+}
+
+export function advancePlayoffWinner(
+  matches: Match[],
+  matchId: string,
+  winnerId: string,
+  selectedRounds: PlayoffRound[]
+): Match[] {
+  if (!matchId.startsWith('playoff-')) return matches;
+  const [, roundTypeRaw, matchIndexRaw] = matchId.split('-');
+  const roundType = roundTypeRaw as PlayoffRound;
+  const matchIndex = Number(matchIndexRaw);
+  const rounds = normalizePlayoffRounds(selectedRounds);
+  const roundIndex = rounds.indexOf(roundType);
+  if (roundIndex < 0 || roundIndex >= rounds.length - 1 || !Number.isFinite(matchIndex)) return matches;
+
+  const nextRound = rounds[roundIndex + 1];
+  const nextMatchId = `playoff-${nextRound}-${Math.floor(matchIndex / 2)}`;
+  const slot = matchIndex % 2 === 0 ? 'player1Id' : 'player2Id';
+  return matches.map(match => match.id === nextMatchId ? { ...match, [slot]: winnerId } : match);
+}
+
+export function invalidatePlayoffDescendants(
+  matches: Match[],
+  matchId: string,
+  selectedRounds: PlayoffRound[]
+): Match[] {
+  if (!matchId.startsWith('playoff-')) return matches;
+  const [, roundTypeRaw, matchIndexRaw] = matchId.split('-');
+  const rounds = normalizePlayoffRounds(selectedRounds);
+  let roundIndex = rounds.indexOf(roundTypeRaw as PlayoffRound);
+  let matchIndex = Number(matchIndexRaw);
+  if (roundIndex < 0 || !Number.isFinite(matchIndex)) return matches;
+
+  let updated = [...matches];
+  while (roundIndex < rounds.length - 1) {
+    const nextRound = rounds[roundIndex + 1];
+    const nextMatchIndex = Math.floor(matchIndex / 2);
+    const nextMatchId = `playoff-${nextRound}-${nextMatchIndex}`;
+    const slot = matchIndex % 2 === 0 ? 'player1Id' : 'player2Id';
+    updated = updated.map(match => {
+      if (match.id !== nextMatchId) return match;
+      return {
+        ...match,
+        [slot]: `TBD-${nextRound}-${nextMatchIndex}-${slot === 'player1Id' ? 1 : 2}`,
+        sets: [],
+        currentSet: { player1: 0, player2: 0 },
+        isCompleted: false,
+        winnerId: undefined,
+      };
+    });
+    roundIndex++;
+    matchIndex = nextMatchIndex;
+  }
+  return updated;
 }
 
 /**
@@ -851,93 +952,108 @@ export function getKnockoutQualifiedTeams(
   groups: { id: string, teams: Player[] }[],
   selectedRounds: PlayoffRound[]
 ): Player[] {
-  const allGroupRankings: { groupId: string, rankings: any[] }[] = [];
-  
-  groups.forEach(group => {
-    const groupMatches = matches.filter(m => m.groupId === group.id);
-    const rankings = calculateRankings(group.teams, groupMatches, criteria);
-    allGroupRankings.push({ groupId: group.id, rankings });
+  type RankedTeam = ReturnType<typeof calculateRankings>[number] & { groupId: string; groupPosition: number };
+
+  const normalizedRounds = normalizePlayoffRounds(selectedRounds);
+  const targetKnockoutSize = normalizedRounds[0] === 'ROUND_OF_16' ? 16 :
+                            normalizedRounds[0] === 'QUARTER_FINALS' ? 8 :
+                            normalizedRounds[0] === 'SEMI_FINALS' ? 4 :
+                            normalizedRounds[0] === 'FINAL' ? 2 : 0;
+
+  if (targetKnockoutSize === 0 || groups.length === 0 || players.length < targetKnockoutSize) return [];
+
+  // No intergrupos uma partida AB pertence à classificação de A e de B.
+  // Por isso filtramos pelos participantes originais, e não pelo rótulo composto.
+  const rankedGroups = groups.map(group => {
+    const teamIds = new Set(group.teams.map(team => team.id));
+    const groupMatches = matches.filter(match =>
+      teamIds.has(match.player1Id) || teamIds.has(match.player2Id)
+    );
+    const rankings = calculateRankings(group.teams, groupMatches, criteria).map((team, index) => ({
+      ...team,
+      groupId: group.id,
+      groupPosition: index + 1,
+    }));
+    return { groupId: group.id, rankings };
   });
 
-  const qualifiedTeams: Player[] = [];
-  
-  // Decide target size based on chosen rounds
-  const targetKnockoutSize = selectedRounds.includes('ROUND_OF_16') ? 16 :
-                            selectedRounds.includes('QUARTER_FINALS') ? 8 :
-                            selectedRounds.includes('SEMI_FINALS') ? 4 :
-                            selectedRounds.includes('FINAL') ? 2 : 0;
-  
-  if (targetKnockoutSize === 0) return [];
+  const compareByCriteria = (a: RankedTeam, b: RankedTeam) => {
+    for (const criterion of criteria) {
+      if (criterion === 'WINS' && b.wins !== a.wins) return b.wins - a.wins;
+      if (criterion === 'SET_BALANCE' && b.setBalance !== a.setBalance) return b.setBalance - a.setBalance;
+      if (criterion === 'GAME_BALANCE' && b.gameBalance !== a.gameBalance) return b.gameBalance - a.gameBalance;
+      if (criterion === 'GAMES_WON' && b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;
+    }
+    return a.name.localeCompare(b.name, 'pt-BR');
+  };
 
-  // How many we should take from each group initially
-  const perGroup = Math.max(1, Math.floor(targetKnockoutSize / groups.length));
-  
-  // Rule: Top N from each group advance
-  allGroupRankings.forEach(gr => {
-    gr.rankings.slice(0, perGroup).forEach(team => {
-      qualifiedTeams.push({ id: team.id, name: team.name });
+  const perGroup = Math.floor(targetKnockoutSize / rankedGroups.length);
+  const selected: RankedTeam[] = [];
+  const selectedIds = new Set<string>();
+
+  rankedGroups.forEach(group => {
+    group.rankings.slice(0, perGroup).forEach(team => {
+      selected.push(team);
+      selectedIds.add(team.id);
     });
   });
 
-  // If we still need more teams to fill the bracket (indices for remaining slots)
-  // We pick the best remaining teams across all groups
-  if (qualifiedTeams.length < targetKnockoutSize) {
-    const remainingNeeded = targetKnockoutSize - qualifiedTeams.length;
-    const candidates: any[] = [];
-    
-    allGroupRankings.forEach(gr => {
-      // Pick teams that haven't qualified yet
-      gr.rankings.slice(perGroup).forEach(team => {
-        candidates.push({ ...team, groupId: gr.groupId });
-      });
-    });
-
-    // Sort candidates by criteria
-    const sortedCandidates = candidates.sort((a, b) => {
-      for (const criterion of criteria) {
-        if (criterion === 'WINS') {
-          if (b.wins !== a.wins) return b.wins - a.wins;
-        }
-        if (criterion === 'SET_BALANCE') {
-          if (b.setBalance !== a.setBalance) return b.setBalance - a.setBalance;
-        }
-        if (criterion === 'GAME_BALANCE') {
-          if (b.gameBalance !== a.gameBalance) return b.gameBalance - a.gameBalance;
-        }
-      }
-      return 0;
-    });
-
-    sortedCandidates.slice(0, remainingNeeded).forEach(team => {
-      qualifiedTeams.push({ id: team.id, name: team.name });
+  if (selected.length < targetKnockoutSize) {
+    const wildcards = rankedGroups
+      .flatMap(group => group.rankings.filter(team => !selectedIds.has(team.id)))
+      .sort((a, b) => a.groupPosition - b.groupPosition || compareByCriteria(a, b));
+    wildcards.slice(0, targetKnockoutSize - selected.length).forEach(team => {
+      selected.push(team);
+      selectedIds.add(team.id);
     });
   }
 
-  // Anti-clash seeding: interleave groups so teams from the same group
-  // only meet in the final stages. Pattern: G1[0], G2[0], G3[0]..., G1[1], G2[1]...
-  // This ensures group rivals are on opposite sides of the bracket.
-  const seeded: Player[] = [];
-  const perGroupQualified: Player[][] = allGroupRankings.map(gr => {
-    return qualifiedTeams.filter(qt => 
-      gr.rankings.some(r => r.id === qt.id)
-    );
-  });
+  if (selected.length !== targetKnockoutSize) return [];
 
-  let posIdx = 0;
-  while (seeded.length < targetKnockoutSize) {
-    let added = false;
-    for (const groupQ of perGroupQualified) {
-      if (posIdx < groupQ.length && seeded.length < targetKnockoutSize) {
-        seeded.push(groupQ[posIdx]);
-        added = true;
+  const byGroup = rankedGroups.map(group =>
+    group.rankings.filter(team => selectedIds.has(team.id))
+  );
+  const asPlayers = (teams: RankedTeam[]) => teams.map(team => ({ id: team.id, name: team.name }));
+
+  // Cruzamentos esportivos previsíveis para as estruturas mais comuns.
+  if (byGroup.length === 2 && targetKnockoutSize === 2) {
+    return asPlayers([byGroup[0][0], byGroup[1][0]]);
+  }
+  if (byGroup.length === 2 && targetKnockoutSize === 4) {
+    return asPlayers([byGroup[0][0], byGroup[1][1], byGroup[1][0], byGroup[0][1]]);
+  }
+  if (byGroup.length === 2 && targetKnockoutSize === 8) {
+    return asPlayers([
+      byGroup[0][0], byGroup[1][3], byGroup[0][1], byGroup[1][2],
+      byGroup[1][0], byGroup[0][3], byGroup[1][1], byGroup[0][2],
+    ]);
+  }
+  if (byGroup.length === 4 && targetKnockoutSize === 8) {
+    return asPlayers([
+      byGroup[0][0], byGroup[2][1], byGroup[1][0], byGroup[3][1],
+      byGroup[2][0], byGroup[0][1], byGroup[3][0], byGroup[1][1],
+    ]);
+  }
+
+  // Fallback para 3, 5 ou mais grupos: melhores campanhas primeiro e pareamento
+  // guloso contra o pior classificado disponível de outro grupo.
+  const pool = [...selected].sort((a, b) => a.groupPosition - b.groupPosition || compareByCriteria(a, b));
+  const bracketOrder: RankedTeam[] = [];
+  while (pool.length > 0) {
+    const seed = pool.shift()!;
+    let opponentIndex = -1;
+    for (let index = pool.length - 1; index >= 0; index--) {
+      if (pool[index].groupId !== seed.groupId) {
+        opponentIndex = index;
+        break;
       }
     }
-    posIdx++;
-    if (!added) break;
+    if (opponentIndex < 0) opponentIndex = pool.length - 1;
+    const opponent = pool.splice(opponentIndex, 1)[0];
+    bracketOrder.push(seed, opponent);
   }
 
-  // Fallback: if seeding didn't cover all slots, use original order
-  return (seeded.length === targetKnockoutSize ? seeded : qualifiedTeams).slice(0, targetKnockoutSize);
+  return asPlayers(bracketOrder);
 }
 
 export interface FinalRankingResult {
@@ -949,13 +1065,58 @@ export interface FinalRankingResult {
 }
 
 /**
+ * Classificação definitiva. Em grupos + mata-mata, a posição esportiva é
+ * definida pela fase alcançada; as estatísticas dos grupos apenas desempатam
+ * equipes eliminadas na mesma fase.
+ */
+export function calculateFinalRankings(
+  tournament: TournamentState
+): ReturnType<typeof calculateRankings> {
+  if (tournament.format !== 'GROUPS_MATA_MATA') {
+    return calculateRankings(tournament.players, tournament.matches, tournament.rankingCriteria);
+  }
+
+  const groupMatches = tournament.matches.filter(match => match.round < 100);
+  const baseRanking = calculateRankings(tournament.players, groupMatches, tournament.rankingCriteria);
+  const baseIndex = new Map(baseRanking.map((team, index) => [team.id, index]));
+  const byId = new Map(baseRanking.map(team => [team.id, team]));
+  const orderedIds: string[] = [];
+  const add = (id?: string) => {
+    if (id && !id.startsWith('TBD') && byId.has(id) && !orderedIds.includes(id)) orderedIds.push(id);
+  };
+  const loserOf = (match: Match) => {
+    if (!match.isCompleted || !match.winnerId) return undefined;
+    return match.winnerId === match.player1Id ? match.player2Id : match.player1Id;
+  };
+
+  const finalMatch = tournament.matches.find(match => match.round === 103 && match.isCompleted);
+  if (!finalMatch?.winnerId) return baseRanking;
+
+  add(finalMatch.winnerId);
+  add(loserOf(finalMatch));
+
+  // Perdedores de uma mesma fase são ordenados pela campanha nos grupos.
+  [102, 101, 100].forEach(round => {
+    const eliminated = tournament.matches
+      .filter(match => match.round === round && match.isCompleted)
+      .map(loserOf)
+      .filter((id): id is string => !!id)
+      .sort((a, b) => (baseIndex.get(a) ?? Number.MAX_SAFE_INTEGER) - (baseIndex.get(b) ?? Number.MAX_SAFE_INTEGER));
+    eliminated.forEach(add);
+  });
+
+  baseRanking.forEach(team => add(team.id));
+  return orderedIds.map(id => byId.get(id)!).filter(Boolean);
+}
+
+/**
  * Calculates points for a ranking based on tournament results.
  */
 export function calculateTournamentPoints(
   tournament: TournamentState,
   ranking: Ranking
 ): FinalRankingResult[] {
-  const standings = calculateRankings(tournament.players, tournament.matches, tournament.rankingCriteria);
+  const standings = calculateFinalRankings(tournament);
   const results: FinalRankingResult[] = [];
 
   const { pneu: pneuPenalty, participation: participationPoints, placementPoints, positionsThatScore } = ranking.pointsConfig;
@@ -981,16 +1142,18 @@ export function calculateTournamentPoints(
 
   standings.forEach((player, index) => {
     // Check if the athlete is officially registered in the league (not manual)
-    const playerIds = player.id.startsWith('team-') 
-      ? player.id.replace('team-', '').split('-') 
-      : [player.id];
+    const playerIds = player.memberIds?.length
+      ? player.memberIds
+      : player.id.startsWith('team-')
+        ? player.id.replace('team-', '').split('-')
+        : [player.id];
       
     const isOfficiallyRegistered = playerIds.some(id => officiallyRegisteredIds.has(id));
     
     const placement = index + 1;
     let points = 0;
 
-    const hadPneu = playerIds.some(pid => playersWhoSufferedPneu.has(pid));
+    const hadPneu = playersWhoSufferedPneu.has(player.id) || playerIds.some(pid => playersWhoSufferedPneu.has(pid));
 
     if (isOfficiallyRegistered) {
       points += (participationPoints || 0);
@@ -1037,41 +1200,47 @@ export function calculateRankings(players: Player[], matches: Match[], criteria:
     const p2 = stats.find(s => s.id === m.player2Id);
     const p2p = m.player2PartnerId ? stats.find(s => s.id === m.player2PartnerId) : null;
 
-    if (!p1 || !p2) return;
+    // Permite calcular a classificação de um grupo no modo intergrupos:
+    // apenas um dos lados da partida pertence ao grupo que está sendo avaliado.
+    if (!p1 && !p1p && !p2 && !p2p) return;
 
     const team1Wins = m.winnerId === m.player1Id || m.winnerId === 'TEAM1';
     
     if (team1Wins) {
-      p1.wins++;
+      if (p1) p1.wins++;
       if (p1p) p1p.wins++;
-      p1.setsWon++;
+      if (p1) p1.setsWon++;
       if (p1p) p1p.setsWon++;
       
-      p2.losses++;
+      if (p2) p2.losses++;
       if (p2p) p2p.losses++;
-      p2.setsLost++;
+      if (p2) p2.setsLost++;
       if (p2p) p2p.setsLost++;
     } else {
-      p2.wins++;
+      if (p2) p2.wins++;
       if (p2p) p2p.wins++;
-      p2.setsWon++;
+      if (p2) p2.setsWon++;
       if (p2p) p2p.setsWon++;
 
-      p1.losses++;
+      if (p1) p1.losses++;
       if (p1p) p1p.losses++;
-      p1.setsLost++;
+      if (p1) p1.setsLost++;
       if (p1p) p1p.setsLost++;
     }
 
     m.sets.forEach(s => {
-      p1.gamesWon += s.player1;
-      p1.gamesLost += s.player2;
+      if (p1) {
+        p1.gamesWon += s.player1;
+        p1.gamesLost += s.player2;
+      }
       if (p1p) {
         p1p.gamesWon += s.player1;
         p1p.gamesLost += s.player2;
       }
-      p2.gamesWon += s.player2;
-      p2.gamesLost += s.player1;
+      if (p2) {
+        p2.gamesWon += s.player2;
+        p2.gamesLost += s.player1;
+      }
       if (p2p) {
         p2p.gamesWon += s.player2;
         p2p.gamesLost += s.player1;
@@ -1084,46 +1253,57 @@ export function calculateRankings(players: Player[], matches: Match[], criteria:
     s.gameBalance = s.gamesWon - s.gamesLost;
   });
 
+  // Mini-tabela para confronto direto. O comparador par-a-par anterior podia
+  // formar ciclos (A > B, B > C, C > A) em empates triplos, violando a ordem
+  // exigida por Array.sort. Aqui todos os empatados nas regras anteriores ao
+  // confronto direto recebem uma pontuação única e determinística.
+  const headToHeadWins = new Map<string, number>();
+  const headToHeadIndex = criteria.indexOf('HEAD_TO_HEAD');
+  if (headToHeadIndex >= 0) {
+    const previousCriteria = criteria.slice(0, headToHeadIndex);
+    const valueFor = (team: typeof stats[number], criterion: RankingCriterion) => {
+      if (criterion === 'WINS') return team.wins;
+      if (criterion === 'SET_BALANCE') return team.setBalance;
+      if (criterion === 'GAME_BALANCE') return team.gameBalance;
+      if (criterion === 'GAMES_WON') return team.gamesWon;
+      return 0;
+    };
+    const cohorts = new Map<string, Set<string>>();
+    stats.forEach(team => {
+      const key = previousCriteria.map(criterion => valueFor(team, criterion)).join('|');
+      if (!cohorts.has(key)) cohorts.set(key, new Set());
+      cohorts.get(key)!.add(team.id);
+      headToHeadWins.set(team.id, 0);
+    });
+    cohorts.forEach(ids => {
+      if (ids.size < 2) return;
+      matches.filter(match => match.isCompleted).forEach(match => {
+        const side1 = [match.player1Id, match.player1PartnerId].filter((id): id is string => !!id);
+        const side2 = [match.player2Id, match.player2PartnerId].filter((id): id is string => !!id);
+        if (!side1.some(id => ids.has(id)) || !side2.some(id => ids.has(id))) return;
+        const winnerSide = match.winnerId === match.player1Id || match.winnerId === 'TEAM1' ? side1 : side2;
+        winnerSide.filter(id => ids.has(id)).forEach(id => {
+          headToHeadWins.set(id, (headToHeadWins.get(id) || 0) + 1);
+        });
+      });
+    });
+  }
+
   return stats.sort((a, b) => {
     for (const criterion of criteria) {
       if (criterion === 'WINS') {
         if (b.wins !== a.wins) return b.wins - a.wins;
       }
       if (criterion === 'HEAD_TO_HEAD') {
-        const directMatches = matches.filter(m => 
-          m.isCompleted && 
-          ((m.player1Id === a.id && m.player2Id === b.id) || 
-           (m.player1Id === b.id && m.player2Id === a.id) ||
-           (m.player1Id === a.id && m.player2PartnerId === b.id) ||
-           (m.player1PartnerId === a.id && m.player2Id === b.id) ||
-           (m.player1PartnerId === a.id && m.player2PartnerId === b.id) ||
-           (m.player2Id === a.id && m.player1PartnerId === b.id) ||
-           (m.player2PartnerId === a.id && m.player1Id === b.id) ||
-           (m.player2PartnerId === a.id && m.player1PartnerId === b.id))
-        );
-
-        if (directMatches.length > 0) {
-          let aWinsCount = 0;
-          let bWinsCount = 0;
-          directMatches.forEach(dm => {
-            const aInT1 = dm.player1Id === a.id || dm.player1PartnerId === a.id;
-            const bInT1 = dm.player1Id === b.id || dm.player1PartnerId === b.id;
-            const aInT2 = dm.player2Id === a.id || dm.player2PartnerId === a.id;
-            const bInT2 = dm.player2Id === b.id || dm.player2PartnerId === b.id;
-            
-            const winnerIsT1 = dm.winnerId === dm.player1Id || dm.winnerId === 'TEAM1';
-            
-            if (aInT1 && bInT2) {
-              if (winnerIsT1) aWinsCount++; else bWinsCount++;
-            } else if (aInT2 && bInT1) {
-              if (winnerIsT1) bWinsCount++; else aWinsCount++;
-            }
-          });
-          if (aWinsCount !== bWinsCount) return bWinsCount - aWinsCount;
-        }
+        const aWinsCount = headToHeadWins.get(a.id) || 0;
+        const bWinsCount = headToHeadWins.get(b.id) || 0;
+        if (aWinsCount !== bWinsCount) return bWinsCount - aWinsCount;
       }
       if (criterion === 'GAME_BALANCE') {
         if (b.gameBalance !== a.gameBalance) return b.gameBalance - a.gameBalance;
+      }
+      if (criterion === 'SET_BALANCE') {
+        if (b.setBalance !== a.setBalance) return b.setBalance - a.setBalance;
       }
       if (criterion === 'GAMES_WON') {
         if (b.gamesWon !== a.gamesWon) return b.gamesWon - a.gamesWon;

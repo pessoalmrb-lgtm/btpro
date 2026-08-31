@@ -1,6 +1,7 @@
 export type Player = {
   id: string;
   name: string;
+  memberIds?: string[];
 };
 
 export type SetScore = {
@@ -62,6 +63,11 @@ export type RankingCriterion = 'WINS' | 'GAME_BALANCE' | 'HEAD_TO_HEAD' | 'GAMES
 
 export type PlayoffRound = 'ROUND_OF_16' | 'QUARTER_FINALS' | 'SEMI_FINALS' | 'FINAL';
 
+export type TournamentGroup = {
+  id: string;
+  teams: Player[];
+};
+
 export type TournamentState = {
   id: string;
   name: string;
@@ -78,6 +84,9 @@ export type TournamentState = {
   registrationType: TeamRegistrationType;
   rankingCriteria: RankingCriterion[];
   teamsPerGroup?: number;
+  groupsCount?: number;
+  groups?: TournamentGroup[];
+  groupsMatchPlay?: 'INTRA' | 'INTER';
   playoffRounds?: PlayoffRound[];
   isFinished: boolean;
   isHidden?: boolean;

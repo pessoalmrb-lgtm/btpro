@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
-import { generateRoundRobin, validateSetScore, calculateRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
+import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
 import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, testConnection, uploadImageToStorage } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
@@ -111,6 +111,7 @@ export default function BeachProApp() {
   const [tournamentFormat, setTournamentFormat] = useState<TournamentFormat>('SUPER_8_INDIVIDUAL');
   const [rankingCriteria, setRankingCriteria] = useState<RankingCriterion[]>([]);
   const [teamsPerGroup, setTeamsPerGroup] = useState(4);
+  const [groupsCount, setGroupsCount] = useState(2);
   const [groupsMatchPlay, setGroupsMatchPlay] = useState<'INTRA' | 'INTER'>('INTRA');
   const [playoffRounds, setPlayoffRounds] = useState<PlayoffRound[]>(['FINAL']);
   const [drawnGroups, setDrawnGroups] = useState<{ id: string, teams: Player[] }[]>([]);
@@ -1165,6 +1166,13 @@ export default function BeachProApp() {
     }
     setTournamentFormat(format);
     if (format === 'GROUPS_MATA_MATA' || format === 'GROUPS') {
+      const firstStructure = getPossibleGroupStructures(playerCount / 2)[0];
+      if (firstStructure) {
+        setTeamsPerGroup(firstStructure.teamsPerGroup);
+        setGroupsCount(firstStructure.groupsCount);
+      }
+      setGroupsMatchPlay('INTRA');
+      if (format === 'GROUPS_MATA_MATA') setPlayoffRounds(['FINAL']);
       navigateTo('GROUP_CONFIG', { replace: true });
     } else {
       navigateTo('MATCH_FORMAT', { replace: true });
@@ -1257,7 +1265,8 @@ export default function BeachProApp() {
               if (p1 && p2) {
                 teamsToGroup.push({
                   id: `team-${p1.id}-${p2.id}`,
-                  name: `${p1.name} / ${p2.name}`
+                  name: `${p1.name} / ${p2.name}`,
+                  memberIds: [p1.id, p2.id],
                 });
               }
             }
@@ -1265,7 +1274,6 @@ export default function BeachProApp() {
             teamsToGroup = players;
           }
 
-          const groupsCount = Math.ceil(teamsToGroup.length / teamsPerGroup);
           const { groups } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay });
           setDrawnGroups(groups);
           navigateTo('GROUPS_DISPLAY', { replace: true });
@@ -1346,7 +1354,8 @@ export default function BeachProApp() {
           
           const finalTeams = teams.map(t => ({
             id: `team-${t.p1.id}-${t.p2.id}`,
-            name: `${t.p1.name} / ${t.p2.name}`
+            name: `${t.p1.name} / ${t.p2.name}`,
+            memberIds: [t.p1.id, t.p2.id],
           }));
 
           let matches: Match[] = [];
@@ -1531,9 +1540,12 @@ export default function BeachProApp() {
           const statsMap = new Map<string, any>();
 
           for (const res of finalResults) {
-            const playerIds = res.playerId.startsWith('team-')
-              ? res.playerId.replace('team-', '').split('-')
-              : [res.playerId];
+            const tournamentPlayer = activeTournament.players.find(player => player.id === res.playerId);
+            const playerIds = tournamentPlayer?.memberIds?.length
+              ? tournamentPlayer.memberIds
+              : res.playerId.startsWith('team-')
+                ? res.playerId.replace('team-', '').split('-')
+                : [res.playerId];
 
             for (const individualId of playerIds) {
               const athlete = ranking.leagueAthletes?.find(a => a.id === individualId);
@@ -1644,7 +1656,11 @@ export default function BeachProApp() {
     });
 
     try {
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatches });
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+        matches: newMatches,
+        matches_group_stage: newMatches.filter(match => match.round < 100),
+        matches_knockout_stage: newMatches.filter(match => match.round >= 100),
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
     }
@@ -1872,36 +1888,24 @@ export default function BeachProApp() {
     if (match.id.startsWith('playoff-')) {
       const parts = match.id.split('-');
       const roundType = parts[1] as PlayoffRound;
-      const matchIdx = parseInt(parts[2]);
       
       const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-      const selectedRounds = activeTournament.playoffRounds || [];
+      const selectedRounds = normalizePlayoffRounds(activeTournament.playoffRounds || []);
       const currentRounds = roundsOrder.filter(r => selectedRounds.includes(r));
       
       const currentRoundIdxInSelection = currentRounds.indexOf(roundType);
       
       if (currentRoundIdxInSelection !== -1 && currentRoundIdxInSelection < currentRounds.length - 1) {
-        const nextRoundType = currentRounds[currentRoundIdxInSelection + 1];
-        const nextMatchIdx = Math.floor(matchIdx / 2);
-        const nextMatchId = `playoff-${nextRoundType}-${nextMatchIdx}`;
-        const isPlayer1 = matchIdx % 2 === 0;
-        
-        const winner = activeTournament.players.find(p => p.id === winnerId) || { id: winnerId, name: winnerId };
-
-        newMatchesList = newMatchesList.map(m => {
-          if (m.id === nextMatchId) {
-            return {
-              ...m,
-              [isPlayer1 ? 'player1Id' : 'player2Id']: winner.id
-            };
-          }
-          return m;
-        });
+        newMatchesList = advancePlayoffWinner(newMatchesList, match.id, winnerId, currentRounds);
       }
     }
 
     try {
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatchesList });
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+        matches: newMatchesList,
+        matches_group_stage: newMatchesList.filter(matchItem => matchItem.round < 100),
+        matches_knockout_stage: newMatchesList.filter(matchItem => matchItem.round >= 100),
+      });
       setError(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
@@ -1918,39 +1922,16 @@ export default function BeachProApp() {
     const isEndingGroups = isMataMataFormat && hasPlayoffs && activeTournament.currentRound < 100 && (currentIndex === availableRounds.filter(r => r < 100).length - 1);
 
     if (isEndingGroups) {
-      const distinctGroupIds = new Set<string>();
-      activeTournament.matches.forEach(m => {
-        if (m.groupId && !m.groupId.includes('playoff')) {
-          // For INTER-GROUP formats (e.g. "AB"), we need to extract both "A" and "B"
-          if (m.groupId.length > 1 && /^[A-Z]+$/.test(m.groupId)) {
-            for (const char of m.groupId) distinctGroupIds.add(char);
-          } else {
-            distinctGroupIds.add(m.groupId);
-          }
-        }
-      });
-
-      const groupIds = Array.from(distinctGroupIds).sort();
-      const numGroups = groupIds.length;
-      const isInterGroup = activeTournament.matches.some(m => m.groupId && m.groupId.length > 1 && !m.groupId.includes('playoff'));
+      const tournamentGroups = getTournamentGroups(activeTournament);
+      const numGroups = tournamentGroups.length;
       
       if (numGroups > 0) {
         // Collect all ranked teams from all groups
-        const groups: {id: string, teams: Player[]}[] = [];
-        
-        // If it's intergroup, the standings are often calculated within the composite groups (e.g. "AB")
-        // But for qualified teams logic, let's stick to the IDs present in the matches
-        const actualStandingGroupIds = Array.from(new Set(activeTournament.matches.map(m => m.groupId).filter((id): id is string => !!id && !id.includes('playoff')))).sort();
-
-        actualStandingGroupIds.forEach(gid => {
-          const groupMatches = activeTournament.matches.filter(m => m.groupId === gid);
-          const groupTeamsIds = new Set(groupMatches.flatMap(m => [m.player1Id, m.player2Id]));
-          const groupPlayers = activeTournament.players.filter(p => groupTeamsIds.has(p.id));
-          groups.push({ id: gid, teams: groupPlayers });
-        });
+        const groups: {id: string, teams: Player[]}[] = tournamentGroups;
+        const actualStandingGroupIds = groups.map(group => group.id).sort();
 
         const roundsOrder: PlayoffRound[] = ['ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
-        const selectedPlayoffRounds = activeTournament.playoffRounds || [];
+        const selectedPlayoffRounds = normalizePlayoffRounds(activeTournament.playoffRounds || []);
         const currentKnockoutRounds = roundsOrder.filter(r => selectedPlayoffRounds.includes(r));
         
         if (currentKnockoutRounds.length === 0) {
@@ -1965,6 +1946,14 @@ export default function BeachProApp() {
           groups,
           currentKnockoutRounds
         );
+
+        const expectedQualified = currentKnockoutRounds[0] === 'ROUND_OF_16' ? 16 :
+          currentKnockoutRounds[0] === 'QUARTER_FINALS' ? 8 :
+          currentKnockoutRounds[0] === 'SEMI_FINALS' ? 4 : 2;
+        if (qualifiedTeams.length !== expectedQualified) {
+          setError(`Não foi possível formar o mata-mata com ${expectedQualified} duplas. Confira a estrutura dos grupos.`);
+          return;
+        }
 
         let knockoutMatches: Match[] = [];
         const firstRound = currentKnockoutRounds[0];
@@ -1981,8 +1970,9 @@ export default function BeachProApp() {
           const g2Id = actualStandingGroupIds[1];
 
           const getRankedFromGroup = (gid: string, rank: number) => {
-             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
              const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const teamIds = new Set(gTeams.map(team => team.id));
+             const gMatches = activeTournament.matches.filter(m => teamIds.has(m.player1Id) || teamIds.has(m.player2Id));
              const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
              return rankings[rank - 1];
           };
@@ -2024,8 +2014,9 @@ export default function BeachProApp() {
           // Q3: 1ºC x 2ºA
           // Q4: 1ºD x 2ºB
           const getRankedFromGroup = (gid: string, rank: number) => {
-             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
              const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const teamIds = new Set(gTeams.map(team => team.id));
+             const gMatches = activeTournament.matches.filter(m => teamIds.has(m.player1Id) || teamIds.has(m.player2Id));
              const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
              return rankings[rank - 1];
           };
@@ -2060,10 +2051,9 @@ export default function BeachProApp() {
             });
           });
 
-          // Generate remaining rounds as TBDs
-          const semiMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
-          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
-          knockoutMatches = [...knockoutMatches, ...semiMatches, ...finalMatches];
+          // Gera semifinal e final como uma única sequência, sem IDs duplicados.
+          const remainingMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          knockoutMatches = [...knockoutMatches, ...remainingMatches];
 
         } else if (actualStandingGroupIds.length === 2 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
           // Scenario INTER-GROUP: 2 composite groups -> Quarter Finals (8 teams)
@@ -2076,8 +2066,9 @@ export default function BeachProApp() {
           const g2Id = actualStandingGroupIds[1];
 
           const getRankedFromGroup = (gid: string, rank: number) => {
-             const gMatches = activeTournament.matches.filter(m => m.groupId === gid);
              const gTeams = groups.find(g => g.id === gid)?.teams || [];
+             const teamIds = new Set(gTeams.map(team => team.id));
+             const gMatches = activeTournament.matches.filter(m => teamIds.has(m.player1Id) || teamIds.has(m.player2Id));
              const rankings = calculateRankings(gTeams, gMatches, activeTournament.rankingCriteria);
              return rankings[rank - 1];
           };
@@ -2112,9 +2103,8 @@ export default function BeachProApp() {
             });
           });
 
-          const semiMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
-          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
-          knockoutMatches = [...knockoutMatches, ...semiMatches, ...finalMatches];
+          const remainingMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          knockoutMatches = [...knockoutMatches, ...remainingMatches];
         } else {
           // General Seeding Logic
           knockoutMatches = generatePlayoffs(qualifiedTeams, selectedCourts, currentKnockoutRounds);
@@ -2126,7 +2116,9 @@ export default function BeachProApp() {
           await updateDoc(doc(db, 'tournaments', activeTournament.id), { 
             matches: [...activeTournament.matches, ...knockoutMatches],
             matches_knockout_stage: knockoutMatches,
-            currentRound: nextRoundNum
+            playoffRounds: currentKnockoutRounds,
+            currentRound: nextRoundNum,
+            totalRounds: Math.max(activeTournament.totalRounds, ...knockoutMatches.map(match => match.round)),
           });
           navigateTo('TOURNAMENT', { round: nextRoundNum });
         } catch (err) {
@@ -2166,12 +2158,21 @@ export default function BeachProApp() {
 
   const editMatch = async (matchId: string) => {
     if (!activeTournament) return;
-    const newMatches = activeTournament.matches.map(m => {
+    let newMatches = activeTournament.matches.map(m => {
       if (m.id !== matchId) return m;
       return { ...m, isCompleted: false };
     });
+    if (matchId.startsWith('playoff-')) {
+      newMatches = invalidatePlayoffDescendants(newMatches, matchId, activeTournament.playoffRounds || []);
+    }
     try {
-      await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: newMatches });
+      await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+        matches: newMatches,
+        matches_group_stage: newMatches.filter(match => match.round < 100),
+        matches_knockout_stage: newMatches.filter(match => match.round >= 100),
+        isFinished: false,
+        finalResults: null,
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `tournaments/${activeTournament.id}`);
     }
@@ -2230,9 +2231,12 @@ export default function BeachProApp() {
           // Collect unique player IDs to fetch their current stats once
           const individualIds = new Set<string>();
           for (const res of results) {
-            const ids = res.playerId.startsWith('team-')
-              ? res.playerId.replace('team-', '').split('-')
-              : [res.playerId];
+            const tournamentPlayer = tournament.players.find(player => player.id === res.playerId);
+            const ids = tournamentPlayer?.memberIds?.length
+              ? tournamentPlayer.memberIds
+              : res.playerId.startsWith('team-')
+                ? res.playerId.replace('team-', '').split('-')
+                : [res.playerId];
             ids.forEach(id => individualIds.add(id));
           }
 
@@ -2250,9 +2254,12 @@ export default function BeachProApp() {
           // Build a delta map to accumulate per-player changes
           const deltaMap = new Map<string, { points: number; victories: number; pneus: number; participations: number }>();
           for (const res of results) {
-            const ids = res.playerId.startsWith('team-')
-              ? res.playerId.replace('team-', '').split('-')
-              : [res.playerId];
+            const tournamentPlayer = tournament.players.find(player => player.id === res.playerId);
+            const ids = tournamentPlayer?.memberIds?.length
+              ? tournamentPlayer.memberIds
+              : res.playerId.startsWith('team-')
+                ? res.playerId.replace('team-', '').split('-')
+                : [res.playerId];
 
             for (const individualId of ids) {
               const athlete = ranking.leagueAthletes?.find(a => a.id === individualId);
@@ -4487,9 +4494,9 @@ O play na palma da mão! 🏆`;
                   { id: 'SUPER_8_FIXED',       title: 'SUPER 8 DUPLAS FIXAS — 16 Atletas', desc: '8 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 7. Total de 28 partidas. Ideal para torneios de liga.', icon: Users, req: 16 },
                   { id: 'SUPER_10_FIXED',      title: 'SUPER 10 DUPLAS FIXAS — 20 Atletas', desc: '10 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 9. Total de 45 partidas. Formato de temporada longa.', icon: Users, req: 20 },
                   { id: 'SUPER_12_FIXED',      title: 'SUPER 12 DUPLAS FIXAS — 24 Atletas', desc: '12 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 11. Total de 66 partidas. O formato mais completo.', icon: Users, req: 24, premium: false },
-                  { id: 'GROUPS_MATA_MATA',    title: 'GRUPOS + MATA-MATA',                  desc: 'Fase de grupos: as duplas são divididas em grupos e jogam entre si. Os melhores de cada grupo avançam para a fase eliminatória, onde uma derrota significa eliminação.', icon: LayoutGrid, req: 4, premium: true },
+                  { id: 'GROUPS_MATA_MATA',    title: 'GRUPOS + MATA-MATA',                  desc: 'A partir de 8 atletas (4 duplas). Os melhores de cada grupo avançam para uma fase eliminatória contínua até a final.', icon: LayoutGrid, req: 8, premium: true },
                 ].filter(f => {
-                  if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 4;
+                  if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 8;
                   return playerCount === f.req;
                 }).map((f) => (
                   <div 
@@ -4575,6 +4582,8 @@ O play na palma da mão! 🏆`;
                         key={possibility.label}
                         onClick={() => {
                           setTeamsPerGroup(possibility.teamsPerGroup);
+                          setGroupsCount(possibility.groupsCount);
+                          if (possibility.groupsCount % 2 !== 0) setGroupsMatchPlay('INTRA');
                         }}
                         className={cn(
                           "p-5 rounded-[1.5rem] border-2 transition-all flex items-center justify-between text-left",
@@ -4622,7 +4631,7 @@ O play na palma da mão! 🏆`;
                       {groupsMatchPlay === 'INTRA' && <CheckCircle2 size={20} className="text-primary" />}
                     </button>
                     
-                    {(playerCount / 2 / teamsPerGroup) % 2 === 0 && (
+                    {groupsCount % 2 === 0 && (
                       <button 
                         onClick={() => setGroupsMatchPlay('INTER')}
                         className={cn(
@@ -4668,7 +4677,7 @@ O play na palma da mão! 🏆`;
             <StepContainer 
               key="playoff-config"
               title="Fase Eliminatória"
-              subtitle="Quais fases o torneio terá?"
+              subtitle="Escolha em qual fase o mata-mata começa. As fases seguintes serão incluídas automaticamente."
               currentStep={3}
             >
               <div className="space-y-6">
@@ -4695,42 +4704,41 @@ O play na palma da mão! 🏆`;
                   ].map((round) => {
                     const validation = checkPlayoffPossibility(playerCount, [round.id as PlayoffRound]);
                     const isPossible = validation.possible;
-                    const isSelected = playoffRounds.includes(round.id as PlayoffRound);
+                    const normalizedRounds = normalizePlayoffRounds(playoffRounds);
+                    const isStartRound = normalizedRounds[0] === round.id;
+                    const isIncluded = normalizedRounds.includes(round.id as PlayoffRound);
                     
                     return (
                       <button
                         key={round.id}
                         disabled={!isPossible}
-                        onClick={() => {
-                          if (isSelected) {
-                            setPlayoffRounds(playoffRounds.filter(r => r !== round.id));
-                          } else {
-                            setPlayoffRounds([...playoffRounds, round.id as PlayoffRound]);
-                          }
-                        }}
+                        onClick={() => setPlayoffRounds(normalizePlayoffRounds([round.id as PlayoffRound]))}
                         className={cn(
                           "p-6 rounded-[2rem] border-2 transition-all flex items-center justify-between group text-left",
                           !isPossible ? "opacity-30 cursor-not-allowed bg-surface-container border-transparent" :
-                          isSelected ? "border-primary bg-primary/5 cursor-pointer" : "border-surface-container hover:border-primary/20 cursor-pointer bg-white"
+                          isStartRound ? "border-primary bg-primary/5 cursor-pointer" :
+                          isIncluded ? "border-primary/30 bg-primary/[0.02] cursor-pointer" : "border-surface-container hover:border-primary/20 cursor-pointer bg-white"
                         )}
                       >
                         <div className="flex items-center gap-4">
                           <div className={cn(
                             "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm",
-                            isSelected ? "bg-primary text-on-primary" : "bg-surface-container text-primary"
+                            isStartRound ? "bg-primary text-on-primary" : isIncluded ? "bg-primary/10 text-primary" : "bg-surface-container text-primary"
                           )}>
                             <LayoutGrid size={20} />
                           </div>
                           <div>
                             <h3 className="text-xs font-black text-primary uppercase tracking-widest">{round.title}</h3>
+                            {isStartRound && <p className="text-primary text-[9px] font-black uppercase tracking-widest mt-1">Fase inicial</p>}
+                            {!isStartRound && isIncluded && <p className="text-primary/50 text-[9px] font-black uppercase tracking-widest mt-1">Incluída automaticamente</p>}
                             {!isPossible && <p className="text-error text-[10px] font-black uppercase tracking-widest mt-1">{validation.message}</p>}
                           </div>
                         </div>
                         <div className={cn(
                           "w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-sm",
-                          isSelected ? "bg-primary border-primary text-on-primary shadow-lg shadow-primary/20" : "border-surface-container bg-white"
+                          isIncluded ? "bg-primary border-primary text-on-primary shadow-lg shadow-primary/20" : "border-surface-container bg-white"
                         )}>
-                          {isSelected ? (
+                          {isIncluded ? (
                             <Check size={16} strokeWidth={4} />
                           ) : (
                             <div className="w-1.5 h-1.5 rounded-full bg-surface-container" />
@@ -5228,7 +5236,10 @@ O play na palma da mão! 🏆`;
                         registrationType,
                         rankingCriteria,
                         teamsPerGroup,
-                        playoffRounds,
+                        groupsCount,
+                        groups: drawnGroups,
+                        groupsMatchPlay,
+                        playoffRounds: tournamentFormat === 'GROUPS_MATA_MATA' ? normalizePlayoffRounds(playoffRounds) : [],
                         isFinished: false,
                         createdAt: Date.now(),
                         rankingId: pendingRankingId || undefined
@@ -5906,7 +5917,7 @@ O play na palma da mão! 🏆`;
                   
                   const allAvailableRounds = Array.from(new Set(
                     activeTournament.matches.map(m => m.round)
-                  )).sort((a, b) => a - b).filter(r => r < 100);
+                  )).sort((a, b) => a - b);
                   const isViewingPast = currentViewRound < activeTournament.currentRound;
 
                   return (<>
@@ -5944,7 +5955,7 @@ O play na palma da mão! 🏆`;
                                     : "bg-slate-50 border-slate-100 text-slate-300"
                                 )}
                               >
-                                {r}
+                                {r >= 100 ? ({ 100: 'O', 101: 'Q', 102: 'S', 103: 'F' } as Record<number, string>)[r] : r}
                               </button>
                             );
                           })}
@@ -6126,6 +6137,8 @@ O play na palma da mão! 🏆`;
                       const matchesInView = activeTournament.matches.filter(m => m.round === currentViewRound);
                       const allPlayedInView = matchesInView.every(m => m.isCompleted);
                       const isLastRound = currentViewRound === (Math.max(...activeTournament.matches.map(m => m.round)) || activeTournament.totalRounds);
+                      const isGeneratingKnockout = activeTournament.format === 'GROUPS_MATA_MATA' &&
+                        currentViewRound < 100 && isLastRound && !activeTournament.matches.some(match => match.round >= 100);
                       
                       return (
                         <>
@@ -6147,7 +6160,7 @@ O play na palma da mão! 🏆`;
                                 className="btn-primary w-full shadow-xl shadow-primary/20 flex items-center justify-center gap-3 py-6"
                               >
                                 <span className="text-xs font-black uppercase tracking-widest">
-                                  {isLastRound ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
+                                  {isGeneratingKnockout ? 'GERAR MATA-MATA' : isLastRound ? 'FINALIZAR TORNEIO' : 'PRÓXIMA RODADA'}
                                 </span>
                                 <ChevronRight size={18} />
                               </button>
@@ -6179,6 +6192,54 @@ O play na palma da mão! 🏆`;
                 {tournamentTab === 'RANKING' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     {(() => {
+                      if (activeTournament.format === 'GROUPS' || activeTournament.format === 'GROUPS_MATA_MATA') {
+                        const tournamentGroups = getTournamentGroups(activeTournament);
+                        const groupMatches = activeTournament.matches.filter(match => match.round < 100);
+                        const qualifiedIds = new Set(
+                          activeTournament.format === 'GROUPS_MATA_MATA'
+                            ? getKnockoutQualifiedTeams(
+                                activeTournament.players,
+                                groupMatches,
+                                activeTournament.rankingCriteria,
+                                tournamentGroups,
+                                activeTournament.playoffRounds || []
+                              ).map(team => team.id)
+                            : []
+                        );
+
+                        return (
+                          <div className="space-y-6">
+                            {tournamentGroups.map(group => {
+                              const ids = new Set(group.teams.map(team => team.id));
+                              const matchesForGroup = groupMatches.filter(match => ids.has(match.player1Id) || ids.has(match.player2Id));
+                              const groupRanking = calculateRankings(group.teams, matchesForGroup, activeTournament.rankingCriteria);
+                              return (
+                                <section key={group.id} className="rounded-[2rem] border border-surface-container bg-surface-container-low p-4">
+                                  <div className="mb-3 flex items-center justify-between px-2">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-primary">Grupo {group.id}</h3>
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-on-surface-variant/40">{activeTournament.groupsMatchPlay === 'INTER' ? 'Intergrupos' : 'Dentro do grupo'}</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {groupRanking.map((team, index) => (
+                                      <div key={team.id} className="flex items-center gap-3 rounded-2xl border border-surface-container bg-white p-3">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/5 text-xs font-black text-primary">{index + 1}</div>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="break-words text-[11px] font-black uppercase leading-tight text-primary">{team.name}</p>
+                                          <p className="mt-1 text-[8px] font-black uppercase tracking-wider text-on-surface-variant/40">{team.wins} vitórias · saldo {team.gameBalance > 0 ? '+' : ''}{team.gameBalance} · {team.gamesWon} pró</p>
+                                        </div>
+                                        {qualifiedIds.has(team.id) && (
+                                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-emerald-600">Classificado</span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </section>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+
                       const rankings = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
                       const champion = rankings[0];
                       const totalGames = activeTournament.matches.reduce((acc, m) => acc + (m.sets[0]?.player1 || 0) + (m.sets[0]?.player2 || 0), 0);
@@ -6317,6 +6378,8 @@ O play na palma da mão! 🏆`;
 
             // Use the same matchFormat from the tournament (same as normal scoring)
             const mFmt = activeTournament.matchFormat || '6_GAMES_TIEBREAK';
+            const knockoutNeedsRebuild = activeTournament.format === 'GROUPS_MATA_MATA' &&
+              !activeTournament.isFinished && !activeTournament.matches.some(match => match.round >= 100);
 
             // Returns whether score is final/valid for this format
             const isScoreComplete = (p1: number, p2: number): boolean => {
@@ -6369,14 +6432,12 @@ O play na palma da mão! 🏆`;
                 if (!match) return;
                 // Determine new winner based on updated score
                 const p1Wins = edit.p1 > edit.p2;
-                const newWinnerId = p1Wins
-                  ? (match.player1PartnerId ? 'TEAM1' : match.player1Id)
-                  : (match.player2PartnerId ? 'TEAM2' : match.player2Id);
+                const newWinnerId = p1Wins ? match.player1Id : match.player2Id;
                 const newLoserId = p1Wins
                   ? (match.player2PartnerId ? 'TEAM2' : match.player2Id)
                   : (match.player1PartnerId ? 'TEAM1' : match.player1Id);
 
-                const updatedMatches = activeTournament.matches.map(m =>
+                let updatedMatches = activeTournament.matches.map(m =>
                   m.id === matchId
                     ? {
                         ...m,
@@ -6388,9 +6449,29 @@ O play na palma da mão! 🏆`;
                       }
                     : m
                 );
-                await updateDoc(doc(db, 'tournaments', activeTournament.id), { matches: updatedMatches });
+
+                const editingGroupAfterPlayoffs = activeTournament.format === 'GROUPS_MATA_MATA' &&
+                  match.round < 100 && activeTournament.matches.some(item => item.round >= 100);
+
+                if (editingGroupAfterPlayoffs) {
+                  // Uma mudança nos grupos pode trocar os classificados. Remove o
+                  // chaveamento antigo para que ele seja gerado novamente.
+                  updatedMatches = updatedMatches.filter(item => item.round < 100);
+                } else if (match.id.startsWith('playoff-')) {
+                  updatedMatches = invalidatePlayoffDescendants(updatedMatches, match.id, activeTournament.playoffRounds || []);
+                  updatedMatches = advancePlayoffWinner(updatedMatches, match.id, newWinnerId, activeTournament.playoffRounds || []);
+                }
+
+                const groupRound = Math.max(...updatedMatches.filter(item => item.round < 100).map(item => item.round), 1);
+                await updateDoc(doc(db, 'tournaments', activeTournament.id), {
+                  matches: updatedMatches,
+                  matches_group_stage: updatedMatches.filter(item => item.round < 100),
+                  matches_knockout_stage: updatedMatches.filter(item => item.round >= 100),
+                  ...(editingGroupAfterPlayoffs ? { currentRound: groupRound, totalRounds: groupRound } : {}),
+                  ...(activeTournament.format === 'GROUPS_MATA_MATA' ? { isFinished: false, finalResults: null } : {}),
+                });
                 setInlineEdits(prev => { const n = {...prev}; delete n[matchId]; return n; });
-                setSnackMessage('Resultado atualizado!');
+                setSnackMessage(editingGroupAfterPlayoffs ? 'Resultado atualizado. O mata-mata precisa ser gerado novamente.' : 'Resultado atualizado!');
                 setTimeout(() => setSnackMessage(null), 2000);
               } catch(e) { console.error(e); }
               finally { setSavingMatch(null); }
@@ -6417,11 +6498,13 @@ O play na palma da mão! 🏆`;
 
               {/* SAVE AND BACK — top */}
               <button
-                onClick={() => navigateTo('FINISHED', { tournamentId: activeTournament.id })}
+                onClick={() => knockoutNeedsRebuild
+                  ? navigateTo('TOURNAMENT', { tournamentId: activeTournament.id, tab: 'MATCHES', round: activeTournament.currentRound })
+                  : navigateTo('FINISHED', { tournamentId: activeTournament.id })}
                 className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-primary/20 active:scale-95 transition-all mb-6"
               >
                 <CheckCircle2 size={16} />
-                SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO
+                {knockoutNeedsRebuild ? 'VOLTAR E GERAR NOVO MATA-MATA' : 'SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO'}
               </button>
 
               <div className="space-y-8">
@@ -6527,11 +6610,13 @@ O play na palma da mão! 🏆`;
               </div>
               {/* SAVE AND BACK — bottom */}
               <button
-                onClick={() => navigateTo('FINISHED', { tournamentId: activeTournament.id })}
+                onClick={() => knockoutNeedsRebuild
+                  ? navigateTo('TOURNAMENT', { tournamentId: activeTournament.id, tab: 'MATCHES', round: activeTournament.currentRound })
+                  : navigateTo('FINISHED', { tournamentId: activeTournament.id })}
                 className="w-full py-4 bg-primary text-white rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-primary/20 active:scale-95 transition-all mt-6"
               >
                 <CheckCircle2 size={16} />
-                SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO
+                {knockoutNeedsRebuild ? 'VOLTAR E GERAR NOVO MATA-MATA' : 'SALVAR ALTERAÇÕES E VOLTAR AO PÓDIO'}
               </button>
             </motion.div>
             );
@@ -6587,7 +6672,7 @@ O play na palma da mão! 🏆`;
 
               {/* Champion Spotlight */}
               {(() => {
-                const rankings = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
+                const rankings = calculateFinalRankings(activeTournament);
                 const champion = rankings[0];
                 const totalGames = activeTournament.matches.reduce((acc, m) => acc + (m.sets[0]?.player1 || 0) + (m.sets[0]?.player2 || 0), 0);
 
@@ -6669,7 +6754,7 @@ O play na palma da mão! 🏆`;
               <div className="flex flex-col gap-4 pt-8">
                 {/* Compartilhar Resultado */}
                 {(() => {
-                  const rkgs = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
+                  const rkgs = calculateFinalRankings(activeTournament);
                   if (!rkgs[0]) return null;
                   return (
                     <button
@@ -8372,7 +8457,7 @@ O play na palma da mão! 🏆`;
           {/* Share Result Popup */}
           <AnimatePresence>
             {showSharePopup && activeTournament && (() => {
-              const rkgs = calculateRankings(activeTournament.players, activeTournament.matches, activeTournament.rankingCriteria);
+              const rkgs = calculateFinalRankings(activeTournament);
               const champion = rkgs[0];
               const top3 = rkgs.slice(0, 3);
               if (!champion) return null;
