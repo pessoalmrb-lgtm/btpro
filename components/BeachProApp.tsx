@@ -75,6 +75,12 @@ const PremiumBadge = ({ size = 14 }: { size?: number }) => (
   </div>
 );
 
+const compareGroupIds = (left?: string, right?: string) =>
+  (left || '').localeCompare(right || '', 'pt-BR', { numeric: true, sensitivity: 'base' });
+
+const compareMatchesForDisplay = (left: Match, right: Match) =>
+  left.table - right.table || compareGroupIds(left.groupId, right.groupId) || left.id.localeCompare(right.id);
+
 export default function BeachProApp() {
 
   const [user, setUser] = useState<User | null>(null);
@@ -1486,7 +1492,7 @@ export default function BeachProApp() {
     if (tournamentFormat === 'SUPER_10_FIXED')      return 5;
     if (tournamentFormat === 'SUPER_12_FIXED')      return 6;
     if (tournamentFormat === 'ROUND_ROBIN')         return Math.min(matchesPerRound, 6);
-    if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') return Math.min(Math.max(2, Math.floor(teams / 4)), 6);
+    if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') return Math.min(Math.max(1, groupsCount), 12);
     if (tournamentFormat === 'MATA_MATA')           return Math.min(matchesPerRound, 6);
     return Math.min(matchesPerRound || 2, 6);
   };
@@ -5374,8 +5380,8 @@ O play na palma da mão! 🏆`;
                 return { ideal, min: 1, max: Math.min(teams, 6), reason: `${teams} duplas — ${ideal} quadra(s) por rodada${waiting ? '. 1 dupla descansa por rodada.' : ' (sem espera).'}`, hasWaiting: waiting };
               }
               if (tournamentFormat === 'GROUPS' || tournamentFormat === 'GROUPS_MATA_MATA') {
-                const ideal = Math.min(Math.max(2, Math.floor(teams / 4)), 6);
-                return { ideal, min: 2, max: Math.min(teams, 8), reason: `${teams} duplas em grupos — ${ideal} quadras recomendadas.` };
+                const ideal = Math.min(Math.max(1, groupsCount), 12);
+                return { ideal, min: ideal, max: Math.min(Math.max(ideal, teams), 12), reason: `${groupsCount} grupos — ${ideal} quadras para iniciar um jogo de cada grupo ao mesmo tempo.` };
               }
               if (tournamentFormat === 'MATA_MATA') {
                 const ideal = Math.min(matchesPerRound, 6);
@@ -5606,7 +5612,7 @@ O play na palma da mão! 🏆`;
                 {/* Todas as rodadas */}
                 <div className="space-y-6">
                   {Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b).map(roundNum => {
-                    const roundMatches = activeTournament.matches.filter(m => m.round === roundNum);
+                    const roundMatches = activeTournament.matches.filter(m => m.round === roundNum).sort(compareMatchesForDisplay);
                     const isCurrent = roundNum === activeTournament.currentRound;
                     return (
                       <div key={roundNum}>
@@ -5685,7 +5691,7 @@ O play na palma da mão! 🏆`;
                     </span>
                   </div>
                   
-                  <div className="bg-surface-container-low/50 border border-surface-container rounded-full p-1.5 flex gap-1 shadow-sm overflow-x-auto no-scrollbar">
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                     {tournaments.filter(t => !t.isHidden).map(t => (
                       <button
                         key={t.id}
@@ -5698,13 +5704,13 @@ O play na palma da mão! 🏆`;
                           }
                         }}
                         className={cn(
-                          "flex-1 py-3 px-4 rounded-full text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 min-w-fit",
+                          "relative min-w-fit rounded-2xl border px-5 py-3.5 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 bg-white",
                           t.id === activeTournament.id 
-                            ? "bg-secondary text-primary shadow-lg shadow-primary/5" 
-                            : "text-on-surface-variant hover:bg-surface-container"
+                            ? "border-primary text-primary shadow-md shadow-primary/10 after:absolute after:bottom-1.5 after:left-1/3 after:right-1/3 after:h-0.5 after:rounded-full after:bg-secondary"
+                            : "border-surface-container text-on-surface-variant hover:border-primary/20"
                         )}
                       >
-                        {t.isFinished && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                        <div className={cn("h-1.5 w-1.5 rounded-full", t.id === activeTournament.id ? "bg-primary" : "bg-primary/25")} />
                         {t.name}
                       </button>
                     ))}
@@ -5712,10 +5718,10 @@ O play na palma da mão! 🏆`;
                 </div>
 
                 {/* Tournament Hero Card */}
-                <div className="relative overflow-hidden rounded-[1.75rem] border border-surface-container bg-white px-4 py-3.5 shadow-lg shadow-primary/5 mb-4">
-                  <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary to-tertiary" />
+                <div className="relative mb-4 overflow-hidden rounded-[1.75rem] border border-primary/70 bg-gradient-to-br from-[#07365f] via-primary to-[#075486] px-5 py-5 shadow-xl shadow-primary/15">
+                  <div className="absolute inset-y-0 left-0 w-1.5 bg-secondary" />
                   {/* Illustrations (Simplified) */}
-                  <div className="absolute inset-0 pointer-events-none opacity-[0.07] overflow-hidden rounded-[1.75rem] text-primary">
+                  <div className="absolute inset-0 pointer-events-none opacity-[0.12] overflow-hidden rounded-[1.75rem] text-white">
                     <div className="absolute bottom-0 right-0 w-48 h-48 -mr-12 -mb-12">
                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                          <path d="M160 180L160 100M120 180L120 100M120 110H160" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -5727,8 +5733,8 @@ O play na palma da mão! 🏆`;
 
                   <div className="flex justify-between items-start relative z-10 w-full gap-4">
                     <div className="flex min-w-0 items-center gap-2 pl-1">
-                       <Sparkles size={12} className="text-secondary" />
-                       <span className="text-[9px] font-black text-primary uppercase tracking-widest truncate max-w-[120px]">
+                       <Sparkles size={13} className="text-secondary" />
+                       <span className="max-w-[150px] truncate rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-white">
                          {(() => {
                             const formats: { [key: string]: string } = {
                               'REI_DA_QUADRA': 'REI DA QUADRA',
@@ -5746,29 +5752,29 @@ O play na palma da mão! 🏆`;
                             return formats[activeTournament.format] || 'TORNEIO';
                          })()}
                        </span>
-                       <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary/25 text-primary transition-all hover:bg-primary/5 active:scale-90">
+                       <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/45 text-white transition-all hover:bg-white/10 active:scale-90">
                          <Info size={15} strokeWidth={2.5} />
                        </button>
                     </div>
 
                     <button 
                       onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="group flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shrink-0"
+                      className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-400 bg-red-500/10 px-3 py-2 text-red-300 transition-all hover:bg-red-500 hover:text-white"
                     >
                       <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
                       <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
                     </button>
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-center relative z-10 py-1 pl-1">
+                  <div className="relative z-10 flex flex-1 flex-col justify-center py-5 pl-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h1 className="text-[clamp(1.35rem,6vw,2rem)] font-display font-black text-primary italic tracking-tighter uppercase leading-tight truncate max-w-full">
+                      <h1 className="max-w-full truncate font-display text-[clamp(1.6rem,7vw,2.35rem)] font-black italic uppercase leading-tight tracking-tighter text-white">
                         {activeTournament.name}
                       </h1>
                       {activeTournament.isFinished && (
-                        <div className="bg-primary/5 border border-primary/10 px-3 py-1 rounded-full flex items-center gap-2 h-fit">
+                        <div className="flex h-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1">
                           <CheckCircle2 size={12} className="text-secondary" />
-                          <span className="text-[9px] font-black text-primary uppercase tracking-widest italic">FINALIZADO</span>
+                           <span className="text-[9px] font-black text-white uppercase tracking-widest italic">FINALIZADO</span>
                         </div>
                       )}
                     </div>
@@ -5776,7 +5782,7 @@ O play na palma da mão! 🏆`;
 
                   <div className="flex items-center gap-2 relative z-10 pl-1">
                     <div className="flex items-center">
-                      <div className="bg-primary px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm">
+                      <div className="flex items-center gap-2 rounded-full border border-white/20 bg-[#0875b5] px-3.5 py-2 shadow-sm">
                         <div className="relative">
                           <History size={12} className="text-secondary" />
                         </div>
@@ -5799,13 +5805,13 @@ O play na palma da mão! 🏆`;
                       
                       {activeTournament.currentRound < 100 && (
                         <div className="px-3">
-                          <span className="text-[8px] font-black text-on-surface-variant/40 uppercase tracking-widest">
-                            DE <span className="text-primary/60">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
+                          <span className="text-[8px] font-black text-white/55 uppercase tracking-widest">
+                            DE <span className="text-white">{String(Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds).padStart(2, '0')}</span>
                           </span>
                         </div>
                       )}
                     </div>
-                    <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-surface-container">
+                    <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-white/85">
                       <div className="h-full rounded-full bg-secondary transition-all duration-500" style={{ width: `${Math.min(100, Math.max(8, (activeTournament.currentRound < 100 ? activeTournament.currentRound : activeTournament.totalRounds) / Math.max(1, Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds) * 100))}%` }} />
                     </div>
                   </div>
@@ -5845,11 +5851,11 @@ O play na palma da mão! 🏆`;
                 </AnimatePresence>
 
                 {/* Navigation Tabs - New Style */}
-                <div className="bg-white rounded-[2rem] border border-surface-container flex shadow-sm overflow-hidden mb-2">
+                <div className="mb-2 flex overflow-hidden rounded-[1.5rem] border border-surface-container bg-white shadow-sm">
                   <button 
                     onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES' })}
                     className={cn(
-                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative border-r border-surface-container",
+                      "relative flex flex-1 flex-col items-center gap-2 border-r border-surface-container px-2 py-4 transition-all",
                       tournamentTab === 'MATCHES' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
                     )}
                   >
@@ -5860,7 +5866,7 @@ O play na palma da mão! 🏆`;
                   <button 
                     onClick={() => navigateTo('TOURNAMENT', { tab: 'RANKING' })}
                     className={cn(
-                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative border-r border-surface-container",
+                      "relative flex flex-1 flex-col items-center gap-2 border-r border-surface-container px-2 py-4 transition-all",
                       tournamentTab === 'RANKING' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
                     )}
                   >
@@ -5871,7 +5877,7 @@ O play na palma da mão! 🏆`;
                   <button 
                     onClick={() => navigateTo('TOURNAMENT', { tab: 'ROUNDS' })}
                     className={cn(
-                      "flex-1 flex flex-col items-center gap-2 py-4 px-2 transition-all relative",
+                      "relative flex flex-1 flex-col items-center gap-2 px-2 py-4 transition-all",
                       tournamentTab === 'ROUNDS' ? "bg-surface-container-low text-primary" : "text-on-surface-variant/40 hover:bg-surface-container-lowest"
                     )}
                   >
@@ -5904,7 +5910,7 @@ O play na palma da mão! 🏆`;
                 {tournamentTab === 'MATCHES' && (() => {
                   const currentViewRound = tournamentViewRound ?? activeTournament.currentRound;
                   const matchesByCourt: { [key: number]: Match[] } = {};
-                  const roundMatches = activeTournament.matches.filter(m => m.round === currentViewRound);
+                  const roundMatches = activeTournament.matches.filter(m => m.round === currentViewRound).sort(compareMatchesForDisplay);
                   
                   // Find resting players for this round (Super format)
                   const restingPlayerIds = roundMatches.find(m => m.restingPlayerIds)?.restingPlayerIds || [];
@@ -5912,8 +5918,9 @@ O play na palma da mão! 🏆`;
 
                   roundMatches.forEach(m => {
                       if (!matchesByCourt[m.table]) matchesByCourt[m.table] = [];
-                      matchesByCourt[m.table].push(m);
+                       matchesByCourt[m.table].push(m);
                     });
+                  Object.values(matchesByCourt).forEach(matches => matches.sort((a, b) => compareGroupIds(a.groupId, b.groupId) || a.id.localeCompare(b.id)));
                   
                   const allAvailableRounds = Array.from(new Set(
                     activeTournament.matches.map(m => m.round)
@@ -5989,8 +5996,9 @@ O play na palma da mão! 🏆`;
                     )}
                     {Object.entries(matchesByCourt).sort(([a], [b]) => Number(a) - Number(b)).map(([court, matches]) => (
                     <section key={court}>
-                      <div className="flex items-baseline gap-3 mb-3">
-                        <h2 className="text-xs font-black text-on-surface font-display uppercase tracking-widest">
+                      <div className="mb-3 flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/5 text-primary"><Grid size={16} /></div>
+                        <h2 className="font-display text-xs font-black uppercase tracking-widest text-on-surface">
                           QUADRA {court.padStart(2, '0')}{matches[0]?.groupId ? ` - GRUPO ${matches[0].groupId}` : ''}
                         </h2>
                         <div className="h-[1px] flex-grow bg-surface-container-highest opacity-50"></div>
@@ -6009,8 +6017,8 @@ O play na palma da mão! 🏆`;
                                 <div 
                                   key={match.id} 
                                   className={cn(
-                                    "rounded-[2.5rem] p-6 shadow-sm relative overflow-hidden group transition-all border-2",
-                                    match.isCompleted ? "bg-[#e8fbf4] border-[#d1f5e8]" : "bg-white border-surface-container/30"
+                                    "group relative overflow-hidden rounded-[1.75rem] border p-5 shadow-sm transition-all",
+                                    match.isCompleted ? "bg-[#e8fbf4] border-[#d1f5e8]" : "bg-white border-surface-container"
                                   )}
                                 >
                                   <div className="relative z-10">
@@ -6038,7 +6046,7 @@ O play na palma da mão! 🏆`;
                                     </div>
 
                                     {/* Score Display (Pill) - Compact */}
-                                  <div className="bg-white rounded-full px-4 py-1 flex items-center justify-around gap-2 shadow-inner border border-stone-100/50 mb-4">
+                                  <div className="mb-4 flex items-center justify-around gap-2 rounded-2xl border border-surface-container bg-surface-container-low/30 px-4 py-2 shadow-inner">
                                     {/* Team 1 Area */}
                                     <div className="flex flex-1 items-center justify-center relative min-h-[3.5rem]">
                                       <div className="absolute left-0 flex flex-col items-center justify-center gap-1.5 h-full">
@@ -6112,7 +6120,7 @@ O play na palma da mão! 🏆`;
                                   <button 
                                     onClick={() => match.isCompleted ? editMatch(match.id) : confirmSet(match.id)}
                                     className={cn(
-                                      "w-full py-3 font-black rounded-full transition-all active:scale-[0.98] shadow-md uppercase tracking-widest text-[8px]",
+                                      "w-full rounded-2xl py-3.5 text-[8px] font-black uppercase tracking-widest shadow-md transition-all active:scale-[0.98]",
                                       match.isCompleted 
                                         ? "bg-slate-200 text-slate-500 hover:bg-slate-300" 
                                         : "bg-primary text-on-primary hover:bg-primary-dim shadow-primary/10"
@@ -6331,6 +6339,7 @@ O play na palma da mão! 🏆`;
                         <div className="grid grid-cols-1 gap-2">
                           {activeTournament.matches
                             .filter(m => m.round === roundNum)
+                            .sort(compareMatchesForDisplay)
                             .map((m) => {
                             const p1Name = getPlayerName(m.player1Id);
                             const p2Name = getPlayerName(m.player2Id);
@@ -6518,7 +6527,7 @@ O play na palma da mão! 🏆`;
                     </div>
 
                     <div className="space-y-3">
-                      {activeTournament.matches.filter(m => m.round === roundNum).map((m) => {
+                      {activeTournament.matches.filter(m => m.round === roundNum).sort(compareMatchesForDisplay).map((m) => {
                         const p1Name = getPlayerName(m.player1Id);
                         const p2Name = getPlayerName(m.player2Id);
                         const fp1p = m.player1PartnerId ? activeTournament.players.find(p => p.id === m.player1PartnerId) : null;

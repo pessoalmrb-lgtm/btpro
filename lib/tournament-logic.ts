@@ -145,6 +145,9 @@ export function generateGroupStage(
   config: { groupsCount: number, teamsPerGroup: number, type: 'INTRA' | 'INTER' },
   predefinedGroups?: { id: string, teams: Player[] }[]
 ): { matches: Match[], groups: { id: string, teams: Player[] }[] } {
+  const orderedCourts = [...selectedCourts].sort((a, b) => a - b);
+  const compareGroupIds = (left: string, right: string) =>
+    left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' });
   // 1. Organize teams into groups
   let groups: { id: string, teams: Player[] }[] = [];
   
@@ -192,37 +195,11 @@ export function generateGroupStage(
   const scheduledMatches: Match[] = [];
   const playerLastPlayedSlot: Record<string, number> = {};
   const playerConsecutiveGames: Record<string, number> = {};
-  const courtUsageCount: Record<string, Record<number, number>> = {};
-  const globalTableUsage: Record<number, number> = {};
-  
-  const incUsage = (teamId: string, court: number) => {
-    globalTableUsage[court] = (globalTableUsage[court] || 0) + 1;
-    if (!courtUsageCount[teamId]) courtUsageCount[teamId] = {};
-    courtUsageCount[teamId][court] = (courtUsageCount[teamId][court] || 0) + 1;
-  };
-
-  const getBestCourt = (p1Id: string, p2Id: string, availableCourts: number[]) => {
-    const scores = availableCourts.map(court => {
-      const u1 = (courtUsageCount[p1Id]?.[court]) || 0;
-      const u2 = (courtUsageCount[p2Id]?.[court]) || 0;
-      const playerUsageScore = Math.pow(10, u1) + Math.pow(10, u2);
-      const globalScore = (globalTableUsage[court] || 0) * 0.1;
-      const tiedRandomScore = Math.random() * 0.01;
-      
-      return { court, totalScore: playerUsageScore + globalScore + tiedRandomScore };
-    });
-
-    scores.sort((a, b) => a.totalScore - b.totalScore);
-    return scores[0].court;
-  };
-
   let currentSlot = 1;
-  const numCourts = selectedCourts.length;
-
   while (pendingMatches.length > 0) {
     const slotMatches: { match: typeof pendingMatches[0], court: number }[] = [];
     const usedPlayersThisSlot = new Set<string>();
-    let availableCourtsInSlot = [...selectedCourts];
+    let availableCourtsInSlot = [...orderedCourts];
 
     // Priority 1: Fill all courts. Try to pick matches for each court.
     while (availableCourtsInSlot.length > 0 && pendingMatches.length > 0) {
@@ -238,24 +215,23 @@ export function generateGroupStage(
       );
       
       let finalCandidates = restAwareCandidates.length > 0 ? restAwareCandidates : candidates;
+      finalCandidates = [...finalCandidates].sort((a, b) => compareGroupIds(a.groupId, b.groupId));
 
-      // If we are at the start, diversify groups
-      if (currentSlot === 1) {
-        const usedGroupsThisSlot = new Set(slotMatches.map(sm => sm.match.groupId));
-        const diverseGroupCandidates = finalCandidates.filter(m => !usedGroupsThisSlot.has(m.groupId));
-        if (diverseGroupCandidates.length > 0) finalCandidates = diverseGroupCandidates;
-      }
+      // Em todas as rodadas, oferece primeiro uma partida de cada grupo. Isso
+      // mantém Grupo A, B, C... nas quadras crescentes sempre que forem elegíveis.
+      const usedGroupsThisSlot = new Set(slotMatches.map(sm => sm.match.groupId));
+      const diverseGroupCandidates = finalCandidates.filter(m => !usedGroupsThisSlot.has(m.groupId));
+      if (diverseGroupCandidates.length > 0) finalCandidates = diverseGroupCandidates;
 
       // Pick the first candidate
       const selected = finalCandidates[0];
       
-      // Decide the best court FOR this candidate from available courts in slot
-      const court = getBestCourt(selected.p1.id, selected.p2.id, availableCourtsInSlot);
+      // Os candidatos já estão em ordem de grupo. Usar a menor quadra livre
+      // mantém simultaneamente a ordem Quadra 1, 2, 3... e Grupo A, B, C...
+      // em cada rodada, sem alterar confrontos, descanso ou pontuação.
+      const court = availableCourtsInSlot[0];
       
       slotMatches.push({ match: selected, court });
-      
-      incUsage(selected.p1.id, court);
-      incUsage(selected.p2.id, court);
       
       // Mark players
       usedPlayersThisSlot.add(selected.p1.id);
@@ -306,6 +282,10 @@ export function generateGroupStage(
     // Safety break
     if (currentSlot > 500) break;
   }
+
+  scheduledMatches.sort((a, b) =>
+    a.round - b.round || a.table - b.table || compareGroupIds(a.groupId || '', b.groupId || '') || a.id.localeCompare(b.id)
+  );
 
   return { matches: scheduledMatches, groups };
 }
