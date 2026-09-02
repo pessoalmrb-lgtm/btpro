@@ -1,4 +1,89 @@
 workflows:
+  ios-testflight:
+    name: Beach Pro - iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    # Exact name of the integration saved in Codemagic. No private keys in Git.
+    integrations:
+      app_store_connect: Codemagic BeachPro
+
+    environment:
+      node: 22.14.0
+      xcode: latest
+      groups:
+        - firebase
+      ios_signing:
+        certificates:
+          - beachpro_distribution
+        provisioning_profiles:
+          - beachpro_app_store
+      vars:
+        APP_STORE_APPLE_ID: "6807855400"
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+
+    scripts:
+      - name: Check Firebase configuration
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          for variable in NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_APP_ID; do
+            if [ -z "${!variable:-}" ]; then
+              echo "Missing Firebase variable: $variable. Check the firebase group in Codemagic."
+              exit 1
+            fi
+          done
+
+      - name: Install JavaScript dependencies
+        script: npm ci
+
+      - name: Build the Beach Pro web app
+        script: npm run build
+
+      # Sync on macOS also regenerates the Swift package paths for this machine.
+      - name: Sync Capacitor with iOS
+        script: npx cap sync ios
+
+      - name: Apply App Store signing profile
+        script: xcode-project use-profiles
+
+      - name: Set a new iOS build number
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID")
+          LATEST_BUILD_NUMBER=${LATEST_BUILD_NUMBER:-0}
+          if ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Expected an integer TestFlight build number; check the app's version history."
+            exit 1
+          fi
+          NEXT_BUILD_NUMBER=$((10#$LATEST_BUILD_NUMBER + 1))
+          cd "$CM_BUILD_DIR/ios/App"
+          agvtool new-version -all "$NEXT_BUILD_NUMBER"
+
+      - name: Build signed IPA for TestFlight
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - build/ios/xcarchive/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Uploads the IPA to App Store Connect / TestFlight only.
+        # No automatic external beta review, tester groups or App Store review.
+        submit_to_testflight: false
+        submit_to_app_store: false
+
   ios-simulator:
     name: Beach Pro - iOS Simulator
     instance_type: mac_mini_m2
@@ -49,4 +134,3 @@ workflows:
     artifacts:
       - BeachPro-iOS-Simulator.zip
       - ios-build/Build/Products/Debug-iphonesimulator/App.app
-
