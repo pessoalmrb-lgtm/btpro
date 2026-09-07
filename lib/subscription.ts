@@ -11,7 +11,9 @@
 // atualiza `subscriptionExpiresAt`, que é permitido, e tolera falha.
 // =====================================================================
 
-export const RC_API_KEY = 'goog_zjhFiEAkdPNxktnZYxXyCFcQMVc';
+export const RC_ANDROID_API_KEY =
+  process.env.NEXT_PUBLIC_REVENUECAT_ANDROID_API_KEY || 'goog_zjhFiEAkdPNxktnZYxXyCFcQMVc';
+export const RC_IOS_API_KEY = process.env.NEXT_PUBLIC_REVENUECAT_IOS_API_KEY || '';
 // ATENÇÃO: isto precisa bater com o IDENTIFIER do Entitlement no RevenueCat.
 // Se no painel estiver como 'Pro', 'pro' ou 'premium', ajuste aqui.
 export const ENTITLEMENT_ID = 'com.beachpro.app Pro';
@@ -35,11 +37,18 @@ async function isNative(): Promise<boolean> {
  */
 export async function initPurchases(uid: string): Promise<void> {
   if (!(await isNative())) return;
+  const { Capacitor } = await import('@capacitor/core');
   const { Purchases, LOG_LEVEL } = await import('@revenuecat/purchases-capacitor');
+
+  const platform = Capacitor.getPlatform();
+  const apiKey = platform === 'ios' ? RC_IOS_API_KEY : RC_ANDROID_API_KEY;
+  if (!apiKey) {
+    throw new Error(`Chave pública do RevenueCat não configurada para ${platform}.`);
+  }
 
   if (configuredForUid === null) {
     await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-    await Purchases.configure({ apiKey: RC_API_KEY, appUserID: uid });
+    await Purchases.configure({ apiKey, appUserID: uid });
     configuredForUid = uid;
     return;
   }
@@ -103,7 +112,7 @@ export async function fetchSubscriptionStatus(uid: string): Promise<Subscription
 }
 
 /**
- * Restaura compras já feitas nesta conta Google (troca de aparelho,
+ * Restaura compras já feitas nesta conta da loja (troca de aparelho,
  * reinstalação, ou compra que não refletiu). Devolve o status resultante.
  */
 export async function restorePurchases(uid: string): Promise<SubscriptionStatus | null> {

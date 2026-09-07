@@ -50,7 +50,7 @@ import Image from 'next/image';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, testConnection, uploadImageToStorage } from '../firebase';
+import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
 import { generateUniqueUserTag, generateUniqueNumericId } from '../lib/user-utils';
 import type { User } from '../firebase';
@@ -252,7 +252,6 @@ export default function BeachProApp() {
   const [showManualAthletePopup, setShowManualAthletePopup] = useState(false);
   const [showLowCourtsPopup, setShowLowCourtsPopup] = useState(false);
   const [showSupportPopup, setShowSupportPopup] = useState(false);
-  const [supportPopupVariant, setSupportPopupVariant] = useState(0);
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
   const [requestSent, setRequestSent] = useState<string | null>(null);
@@ -467,21 +466,17 @@ export default function BeachProApp() {
     handleRedirectResult();
   }, []);
 
-  // Show support popup after splash — only once per session, only on HOME, only for free users
+  // Exibe o aviso do plano gratuito uma vez a cada abertura do app.
   const supportShownThisSession = React.useRef(false);
   React.useEffect(() => {
     if (!splashDone || !user) return;
     if (typeof window === 'undefined') return;
     if (supportShownThisSession.current) return;
     supportShownThisSession.current = true;
-    // Delay to ensure user is on HOME and app is settled
+    // Pequeno atraso para que a Home apareça antes do aviso.
     const timer = setTimeout(() => {
-      const lastVariant = parseInt(localStorage.getItem('btpro_support_variant') || '-1');
-      const nextVariant = (lastVariant + 1) % 3;
-      setSupportPopupVariant(nextVariant);
-      localStorage.setItem('btpro_support_variant', String(nextVariant));
       setShowSupportPopup(true);
-    }, 4000);
+    }, 1200);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [splashDone, user?.uid]);
@@ -1130,27 +1125,83 @@ export default function BeachProApp() {
     }
   };
 
-  const startNewTournament = () => {
+  const getFreeTournamentCount = async () => {
+    if (!user) return 0;
+
+    const usageSnap = await getDoc(doc(db, 'tournamentUsage', user.uid));
+    const recordedCount = usageSnap.exists()
+      ? Number(usageSnap.data().freeTournamentCount || 0)
+      : 0;
+
+    // Migração segura para quem já criou torneios antes desta regra.
+    const existingSnap = await getDocs(query(collection(db, 'tournaments'), where('uid', '==', user.uid)));
+    return Math.max(recordedCount, existingSnap.size);
+  };
+
+  const requireTournamentSlot = async () => {
+    if (isPremium) return true;
+    try {
+      const used = await getFreeTournamentCount();
+      if (used >= 2) {
+        setUpgradeReason('TOURNAMENT_LIMIT');
+        setShowUpgradeModal(true);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Erro ao verificar limite gratuito:', err);
+      setError('Não foi possível verificar seu plano. Tente novamente.');
+      return false;
+    }
+  };
+
+  const saveNewTournament = async (tournamentId: string, tournamentData: Record<string, unknown>) => {
+    if (!user) return false;
+
+    if (isPremium) {
+      await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+      return true;
+    }
+
+    const existingSnap = await getDocs(query(collection(db, 'tournaments'), where('uid', '==', user.uid)));
+    const usageRef = doc(db, 'tournamentUsage', user.uid);
+    const tournamentRef = doc(db, 'tournaments', tournamentId);
+
+    try {
+      // A transação impede que dois aparelhos ou dois toques simultâneos
+      // consumam a mesma vaga gratuita.
+      await runTransaction(db, async transaction => {
+        const usageSnap = await transaction.get(usageRef);
+        const recordedCount = usageSnap.exists()
+          ? Number(usageSnap.data().freeTournamentCount || 0)
+          : 0;
+        const used = Math.max(recordedCount, existingSnap.size);
+        if (used >= 2) throw new Error('FREE_TOURNAMENT_LIMIT');
+
+        transaction.set(tournamentRef, tournamentData);
+        transaction.set(usageRef, {
+          uid: user.uid,
+          freeTournamentCount: used + 1,
+          updatedAt: Date.now()
+        });
+      });
+      return true;
+    } catch (err) {
+      if (err instanceof Error && err.message === 'FREE_TOURNAMENT_LIMIT') {
+        setUpgradeReason('TOURNAMENT_LIMIT');
+        setShowUpgradeModal(true);
+        return false;
+      }
+      throw err;
+    }
+  };
+
+  const startNewTournament = async () => {
     // Garante que um torneio comum não herde a liga de uma tentativa anterior.
     setPendingRankingId(null);
     setActiveRankingId(null);
 
-    if (isPremium) {
-      setTournamentName('');
-      navigateTo('TOURNAMENT_NAME', { rankingId: null });
-      return;
-    }
-    const activeTournaments = manageableTournaments.filter(t => !t.isFinished && !t.isHidden);
-    const finishedTournaments = manageableTournaments.filter(t => t.isFinished && !t.isHidden);
-    if (activeTournaments.length >= 1) {
-      setUpgradeReason('TOURNAMENT_LIMIT');
-      setShowUpgradeModal(true);
-      return;
-    }
-    if (finishedTournaments.length >= 1) {
-      setShowFinishedLimitPopup(true);
-      return;
-    }
+    if (!(await requireTournamentSlot())) return;
     setTournamentName('');
     navigateTo('TOURNAMENT_NAME', { rankingId: null });
   };
@@ -1165,11 +1216,6 @@ export default function BeachProApp() {
   };
 
   const handleFormatConfirm = (format: TournamentFormat) => {
-    if (format === 'GROUPS_MATA_MATA' && !isPremium) {
-      setUpgradeReason('FORMAT_LIMIT');
-      setShowUpgradeModal(true);
-      return;
-    }
     setTournamentFormat(format);
     if (format === 'GROUPS_MATA_MATA' || format === 'GROUPS') {
       const firstStructure = getPossibleGroupStructures(playerCount / 2)[0];
@@ -1192,11 +1238,6 @@ export default function BeachProApp() {
     }
     if (playerCount % 2 !== 0) {
       setError("O número de atletas deve ser par para formar duplas.");
-      return;
-    }
-    if (playerCount > 8 && !isPremium) {
-      setUpgradeReason('ATHLETE_LIMIT');
-      setShowUpgradeModal(true);
       return;
     }
     setError(null);
@@ -1332,7 +1373,7 @@ export default function BeachProApp() {
           };
           
           const tournamentData = cleanData({ ...newTournament, uid: user.uid });
-          await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+          if (!(await saveNewTournament(tournamentId, tournamentData))) return;
           setPendingRankingId(null);
           navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
@@ -1391,7 +1432,7 @@ export default function BeachProApp() {
           };
           
           const tournamentData2 = cleanData({ ...newTournament, uid: user.uid });
-          await setDoc(doc(db, 'tournaments', tournamentId), tournamentData2);
+          if (!(await saveNewTournament(tournamentId, tournamentData2))) return;
           setPendingRankingId(null);
           navigateTo('TOURNAMENT', { tournamentId, replace: true });
         } catch (err) {
@@ -1432,7 +1473,7 @@ export default function BeachProApp() {
       
       try {
         const tournamentData3 = cleanData({ ...newTournament, uid: user.uid });
-        await setDoc(doc(db, 'tournaments', tournamentId), tournamentData3);
+        if (!(await saveNewTournament(tournamentId, tournamentData3))) return;
         setPendingRankingId(null);
         navigateTo('TOURNAMENT', { tournamentId, replace: true });
       } catch (err) {
@@ -2321,14 +2362,14 @@ export default function BeachProApp() {
       'DRAWING', 'GROUPS_DISPLAY', 'RANKING_CRITERIA', 'TABLE_COUNT', 'CREATE_RANKING',
       'EDIT_PROFILE', 'TOURNAMENTS_LIST'
     ];
-    const isDarkStep = step === 'HOME' || !user || step === 'PROFILE' || step === 'MY_RANKINGS';
-    const bgColor = isDarkStep ? "bg-[#004a8c]" : "bg-slate-50";
+    const bgColor = user ? "bg-[#020d1b]" : "bg-[#004a8c]";
 
     return (
       <main className={cn(
         "min-h-[100dvh] flex flex-col items-center overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+6rem)] transition-colors duration-500",
-        bgColor
-      )}>
+        bgColor,
+        user && "authenticated-theme"
+      )} data-app-step={step} data-authenticated={Boolean(user)}>
         <div className="w-full flex-grow">
           <AnimatePresence mode="wait">
             {(!isAuthReady || !splashDone) && (
@@ -2564,7 +2605,7 @@ export default function BeachProApp() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="w-full"
+              className="w-full beach-screen beach-screen--home"
             >
               <div className="arena-hero-bg pt-4 pb-16 px-8 flex flex-col items-center text-center">
                 <div className="w-full flex items-center justify-between mb-6">
@@ -2621,25 +2662,7 @@ export default function BeachProApp() {
                 
                 <div className="flex flex-col w-full gap-4 max-w-[340px]">
                   <button 
-                    onClick={() => {
-                      const limit = isPremium ? 100 : 1;
-                      if (!isPremium) {
-                        const activeTournaments = manageableTournaments.filter(t => !t.isFinished && !t.isHidden);
-                        const finishedTournaments = manageableTournaments.filter(t => t.isFinished && !t.isHidden);
-                        if (activeTournaments.length >= 1) {
-                          setUpgradeReason('TOURNAMENT_LIMIT');
-                          setShowUpgradeModal(true);
-                          return;
-                        }
-                        if (finishedTournaments.length >= 1) {
-                          setShowFinishedLimitPopup(true);
-                          return;
-                        }
-                      }
-                      setPendingRankingId(null);
-                      setActiveRankingId(null);
-                      navigateTo('TOURNAMENT_NAME', { rankingId: null });
-                    }}
+                    onClick={startNewTournament}
                     className="btn-hero-neon group h-20"
                   >
                     <div className="bg-white/20 w-14 h-14 rounded-full flex items-center justify-center text-on-secondary shadow-lg">
@@ -4500,7 +4523,7 @@ O play na palma da mão! 🏆`;
                   { id: 'SUPER_8_FIXED',       title: 'SUPER 8 DUPLAS FIXAS — 16 Atletas', desc: '8 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 7. Total de 28 partidas. Ideal para torneios de liga.', icon: Users, req: 16 },
                   { id: 'SUPER_10_FIXED',      title: 'SUPER 10 DUPLAS FIXAS — 20 Atletas', desc: '10 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 9. Total de 45 partidas. Formato de temporada longa.', icon: Users, req: 20 },
                   { id: 'SUPER_12_FIXED',      title: 'SUPER 12 DUPLAS FIXAS — 24 Atletas', desc: '12 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 11. Total de 66 partidas. O formato mais completo.', icon: Users, req: 24, premium: false },
-                  { id: 'GROUPS_MATA_MATA',    title: 'GRUPOS + MATA-MATA',                  desc: 'A partir de 8 atletas (4 duplas). Os melhores de cada grupo avançam para uma fase eliminatória contínua até a final.', icon: LayoutGrid, req: 8, premium: true },
+                  { id: 'GROUPS_MATA_MATA',    title: 'GRUPOS + MATA-MATA',                  desc: 'A partir de 8 atletas (4 duplas). Os melhores de cada grupo avançam para uma fase eliminatória contínua até a final.', icon: LayoutGrid, req: 8, premium: false },
                 ].filter(f => {
                   if (f.id === 'GROUPS_MATA_MATA') return playerCount >= 8;
                   return playerCount === f.req;
@@ -5253,7 +5276,7 @@ O play na palma da mão! 🏆`;
                       
                       try {
                         const tournamentData = cleanData({ ...newTournament, uid: user.uid });
-                        await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+                        if (!(await saveNewTournament(tournamentId, tournamentData))) return;
                         setPendingRankingId(null);
                         navigateTo('TOURNAMENT', { tournamentId, replace: true });
                       } catch (err) {
@@ -5679,7 +5702,7 @@ O play na palma da mão! 🏆`;
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="w-full max-w-2xl mx-auto pt-2"
+              className="w-full max-w-2xl mx-auto pt-2 beach-screen beach-screen--tournament"
             >
               <div className="px-4 space-y-6">
                 {/* Acesso Rápido Section */}
@@ -6805,7 +6828,7 @@ O play na palma da mão! 🏆`;
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full pb-32"
+              className="w-full pb-32 beach-screen beach-screen--profile"
             >
               {/* 1. Cabeçalho do Perfil (Foto e Nome) */}
               <div className="arena-hero-bg pt-10 pb-16 px-8 flex flex-col items-center text-center relative overflow-hidden">
@@ -7342,7 +7365,7 @@ O play na palma da mão! 🏆`;
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="w-full md:pb-20"
+              className="w-full md:pb-20 beach-screen beach-screen--tournaments"
             >
               <div className="arena-hero-bg pt-4 pb-12 px-8 flex flex-col items-center text-center">
                 <div className="mb-2">
@@ -7981,8 +8004,8 @@ O play na palma da mão! 🏆`;
                     <div className="flex items-center gap-4 px-5 pt-5 pb-4">
                       <div className="w-11 h-11 bg-amber-400 rounded-2xl flex items-center justify-center shrink-0 text-xl">⚡</div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">Desbloqueie o BeachPró Premium</p>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Torneios e atletas ilimitados</p>
+                        <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">Você tem 2 torneios grátis</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Qualquer formato e quantidade de atletas</p>
                       </div>
                       <button onClick={close} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0">
                         <X size={16} />
@@ -7990,16 +8013,16 @@ O play na palma da mão! 🏆`;
                     </div>
                     <div className="px-5 pb-5 flex gap-3">
                       <button
-                        onClick={openPremium}
+                        onClick={close}
                         className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
                       >
-                        Ver planos
+                        Entendi
                       </button>
                       <button
-                        onClick={close}
+                        onClick={openPremium}
                         className="px-5 py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
                       >
-                        Agora não
+                        Ver Premium
                       </button>
                     </div>
                   </div>
@@ -8032,7 +8055,7 @@ O play na palma da mão! 🏆`;
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-3">Você tem agora</p>
-                          {['1 torneio ativo', 'Até 8 atletas', 'Participa de 2 ligas'].map((f, i) => (
+                          {['2 torneios grátis', 'Atletas sem limite', 'Participa de 2 ligas'].map((f, i) => (
                             <div key={i} className="flex items-center gap-1.5 mb-1.5">
                               <div className="w-2 h-2 rounded-full bg-slate-200 shrink-0" />
                               <p className="text-[8px] font-black text-slate-500">{f}</p>
@@ -8122,7 +8145,7 @@ O play na palma da mão! 🏆`;
               ),
             ];
 
-            const VariantComponent = variants[supportPopupVariant % 3];
+            const VariantComponent = variants[0];
             return <VariantComponent />;
           })()}
         </AnimatePresence>

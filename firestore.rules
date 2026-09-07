@@ -107,6 +107,23 @@ service cloud.firestore {
       );
     }
 
+    // Contador permanente da franquia gratuita. Só pode aumentar, nunca ser
+    // reduzido, e fica limitado aos dois torneios gratuitos.
+    match /tournamentUsage/{userId} {
+      allow get: if isSignedIn() && userId == request.auth.uid;
+      allow create: if isSignedIn() && userId == request.auth.uid &&
+        incoming().uid == request.auth.uid &&
+        incoming().freeTournamentCount is int &&
+        incoming().freeTournamentCount >= 1 && incoming().freeTournamentCount <= 2 &&
+        isNum(incoming().updatedAt);
+      allow update: if isSignedIn() && userId == request.auth.uid &&
+        incoming().uid == existing().uid &&
+        incoming().freeTournamentCount is int &&
+        incoming().freeTournamentCount == existing().freeTournamentCount + 1 &&
+        incoming().freeTournamentCount <= 2 &&
+        isNum(incoming().updatedAt);
+    }
+
     match /rankings/{rankingId} {
       allow read: if isSignedIn();
 

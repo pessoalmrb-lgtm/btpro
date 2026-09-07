@@ -9,23 +9,29 @@ import { AppStep } from '../types';
 export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { activeStep: AppStep, setStep: (s: AppStep) => void, isVisible: boolean, resetApp: () => void }) => {
   if (!isVisible) return null;
 
+  // A navegação só aparece após o login; todo o app autenticado usa o tema noturno.
+  const darkNavigation = true;
+
   return (
     <motion.nav 
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       exit={{ y: 100 }}
-      className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[92%] max-w-[440px] bottom-nav-glass rounded-full px-4 py-1 flex items-center justify-between z-[200] h-16"
+      className={cn(
+        "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[92%] max-w-[440px] rounded-full px-4 py-1 flex items-center justify-between z-[200] h-[4.5rem] transition-colors duration-500",
+        darkNavigation ? "bottom-nav-night" : "bottom-nav-glass"
+      )}
     >
       <button 
         onClick={resetApp}
         className={cn(
           "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'HOME' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
+          activeStep === 'HOME' ? (darkNavigation ? "text-secondary" : "text-primary") : (darkNavigation ? "text-slate-400" : "text-on-surface-variant/60 opacity-80")
         )}
       >
         <div className={cn(
           "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'HOME' ? "bg-primary/10" : ""
+          activeStep === 'HOME' ? (darkNavigation ? "bg-secondary/10 ring-1 ring-secondary/30 shadow-[0_0_24px_rgba(226,255,0,.16)]" : "bg-primary/10") : ""
         )}>
           <Home size={20} className={activeStep === 'HOME' ? "fill-primary/10" : ""} />
         </div>
@@ -36,12 +42,12 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         onClick={() => setStep('MY_RANKINGS')}
         className={cn(
           "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
+          activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? (darkNavigation ? "text-secondary" : "text-primary") : (darkNavigation ? "text-slate-400" : "text-on-surface-variant/60 opacity-80")
         )}
       >
         <div className={cn(
           "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "bg-primary/10" : ""
+          activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? (darkNavigation ? "bg-secondary/10 ring-1 ring-secondary/30 shadow-[0_0_24px_rgba(226,255,0,.16)]" : "bg-primary/10") : ""
         )}>
           <Award size={20} className={activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "fill-primary/10" : "opacity-40"} />
         </div>
@@ -52,14 +58,14 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         onClick={() => setStep('TOURNAMENTS_LIST')}
         className={cn(
           "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'TOURNAMENTS_LIST' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
+          activeStep === 'TOURNAMENTS_LIST' || activeStep === 'TOURNAMENT' ? (darkNavigation ? "text-secondary" : "text-primary") : (darkNavigation ? "text-slate-400" : "text-on-surface-variant/60 opacity-80")
         )}
       >
         <div className={cn(
           "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'TOURNAMENTS_LIST' ? "bg-primary/10" : ""
+          activeStep === 'TOURNAMENTS_LIST' || activeStep === 'TOURNAMENT' ? (darkNavigation ? "bg-secondary/10 ring-1 ring-secondary/30 shadow-[0_0_24px_rgba(226,255,0,.16)]" : "bg-primary/10") : ""
         )}>
-          <TrophyIcon size={20} className={activeStep === 'TOURNAMENTS_LIST' ? "fill-primary/10" : ""} />
+          <TrophyIcon size={20} className={activeStep === 'TOURNAMENTS_LIST' || activeStep === 'TOURNAMENT' ? "fill-current/10" : ""} />
         </div>
         <span className="text-[8px] font-black uppercase tracking-widest leading-none">Torneios</span>
       </button>
@@ -68,12 +74,12 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         onClick={() => setStep('PROFILE')}
         className={cn(
           "flex flex-col items-center gap-1 transition-all active:scale-95 flex-1",
-          activeStep === 'PROFILE' ? "text-primary" : "text-on-surface-variant/60 opacity-80"
+          activeStep === 'PROFILE' ? (darkNavigation ? "text-secondary" : "text-primary") : (darkNavigation ? "text-slate-400" : "text-on-surface-variant/60 opacity-80")
         )}
       >
         <div className={cn(
           "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-          activeStep === 'PROFILE' ? "bg-primary/10" : ""
+          activeStep === 'PROFILE' ? (darkNavigation ? "bg-secondary/10 ring-1 ring-secondary/30 shadow-[0_0_24px_rgba(226,255,0,.16)]" : "bg-primary/10") : ""
         )}>
           <UserIcon size={20} className={activeStep === 'PROFILE' ? "fill-primary/10" : ""} />
         </div>

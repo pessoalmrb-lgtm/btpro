@@ -11,7 +11,7 @@ export const StepContainer = ({ children, title, subtitle, currentStep }: { chil
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-xl mx-auto px-4 py-12 flex flex-col min-h-screen bg-slate-50 relative z-10"
+      className="beach-step w-full max-w-xl mx-auto px-4 py-12 flex flex-col min-h-screen bg-slate-50 relative z-10"
     >
       {currentStep && (
         <div className="flex gap-1 mb-8 max-w-[200px]">

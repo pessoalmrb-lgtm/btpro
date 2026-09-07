@@ -159,6 +159,329 @@
   @apply bg-white/90 backdrop-blur-md border border-surface-container shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.08)];
 }
 
+.bottom-nav-night {
+  color: #94a3b8;
+  background: linear-gradient(180deg, rgba(12, 29, 48, 0.92), rgba(3, 14, 28, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px) saturate(130%);
+  -webkit-backdrop-filter: blur(22px) saturate(130%);
+}
+
+/* Base visual compartilhada por TODAS as telas após o login. */
+.authenticated-theme {
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 86% 6%, rgba(0, 145, 210, .17), transparent 30rem),
+    radial-gradient(circle at 12% 72%, rgba(226, 255, 0, .045), transparent 28rem),
+    linear-gradient(180deg, #020b17 0%, #03182b 48%, #020c18 100%) !important;
+}
+
+.authenticated-theme::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .18;
+  background-image:
+    linear-gradient(90deg, transparent 49.8%, rgba(70, 161, 205, .16) 50%, transparent 50.2%),
+    linear-gradient(0deg, transparent 74.8%, rgba(70, 161, 205, .11) 75%, transparent 75.2%),
+    radial-gradient(ellipse at 50% 108%, rgba(190, 151, 92, .22), transparent 38%);
+}
+
+.authenticated-theme > div,
+.authenticated-theme > nav {
+  position: relative;
+  z-index: 1;
+}
+
+.authenticated-theme .beach-step {
+  background: transparent !important;
+}
+
+.authenticated-theme .beach-step::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(4, 22, 38, .62), rgba(2, 12, 24, .92));
+}
+
+.authenticated-theme [class~="bg-white"],
+.authenticated-theme [class~="bg-surface-container-lowest"],
+.authenticated-theme [class~="bg-slate-50"] {
+  background-color: rgba(8, 27, 45, .84) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.authenticated-theme [class~="bg-surface-container"],
+.authenticated-theme [class~="bg-surface-container-low"],
+.authenticated-theme [class~="bg-surface-container-high"],
+.authenticated-theme [class~="bg-slate-100"],
+.authenticated-theme [class~="bg-slate-200"] {
+  background-color: rgba(18, 44, 67, .76) !important;
+}
+
+.authenticated-theme [class*="border-surface-container"],
+.authenticated-theme [class~="border-slate-100"],
+.authenticated-theme [class~="border-slate-200"],
+.authenticated-theme [class~="border-slate-300"] {
+  border-color: rgba(148, 163, 184, .24) !important;
+}
+
+.authenticated-theme [class~="text-on-surface"],
+.authenticated-theme [class~="text-slate-900"],
+.authenticated-theme [class~="text-slate-800"],
+.authenticated-theme [class~="text-slate-700"],
+.authenticated-theme [class~="text-slate-600"] {
+  color: #f8fafc !important;
+}
+
+.authenticated-theme [class*="text-on-surface-variant"],
+.authenticated-theme [class~="text-outline"],
+.authenticated-theme [class~="text-outline-variant"],
+.authenticated-theme [class~="text-slate-500"],
+.authenticated-theme [class~="text-slate-400"] {
+  color: #9aaabe !important;
+}
+
+.authenticated-theme [class~="text-primary"] {
+  color: #38bdf8;
+}
+
+.authenticated-theme input,
+.authenticated-theme textarea,
+.authenticated-theme select {
+  color: #f8fafc;
+  background-color: rgba(10, 30, 49, .9) !important;
+  border-color: rgba(148, 163, 184, .28) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.authenticated-theme input::placeholder,
+.authenticated-theme textarea::placeholder {
+  color: #64748b;
+}
+
+.authenticated-theme input:focus,
+.authenticated-theme textarea:focus,
+.authenticated-theme select:focus {
+  border-color: rgba(56, 189, 248, .72) !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .12), inset 0 1px 0 rgba(255, 255, 255, .04) !important;
+}
+
+.authenticated-theme .glass-card,
+.authenticated-theme .player-card,
+.authenticated-theme [class~="shadow-sm"] {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.authenticated-theme .btn-outline {
+  color: #e2e8f0;
+  background: rgba(12, 35, 56, .82);
+  border: 1px solid rgba(148, 163, 184, .24);
+}
+
+.authenticated-theme .btn-primary {
+  background: linear-gradient(135deg, #087eb8, #005381);
+  border: 1px solid rgba(56, 189, 248, .35);
+  box-shadow: 0 14px 34px rgba(0, 95, 153, .28);
+}
+
+.authenticated-theme .beach-step > div:first-of-type > div:first-of-type,
+.authenticated-theme .beach-step h2 {
+  color: #f8fafc;
+}
+
+.authenticated-theme .beach-step > div:first-of-type > div:first-of-type {
+  background-color: #e2ff00;
+  box-shadow: 0 0 18px rgba(226, 255, 0, .22);
+}
+
+.authenticated-theme .match-finished {
+  background: rgba(6, 78, 59, .24) !important;
+  border-color: rgba(52, 211, 153, .32) !important;
+}
+
+.authenticated-theme .match-pending {
+  background: rgba(8, 27, 45, .84) !important;
+  border-color: rgba(148, 163, 184, .24) !important;
+}
+
+.authenticated-theme ::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .5);
+}
+
+/* Visual noturno Beach Pró — aplicado somente às telas principais. */
+[data-app-step="HOME"],
+[data-app-step="PROFILE"],
+[data-app-step="TOURNAMENTS_LIST"],
+[data-app-step="TOURNAMENT"] {
+  position: relative;
+  background:
+    radial-gradient(circle at 82% 9%, rgba(0, 129, 196, 0.18), transparent 27rem),
+    radial-gradient(circle at 15% 52%, rgba(226, 255, 0, 0.055), transparent 22rem),
+    linear-gradient(180deg, #020b17 0%, #03172a 46%, #020c18 100%);
+}
+
+[data-app-step="HOME"]::before,
+[data-app-step="PROFILE"]::before,
+[data-app-step="TOURNAMENTS_LIST"]::before,
+[data-app-step="TOURNAMENT"]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: .28;
+  background-image:
+    linear-gradient(90deg, transparent 49.7%, rgba(102, 176, 214, .16) 50%, transparent 50.3%),
+    linear-gradient(0deg, transparent 77%, rgba(102, 176, 214, .12) 77.2%, transparent 77.4%),
+    radial-gradient(ellipse at 50% 105%, rgba(188, 151, 93, .2), transparent 42%);
+}
+
+[data-app-step="HOME"] > div,
+[data-app-step="PROFILE"] > div,
+[data-app-step="TOURNAMENTS_LIST"] > div,
+[data-app-step="TOURNAMENT"] > div {
+  position: relative;
+  z-index: 1;
+}
+
+.beach-screen .arena-hero-bg {
+  background:
+    radial-gradient(circle at 88% 18%, rgba(0, 151, 221, .19), transparent 35%),
+    linear-gradient(145deg, rgba(1, 12, 25, .96), rgba(3, 45, 69, .9));
+}
+
+.beach-screen .arena-hero-bg::after {
+  background-image:
+    linear-gradient(118deg, transparent 58%, rgba(60, 180, 224, .07) 58.2%, transparent 58.5%),
+    radial-gradient(circle at 80% 0%, rgba(226, 255, 0, .08), transparent 35%);
+}
+
+.beach-screen .wave-container {
+  background: linear-gradient(180deg, rgba(5, 22, 38, .97), rgba(2, 12, 24, .99));
+  border-top: 1px solid rgba(148, 163, 184, .2);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, .34);
+}
+
+.beach-screen .bg-white,
+.beach-screen .bg-surface-container-lowest,
+.beach-screen .bg-slate-50 {
+  background-color: rgba(9, 27, 45, .78) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.beach-screen .bg-surface-container,
+.beach-screen .bg-surface-container-low,
+.beach-screen .bg-slate-100 {
+  background-color: rgba(18, 43, 65, .72) !important;
+}
+
+.beach-screen .border-surface-container,
+.beach-screen .border-slate-100,
+.beach-screen .border-slate-200 {
+  border-color: rgba(148, 163, 184, .22) !important;
+}
+
+.beach-screen .text-on-surface,
+.beach-screen .text-slate-900,
+.beach-screen .text-slate-800,
+.beach-screen .text-slate-700,
+.beach-screen .text-slate-600 {
+  color: #f8fafc !important;
+}
+
+.beach-screen .text-on-surface-variant,
+.beach-screen .text-slate-500,
+.beach-screen .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.beach-screen .glass-card,
+.beach-screen--tournaments .wave-container > div > div,
+.beach-screen--profile .wave-container > div > div {
+  border-color: rgba(148, 163, 184, .24);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+
+.beach-screen--home .btn-hero-neon {
+  border: 1px solid rgba(238, 255, 82, .8);
+  box-shadow: 0 15px 40px rgba(226, 255, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+
+.beach-screen--home .btn-hero-secondary {
+  background: linear-gradient(135deg, #00bfe8 0%, #0878d4 100%);
+  border: 1px solid rgba(96, 210, 255, .65);
+  box-shadow: 0 15px 38px rgba(0, 169, 225, .2), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+
+.beach-screen--tournaments .wave-container {
+  margin-top: -2.25rem;
+}
+
+.beach-screen--tournaments .wave-container > div > div {
+  background: linear-gradient(145deg, rgba(12, 33, 52, .9), rgba(4, 18, 32, .94)) !important;
+  border-color: rgba(148, 163, 184, .3) !important;
+}
+
+.beach-screen--tournaments .wave-container > div > div:not(:has(.bg-slate-700)) {
+  border-color: rgba(226, 255, 0, .48) !important;
+}
+
+.beach-screen--tournaments h3,
+.beach-screen--tournaments button:not(.text-rose-500) {
+  color: #f8fafc;
+}
+
+.beach-screen--tournament {
+  padding: .75rem 1rem 8rem;
+}
+
+.beach-screen--tournament > .px-4 {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.beach-screen--tournament .bg-gradient-to-br {
+  background-image: linear-gradient(145deg, rgba(7, 38, 62, .96), rgba(3, 18, 32, .94)) !important;
+  border-color: rgba(226, 255, 0, .6) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .32) !important;
+}
+
+.beach-screen--tournament .rounded-\[2rem\],
+.beach-screen--tournament .rounded-\[1\.75rem\] {
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .24);
+}
+
+.beach-screen--profile .arena-hero-bg {
+  padding-bottom: 3.5rem;
+}
+
+.beach-screen--profile .bg-white.rounded-\[2\.5rem\] {
+  border: 1px solid rgba(148, 163, 184, .25) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .25) !important;
+}
+
+.beach-screen--profile .text-primary,
+.beach-screen--tournaments .text-primary,
+.beach-screen--tournament .text-primary {
+  color: #38bdf8;
+}
+
+@media (min-width: 768px) {
+  .beach-screen--home .arena-hero-bg,
+  .beach-screen--profile .arena-hero-bg,
+  .beach-screen--tournaments .arena-hero-bg {
+    border-radius: 0 0 3.5rem 3.5rem;
+  }
+}
+
 .kinetic-gradient {
   background: linear-gradient(135deg, #005f99 0%, #005387 100%);
 }

@@ -18,9 +18,9 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
 
   const getReasonConfig = () => {
     switch (reason) {
-      case 'TOURNAMENT_LIMIT': return { title: 'Limite de Torneios!',  desc: 'Você atingiu o limite de 1 torneio ativo no plano Free.',         icon: <Zap className="w-8 h-8 text-slate-900" /> };
-      case 'ATHLETE_LIMIT':    return { title: 'Limite de Atletas!',   desc: 'Torneios com mais de 8 atletas são exclusivos Premium.',           icon: <Users className="w-8 h-8 text-slate-900" /> };
-      case 'FORMAT_LIMIT':     return { title: 'Formato Exclusivo!',   desc: 'O formato Grupos + Mata-Mata é exclusivo Premium.',                icon: <Trophy className="w-8 h-8 text-slate-900" /> };
+      case 'TOURNAMENT_LIMIT': return { title: 'Seus 2 torneios grátis foram usados', desc: 'Assine o Premium para criar torneios ilimitados.', icon: <Zap className="w-8 h-8 text-slate-900" /> };
+      case 'ATHLETE_LIMIT':    return { title: 'Beach Pró Premium',    desc: 'Assine para criar torneios ilimitados.',                            icon: <Users className="w-8 h-8 text-slate-900" /> };
+      case 'FORMAT_LIMIT':     return { title: 'Beach Pró Premium',    desc: 'Assine para criar torneios ilimitados.',                            icon: <Trophy className="w-8 h-8 text-slate-900" /> };
       case 'RANKING_LIMIT':    return { title: 'Criação de Ligas!',    desc: 'A criação de ligas é exclusiva do plano Premium.',                 icon: <BarChart3 className="w-8 h-8 text-slate-900" /> };
       case 'VERIFIED_BADGE':   return { title: 'Selo Verificado',      desc: 'Destaque seu perfil com o selo oficial.',                          icon: <Star className="w-8 h-8 text-slate-900" /> };
       default:                 return { title: 'Beach Pró Premium',    desc: 'Leve sua organização de torneios ao próximo nível.',               icon: <Trophy className="w-8 h-8 text-slate-900" /> };
@@ -37,7 +37,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
       const isNative = Capacitor.isNativePlatform();
 
       if (!isNative) {
-        setErrorMsg('Assinatura disponível apenas no aplicativo Android.');
+        setErrorMsg('Assinatura disponível apenas no aplicativo para iOS ou Android.');
         return;
       }
 
@@ -101,7 +101,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
     try {
       const { Capacitor } = await import('@capacitor/core');
       if (!Capacitor.isNativePlatform()) {
-        setErrorMsg('Restauração disponível apenas no aplicativo Android.');
+        setErrorMsg('Restauração disponível apenas no aplicativo para iOS ou Android.');
         return;
       }
       const { restorePurchases, mirrorExpirationToFirestore } =
@@ -111,7 +111,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
         await mirrorExpirationToFirestore(uid, status);
         onSuccess();
       } else {
-        setErrorMsg('Nenhuma assinatura ativa encontrada nesta conta Google.');
+        setErrorMsg('Nenhuma assinatura ativa encontrada nesta conta da loja.');
       }
     } catch (error: any) {
       console.error('Restore error:', JSON.stringify(error), error);
@@ -123,10 +123,10 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
   };
 
   const freeFeatures = [
-    '1 torneio ativo por vez',
-    'Até 8 atletas por torneio',
+    '2 torneios grátis no total',
+    'Qualquer quantidade de atletas',
     'Participar de até 2 ligas',
-    'Todos os formatos (exceto Grupos + Mata-Mata)',
+    'Todos os formatos de torneio',
     'Histórico de torneios',
   ];
 
