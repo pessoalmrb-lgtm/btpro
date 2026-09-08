@@ -741,13 +741,130 @@
 }
 
 .beach-screen--finished .finished-ranking-row {
-  background: linear-gradient(145deg, rgba(10, 34, 55, .96), rgba(5, 23, 39, .98)) !important;
-  border-color: rgba(91, 154, 190, .3) !important;
+  background: linear-gradient(145deg, rgba(25, 61, 89, .98), rgba(12, 39, 62, .99)) !important;
+  border-color: rgba(107, 184, 222, .52) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .055) !important;
 }
 
 .beach-screen--finished .finished-ranking-row > div:nth-child(2) > div:first-child,
 .beach-screen--finished .finished-ranking-row span {
   color: #f8fafc !important;
+}
+
+.beach-screen--finished .finished-share-button,
+.authenticated-theme .neon-action-button {
+  color: #071725 !important;
+  background: linear-gradient(135deg, #dfff16, #aeee49) !important;
+  border: 1px solid rgba(237, 255, 110, .9);
+  text-shadow: none !important;
+  box-shadow: 0 12px 30px rgba(190, 242, 100, .2), inset 0 1px 0 rgba(255, 255, 255, .42) !important;
+}
+
+.authenticated-theme .neon-action-button h4,
+.authenticated-theme .neon-action-button p,
+.authenticated-theme .neon-action-button svg {
+  color: #071725 !important;
+}
+
+/* Minhas Ligas acompanha o mesmo tema noturno das telas de torneio. */
+.beach-screen--leagues {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(0, 140, 207, .2), transparent 28rem),
+    radial-gradient(circle at 12% 68%, rgba(226, 255, 0, .045), transparent 25rem),
+    linear-gradient(180deg, #020b17, #03182b 50%, #020c18) !important;
+}
+
+.beach-screen--leagues .arena-hero-bg {
+  background: linear-gradient(145deg, rgba(3, 22, 38, .98), rgba(4, 57, 83, .94)) !important;
+}
+
+.beach-screen--leagues .league-list-content.wave-container {
+  margin-top: -2.25rem;
+  background: linear-gradient(180deg, rgba(5, 23, 39, .99), rgba(2, 13, 25, 1)) !important;
+  border-top: 1px solid rgba(83, 161, 199, .28);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, .34);
+}
+
+.beach-screen--leagues .league-primary-action {
+  color: #fff !important;
+  background: linear-gradient(135deg, #087fc0, #00639e) !important;
+  border: 1px solid rgba(68, 204, 255, .42);
+}
+
+.beach-screen--leagues .league-secondary-action {
+  color: #48cbff !important;
+  background: rgba(17, 49, 74, .94) !important;
+  border-color: rgba(62, 195, 246, .7) !important;
+}
+
+.beach-screen--leagues .league-list-card {
+  color: #f8fafc;
+  background: linear-gradient(145deg, rgba(20, 54, 80, .98), rgba(7, 28, 46, .99)) !important;
+  border-color: rgba(81, 165, 205, .4) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+
+.beach-screen--leagues .league-list-card > div:last-child {
+  background: rgba(9, 31, 50, .88);
+}
+
+.beach-screen--leagues .league-list-card h4,
+.beach-screen--leagues .league-list-card p,
+.beach-screen--leagues .league-list-card span:not(.bg-emerald-400) {
+  color: #f8fafc !important;
+}
+
+.league-tabs {
+  background: linear-gradient(180deg, rgba(13, 40, 63, .98), rgba(5, 23, 40, .99)) !important;
+  border-color: rgba(88, 158, 195, .38) !important;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .05) !important;
+}
+
+.league-tabs button {
+  color: #a9b7c9 !important;
+  background: transparent !important;
+}
+
+.league-tabs button.bg-\[\#004a8c\] {
+  color: #fff !important;
+  background: linear-gradient(135deg, #087fc0, #005b94) !important;
+  box-shadow: 0 8px 22px rgba(0, 99, 158, .3) !important;
+}
+
+.guest-athlete-notice {
+  color: #f8fafc;
+  background: linear-gradient(145deg, rgba(25, 48, 65, .98), rgba(7, 27, 43, .99)) !important;
+  border-color: rgba(245, 184, 32, .7) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .28), inset 3px 0 0 #f5b820 !important;
+}
+
+.guest-athlete-notice .guest-athlete-icon {
+  color: #081725 !important;
+  background: #f5b820 !important;
+}
+
+.guest-athlete-notice .guest-athlete-copy {
+  background: rgba(245, 184, 32, .08) !important;
+  border-color: rgba(245, 184, 32, .24) !important;
+}
+
+.guest-athlete-notice .guest-points-badge {
+  color: #1b2430 !important;
+  background: #ffe7a0 !important;
+}
+
+.guest-athlete-notice .text-amber-950,
+.guest-athlete-notice .text-red-600 {
+  color: #f8fafc !important;
+  text-decoration-color: #f5b820;
+}
+
+/* Salvaguardas de contraste para ações principais dentro do tema escuro. */
+.authenticated-theme .btn-primary,
+.authenticated-theme button.league-primary-action,
+.authenticated-theme button.tournament-confirm,
+.authenticated-theme button.tournament-info-confirm {
+  color: #fff !important;
 }
 
 @media (max-width: 420px) {

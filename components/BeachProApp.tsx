@@ -2839,7 +2839,7 @@ export default function BeachProApp() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="w-full min-h-screen bg-[#004a8c]"
+              className="league-list-screen w-full min-h-screen beach-screen beach-screen--leagues"
             >
               <div className="arena-hero-bg pt-4 pb-12 px-8 flex flex-col items-center text-center relative">
                 <button onClick={goBack} className="absolute left-6 top-6 p-3 bg-white/10 rounded-2xl text-white backdrop-blur-sm border border-white/20 active:scale-95 transition-all">
@@ -2859,7 +2859,7 @@ export default function BeachProApp() {
                 </div>
               </div>
 
-              <div className="wave-container px-6 pt-10 pb-32">
+              <div className="league-list-content wave-container px-6 pt-10 pb-32">
                 <div className="max-w-2xl mx-auto space-y-4">
                   <div className="flex flex-col gap-3 mb-6">
                     <button
@@ -2872,7 +2872,7 @@ export default function BeachProApp() {
                         resetRankingForm();
                         navigateTo('CREATE_RANKING', { rankingId: null });
                       }}
-                      className="w-full py-5 bg-primary text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary-dim transition-all"
+                      className="league-primary-action w-full py-5 bg-primary text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary-dim transition-all"
                     >
                       <Plus size={18} strokeWidth={3} />
                       NOVA LIGA
@@ -2885,7 +2885,7 @@ export default function BeachProApp() {
                         setLeagueSearchError(null);
                         navigateTo('FIND_LEAGUES');
                       }}
-                      className="w-full py-5 bg-white border-2 border-primary text-primary rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-primary/5 transition-all"
+                      className="league-secondary-action w-full py-5 bg-white border-2 border-primary text-primary rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-primary/5 transition-all"
                     >
                       <Search size={18} />
                       ENCONTRAR LIGAS
@@ -2901,7 +2901,7 @@ export default function BeachProApp() {
                       return (
                         <div
                           key={`ranking-item-${r.id || idx}`}
-                          className="w-full bg-white rounded-[2rem] border border-surface-container shadow-sm overflow-hidden group hover:shadow-md hover:border-primary/20 transition-all cursor-pointer"
+                          className="league-list-card w-full bg-white rounded-[2rem] border border-surface-container shadow-sm overflow-hidden group hover:shadow-md hover:border-primary/20 transition-all cursor-pointer"
                           onClick={() => navigateTo('RANKING_DETAILS', { rankingId: r.id })}
                         >
                           {/* Cover image strip */}
@@ -3518,7 +3518,7 @@ O play na palma da mão! 🏆`;
                              setTournamentName(activeRanking.name);
                              navigateTo('PLAYER_COUNT');
                            }}
-                           className="w-full bg-[#bef264] p-5 rounded-[2.5rem] flex items-center justify-between group shadow-xl shadow-[#bef264]/20 active:scale-[0.98] transition-all"
+                           className="neon-action-button league-new-tournament w-full bg-[#bef264] p-5 rounded-[2.5rem] flex items-center justify-between group shadow-xl shadow-[#bef264]/20 active:scale-[0.98] transition-all"
                          >
                            <div className="flex items-center gap-4">
                               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#bef264] shadow-sm">
@@ -3537,7 +3537,7 @@ O play na palma da mão! 🏆`;
                        {/* "Minhas Ligas" button removed per request */}
 
                     {/* Tab Navigation Pill */}
-                    <div className="bg-white/60 backdrop-blur-xl border border-slate-200/50 p-2 rounded-[2.5rem] flex items-center justify-between mb-8 shadow-xl">
+                    <div className="league-tabs bg-white/60 backdrop-blur-xl border border-slate-200/50 p-2 rounded-[2.5rem] flex items-center justify-between mb-8 shadow-xl">
                       {[
                         { id: 'RANKING', label: 'Tabela', icon: TrophyIcon },
                         { id: 'PLAYERS', label: 'Atletas', icon: Users },
@@ -4978,23 +4978,23 @@ O play na palma da mão! 🏆`;
             >
               <div className="space-y-4 mb-6">
                 {pendingRankingId && (
-                  <div className="bg-white border-4 border-amber-400 p-6 rounded-[2.5rem] flex flex-col gap-4 mb-8 shadow-xl ring-8 ring-amber-500/5 animate-in fade-in slide-in-from-top-4 duration-1000">
+                  <div className="guest-athlete-notice bg-white border border-amber-400 p-4 rounded-[1.5rem] flex flex-col gap-3 mb-5 shadow-xl animate-in fade-in slide-in-from-top-4 duration-1000">
                     <div className="flex items-center gap-3">
-                      <div className="bg-amber-400 p-3 rounded-2xl text-white shadow-lg shadow-amber-200">
-                        <AlertTriangle size={24} strokeWidth={3} />
+                      <div className="guest-athlete-icon bg-amber-400 p-2 rounded-xl text-slate-950 shadow-lg shadow-amber-500/20">
+                        <AlertTriangle size={18} strokeWidth={3} />
                       </div>
-                      <h4 className="text-[14px] font-black text-amber-950 uppercase tracking-tight leading-none">Atenção: Atleta Convidado</h4>
+                      <h4 className="text-[11px] font-black text-amber-300 uppercase tracking-wider leading-none">Atenção: Atleta Convidado</h4>
                     </div>
                     <div className="space-y-3">
-                      <p className="text-[12px] font-black text-amber-900 leading-tight">
-                        Este torneio é <span className="bg-amber-100 px-1.5 rounded">VALENDO PONTOS</span> para a liga.
+                      <p className="text-[10px] font-black text-slate-200 leading-tight">
+                        Este torneio está <span className="guest-points-badge bg-amber-100 px-1.5 py-0.5 rounded">VALENDO PONTOS</span> para a liga.
                       </p>
-                      <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200/50">
-                        <p className="text-[11px] font-bold text-amber-800 leading-relaxed italic">
+                      <div className="guest-athlete-copy bg-amber-50/80 p-3 rounded-xl border border-amber-200/50">
+                        <p className="text-[10px] font-bold text-slate-200 leading-relaxed">
                           Atletas <span className="text-amber-950 underline decoration-amber-400 decoration-2 underline-offset-4">não cadastrados</span> na liga podem participar normalmente, mas <span className="text-red-600 font-black">NÃO SOMARÃO PONTOS</span> no ranking global em nenhuma hipótese.
                         </p>
                       </div>
-                      <p className="text-[10px] font-bold text-amber-700/60 uppercase tracking-wider">
+                      <p className="text-[8px] font-bold text-amber-200/70 uppercase tracking-wider">
                         Apenas atletas da lista oficial acumulam pontuação.
                       </p>
                     </div>
@@ -6786,7 +6786,7 @@ O play na palma da mão! 🏆`;
                   return (
                     <button
                       onClick={() => { setShareBackgroundImage(null); setShowSharePopup(true); }}
-                      className="w-full py-5 bg-[#bef264] text-slate-900 rounded-full font-black text-sm uppercase tracking-widest shadow-lg shadow-[#bef264]/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
+                      className="finished-share-button neon-action-button w-full py-5 bg-[#bef264] text-slate-900 rounded-full font-black text-sm uppercase tracking-widest shadow-lg shadow-[#bef264]/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
                     >
                       <Share2 size={20} />
                       COMPARTILHAR RESULTADO
