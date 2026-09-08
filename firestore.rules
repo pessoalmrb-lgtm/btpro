@@ -83,6 +83,8 @@ service cloud.firestore {
              isNum(data.currentRound) &&
              isNum(data.totalRounds) &&
              data.tables is list && data.tables.size() <= 100 &&
+             (data.get('accessCode', null) == null ||
+              (data.accessCode is string && data.accessCode.size() == 5 && data.accessCode.matches('^[A-Z0-9]+$'))) &&
              data.isFinished is bool &&
              isNum(data.createdAt);
     }
@@ -188,7 +190,8 @@ service cloud.firestore {
             'name', 'players', 'matches', 'currentRound', 'totalRounds', 'tables',
             'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'isHidden',
             'rankingId', 'championsPhotoUrl', 'finalResults', 'matches_group_stage',
-            'matches_knockout_stage', 'teamsPerGroup', 'playoffRounds', 'athleteCount'
+            'matches_knockout_stage', 'teamsPerGroup', 'playoffRounds', 'athleteCount',
+            'accessCode'
           ])
         )
       );
@@ -198,6 +201,22 @@ service cloud.firestore {
         (existing().get('rankingId', null) != null && isRankingAdmin(existing().rankingId)) ||
         isAdmin()
       );
+    }
+
+    // Índice mínimo usado para localizar um torneio pelo código. Ele não
+    // concede permissão de edição nem ignora a validação de membro da liga.
+    match /tournamentAccessCodes/{accessCode} {
+      allow get: if isSignedIn() && accessCode.size() == 5;
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        accessCode.size() == 5 && accessCode.matches('^[A-Z0-9]+$') &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().tournamentId is string &&
+        incoming().tournamentName is string &&
+        isNum(incoming().createdAt) &&
+        getAfter(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
     }
   }
 }

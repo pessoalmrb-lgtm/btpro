@@ -199,6 +199,14 @@ export default function BeachProApp() {
   const [tournamentViewRound, setTournamentViewRound] = useState<number | null>(null);
   const [showRoundSelector, setShowRoundSelector] = useState(false);
   const [showTournamentInfo, setShowTournamentInfo] = useState(false);
+  const [showFollowTournament, setShowFollowTournament] = useState(false);
+  const [followTournamentCode, setFollowTournamentCode] = useState('');
+  const [followTournamentError, setFollowTournamentError] = useState<string | null>(null);
+  const [isFollowingTournament, setIsFollowingTournament] = useState(false);
+  const [followedTournament, setFollowedTournament] = useState<TournamentState | null>(null);
+  const [spectatorTournamentId, setSpectatorTournamentId] = useState<string | null>(null);
+  const followedTournamentUnsubscribeRef = useRef<null | (() => void)>(null);
+  const accessCodeBackfillRef = useRef<Set<string>>(new Set());
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // --- Profile Editing State ---
@@ -264,7 +272,8 @@ export default function BeachProApp() {
   const [showHistoryDetail, setShowHistoryDetail] = useState<string | null>(null);
   const [historyDetailTab, setHistoryDetailTab] = useState<'RESULTS' | 'MATCHES'>('RESULTS');
 
-  const activeTournament = tournaments.find(t => t.id === activeTournamentId);
+  const activeTournament = tournaments.find(t => t.id === activeTournamentId) ||
+    (followedTournament?.id === activeTournamentId ? followedTournament : undefined);
 
   // Torneios que o usuário pode gerenciar (próprios ou de ligas onde é admin)
   const manageableTournaments = tournaments.filter(t => {
@@ -281,6 +290,7 @@ export default function BeachProApp() {
     rankingId?: string | null,
     matchHistory?: boolean, 
     replace?: boolean,
+    spectator?: boolean,
     tab?: 'MATCHES' | 'RANKING' | 'ROUNDS',
     round?: number | null
   } = {}) => {
@@ -313,6 +323,9 @@ export default function BeachProApp() {
     setShowMatchHistory(nextMatchHistory || false);
     setTournamentTab(nextTab);
     setTournamentViewRound(nextRound);
+    if (options.tournamentId !== undefined) {
+      setSpectatorTournamentId(options.spectator && nextTournamentId ? nextTournamentId : null);
+    }
     
     // Reset scroll on navigation
     if (typeof window !== 'undefined') {
@@ -1155,11 +1168,150 @@ export default function BeachProApp() {
     }
   };
 
+  const generateUniqueTournamentCode = async () => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      let code = '';
+      for (let i = 0; i < 5; i += 1) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      const codeSnap = await getDoc(doc(db, 'tournamentAccessCodes', code));
+      if (!codeSnap.exists()) return code;
+    }
+    throw new Error('Não foi possível gerar um código único. Tente novamente.');
+  };
+
+  const openFollowTournament = () => {
+    setFollowTournamentCode('');
+    setFollowTournamentError(null);
+    setShowFollowTournament(true);
+  };
+
+  const followTournamentByCode = async () => {
+    if (!user) return;
+    const code = followTournamentCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 5) {
+      setFollowTournamentError('Digite o código de 5 caracteres.');
+      return;
+    }
+
+    setIsFollowingTournament(true);
+    setFollowTournamentError(null);
+    try {
+      const accessSnap = await getDoc(doc(db, 'tournamentAccessCodes', code));
+      if (!accessSnap.exists()) {
+        setFollowTournamentError('Código de torneio não encontrado.');
+        return;
+      }
+
+      const access = accessSnap.data() as { tournamentId?: string; rankingId?: string | null };
+      if (!access.tournamentId) {
+        setFollowTournamentError('Este código não está disponível.');
+        return;
+      }
+
+      if (access.rankingId) {
+        const rankingSnap = await getDoc(doc(db, 'rankings', access.rankingId));
+        const ranking = rankingSnap.data() as Ranking | undefined;
+        const canAccess = !!ranking && (
+          ranking.ownerId === user.uid ||
+          ranking.adminIds?.includes(user.uid) ||
+          ranking.athleteIds?.includes(user.uid)
+        );
+        if (!canAccess) {
+          setFollowTournamentError('Você não faz parte dessa liga e não pode acessar esse torneio.');
+          return;
+        }
+      }
+
+      const tournamentRef = doc(db, 'tournaments', access.tournamentId);
+      const tournamentSnap = await getDoc(tournamentRef);
+      if (!tournamentSnap.exists()) {
+        setFollowTournamentError('Torneio não encontrado ou indisponível.');
+        return;
+      }
+
+      followedTournamentUnsubscribeRef.current?.();
+      followedTournamentUnsubscribeRef.current = onSnapshot(tournamentRef, snapshot => {
+        if (snapshot.exists()) setFollowedTournament(snapshot.data() as TournamentState);
+      });
+      const loadedTournament = tournamentSnap.data() as TournamentState;
+      setFollowedTournament(loadedTournament);
+      setShowFollowTournament(false);
+      navigateTo('TOURNAMENT', { tournamentId: loadedTournament.id, spectator: true, tab: 'ROUNDS', round: null });
+    } catch (err) {
+      console.error('Erro ao acompanhar torneio:', err);
+      setFollowTournamentError('Não foi possível acessar o torneio. Verifique o código.');
+    } finally {
+      setIsFollowingTournament(false);
+    }
+  };
+
+  const copyTournamentCode = async (tournament: TournamentState) => {
+    if (!tournament.accessCode) return;
+    await navigator.clipboard.writeText(tournament.accessCode);
+    setSnackMessage('Código do torneio copiado!');
+    setTimeout(() => setSnackMessage(null), 2500);
+  };
+
+  const shareTournamentAccess = async (tournament: TournamentState) => {
+    if (!tournament.accessCode) return;
+    const text = `🏆 Acompanhe o torneio ${tournament.name} pelo aplicativo BeachPró.\n\nAbra o app, toque em “Acompanhar torneio” e digite o código: ${tournament.accessCode}\n\nVocê poderá acompanhar todas as rodadas, quadras e placares em tempo real.`;
+    try {
+      if (navigator.share) await navigator.share({ title: `Torneio ${tournament.name}`, text });
+      else {
+        await navigator.clipboard.writeText(text);
+        setSnackMessage('Convite copiado! Cole no WhatsApp.');
+        setTimeout(() => setSnackMessage(null), 2500);
+      }
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') console.error('Erro ao compartilhar torneio:', err);
+    }
+  };
+
+  useEffect(() => () => followedTournamentUnsubscribeRef.current?.(), []);
+
+  useEffect(() => {
+    if (!user) return;
+    const missingCodes = tournaments.filter(t => t.uid === user.uid && !t.accessCode && !accessCodeBackfillRef.current.has(t.id));
+    missingCodes.forEach(tournament => {
+      accessCodeBackfillRef.current.add(tournament.id);
+      void (async () => {
+        try {
+          const accessCode = await generateUniqueTournamentCode();
+          const batch = writeBatch(db);
+          batch.update(doc(db, 'tournaments', tournament.id), { accessCode });
+          batch.set(doc(db, 'tournamentAccessCodes', accessCode), {
+            tournamentId: tournament.id,
+            tournamentName: tournament.name,
+            ownerUid: user.uid,
+            rankingId: tournament.rankingId || null,
+            createdAt: tournament.createdAt
+          });
+          await batch.commit();
+        } catch (err) {
+          accessCodeBackfillRef.current.delete(tournament.id);
+          console.error('Erro ao criar código para torneio existente:', err);
+        }
+      })();
+    });
+  }, [tournaments, user]);
+
   const saveNewTournament = async (tournamentId: string, tournamentData: Record<string, unknown>) => {
     if (!user) return false;
 
+    const accessCode = String(tournamentData.accessCode || '');
+    const accessData = {
+      tournamentId,
+      tournamentName: String(tournamentData.name || ''),
+      ownerUid: user.uid,
+      rankingId: tournamentData.rankingId ? String(tournamentData.rankingId) : null,
+      createdAt: Number(tournamentData.createdAt || Date.now())
+    };
+
     if (isPremium) {
-      await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'tournaments', tournamentId), tournamentData);
+      if (accessCode) batch.set(doc(db, 'tournamentAccessCodes', accessCode), accessData);
+      await batch.commit();
       return true;
     }
 
@@ -1179,6 +1331,7 @@ export default function BeachProApp() {
         if (used >= 2) throw new Error('FREE_TOURNAMENT_LIMIT');
 
         transaction.set(tournamentRef, tournamentData);
+        if (accessCode) transaction.set(doc(db, 'tournamentAccessCodes', accessCode), accessData);
         transaction.set(usageRef, {
           uid: user.uid,
           freeTournamentCount: used + 1,
@@ -1369,6 +1522,7 @@ export default function BeachProApp() {
             rankingCriteria,
             isFinished: false,
             createdAt: Date.now(),
+            accessCode: await generateUniqueTournamentCode(),
             rankingId: pendingRankingId || undefined
           };
           
@@ -1428,6 +1582,7 @@ export default function BeachProApp() {
             rankingCriteria,
             isFinished: false,
             createdAt: Date.now(),
+            accessCode: await generateUniqueTournamentCode(),
             rankingId: pendingRankingId || undefined
           };
           
@@ -1468,6 +1623,7 @@ export default function BeachProApp() {
         rankingCriteria,
         isFinished: false,
         createdAt: Date.now(),
+        accessCode: await generateUniqueTournamentCode(),
         rankingId: pendingRankingId || undefined
       };
       
@@ -2703,6 +2859,15 @@ export default function BeachProApp() {
                       </button>
                     );
                   })()}
+                  <button
+                    type="button"
+                    onClick={openFollowTournament}
+                    className="follow-tournament-button group flex h-12 w-full items-center justify-between rounded-full border px-4 transition-all active:scale-[0.98]"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-secondary"><Eye size={16}/></div>
+                    <span className="flex-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-white">Acompanhar torneio</span>
+                    <ChevronRight size={16} className="text-white/55 transition-transform group-hover:translate-x-0.5"/>
+                  </button>
                 </div>
 
               </div>
@@ -5271,6 +5436,7 @@ O play na palma da mão! 🏆`;
                         playoffRounds: tournamentFormat === 'GROUPS_MATA_MATA' ? normalizePlayoffRounds(playoffRounds) : [],
                         isFinished: false,
                         createdAt: Date.now(),
+                        accessCode: await generateUniqueTournamentCode(),
                         rankingId: pendingRankingId || undefined
                       };
                       
@@ -5591,10 +5757,10 @@ O play na palma da mão! 🏆`;
 
           {isAuthReady && user && step === 'TOURNAMENT' && activeTournament && (() => {
             // Verifica se o usuário é admin do torneio
-            const isAdminView = !activeTournament.rankingId || (() => {
+            const isAdminView = spectatorTournamentId !== activeTournament.id && (!activeTournament.rankingId || (() => {
               const r = rankings.find(rk => rk.id === activeTournament.rankingId);
               return !r || r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '');
-            })();
+            })());
 
             // Se não é admin e o torneio é de uma liga, mostra view somente leitura
             if (!isAdminView) return (
@@ -5667,13 +5833,13 @@ O play na palma da mão! 🏆`;
                             const p2Name = p2p ? `${p2Base} / ${p2p.name}` : p2Base;
                             return (
                               <div key={m.id} className={cn(
-                                "bg-white rounded-2xl border p-4 flex items-center gap-3",
-                                m.isCompleted ? "border-emerald-100 bg-emerald-50/30" : "border-surface-container"
+                                "spectator-match-card rounded-2xl border p-4 flex items-center gap-3",
+                                m.isCompleted && "spectator-match-card--completed"
                               )}>
                                 <div className="flex-1 min-w-0 text-right">
                                   <p className="text-[10px] font-black uppercase truncate text-white">{p1Name}</p>
                                 </div>
-                                <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 px-3 py-1.5 rounded-xl">
+                                <div className="spectator-score flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-xl">
                                   <span className="mr-1 rounded-md bg-primary px-1.5 py-0.5 text-[8px] font-black text-white">QUADRA {m.table}</span>
                                   <span className={cn("text-sm font-black font-display", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-400")}>{s1}</span>
                                   <span className="text-[9px] text-slate-300 font-black">×</span>
@@ -5794,6 +5960,13 @@ O play na palma da mão! 🏆`;
                       <h1 className="max-w-full truncate font-display text-[clamp(1.6rem,7vw,2.35rem)] font-black italic uppercase leading-tight tracking-tighter text-white">
                         {activeTournament.name}
                       </h1>
+                      {activeTournament.accessCode && (
+                        <div className="tournament-access-code flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-white/10 py-1 pl-2.5 pr-1">
+                          <span className="font-mono text-[10px] font-black tracking-[0.14em] text-secondary">{activeTournament.accessCode}</span>
+                          <button type="button" aria-label="Copiar código do torneio" onClick={() => copyTournamentCode(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-90"><Copy size={12}/></button>
+                          <button type="button" aria-label="Compartilhar acesso ao torneio" onClick={() => shareTournamentAccess(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-90"><Share2 size={12}/></button>
+                        </div>
+                      )}
                       {activeTournament.isFinished && (
                         <div className="flex h-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1">
                           <CheckCircle2 size={12} className="text-secondary" />
@@ -7535,6 +7708,39 @@ O play na palma da mão! 🏆`;
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        {/* Follow tournament by code */}
+        <AnimatePresence>
+          {showFollowTournament && (
+            <motion.div className="follow-tournament-backdrop fixed inset-0 z-[600] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowFollowTournament(false)}>
+              <motion.div role="dialog" aria-modal="true" aria-labelledby="follow-tournament-title" onClick={event => event.stopPropagation()} initial={{ opacity: 0, y: 24, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }} className="follow-tournament-dialog w-full max-w-sm rounded-[2rem] border p-5 shadow-2xl">
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="mb-1 text-[8px] font-black uppercase tracking-[.2em] text-secondary">Placar em tempo real</p>
+                    <h2 id="follow-tournament-title" className="font-display text-xl font-black uppercase italic text-white">Acompanhar torneio</h2>
+                    <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-400">Digite o código compartilhado pelo organizador.</p>
+                  </div>
+                  <button type="button" aria-label="Fechar" onClick={() => setShowFollowTournament(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white"><X size={17}/></button>
+                </div>
+                <input
+                  autoFocus
+                  inputMode="text"
+                  maxLength={5}
+                  value={followTournamentCode}
+                  onChange={event => { setFollowTournamentCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')); setFollowTournamentError(null); }}
+                  onKeyDown={event => { if (event.key === 'Enter') followTournamentByCode(); }}
+                  placeholder="ABCDE"
+                  className="follow-tournament-input w-full rounded-2xl border px-5 py-4 text-center font-mono text-2xl font-black uppercase tracking-[.35em] outline-none"
+                />
+                {followTournamentError && <div className="mt-3 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-center text-[9px] font-black leading-relaxed text-red-300">{followTournamentError}</div>}
+                <button type="button" disabled={isFollowingTournament} onClick={followTournamentByCode} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50">
+                  {isFollowingTournament ? <RefreshCw size={15} className="animate-spin"/> : <Eye size={15}/>} Acessar placar
+                </button>
+                <p className="mt-3 text-center text-[8px] font-semibold leading-relaxed text-slate-500">O acompanhamento permite visualizar rodadas, quadras e placares, sem editar resultados.</p>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
 

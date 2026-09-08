@@ -93,6 +93,7 @@ export type TournamentState = {
   createdAt: number;
   uid?: string;
   rankingId?: string;
+  accessCode?: string;
   championsPhotoUrl?: string;
   finalResults?: {
     playerId: string;

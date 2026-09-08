@@ -693,6 +693,13 @@
   border-color: rgba(91, 154, 190, .3) !important;
 }
 
+.beach-screen--tournament .tournament-ranking-medal {
+  color: #fff !important;
+  background: linear-gradient(145deg, #123f60, #08263e) !important;
+  border: 1px solid rgba(65, 199, 250, .72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+}
+
 .beach-screen--tournament .tournament-ranking-row:nth-child(1) .tournament-ranking-medal {
   color: #eef3f8 !important;
   border: 2px solid #cbd5e1;
@@ -764,6 +771,74 @@
 .authenticated-theme .neon-action-button p,
 .authenticated-theme .neon-action-button svg {
   color: #071725 !important;
+}
+
+.authenticated-theme .league-new-tournament > div:first-child {
+  color: #071725 !important;
+  background: rgba(4, 27, 43, .12) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.beach-screen--home .follow-tournament-button {
+  color: #f8fafc;
+  background: linear-gradient(135deg, rgba(11, 49, 74, .92), rgba(5, 28, 47, .96));
+  border-color: rgba(66, 184, 231, .48);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+
+.beach-screen--home .follow-tournament-button:hover {
+  border-color: rgba(226, 255, 0, .62);
+  background: linear-gradient(135deg, rgba(14, 59, 86, .96), rgba(5, 31, 50, .98));
+}
+
+.tournament-access-code {
+  border-color: rgba(226, 255, 0, .34) !important;
+  background: rgba(1, 17, 30, .54) !important;
+}
+
+.follow-tournament-backdrop {
+  background: rgba(0, 7, 16, .84);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+
+.follow-tournament-dialog {
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(226, 255, 0, .08), transparent 12rem),
+    linear-gradient(150deg, #0b304c, #031421 76%);
+  border-color: rgba(46, 195, 245, .65);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .65), inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.follow-tournament-input {
+  color: #f8fafc !important;
+  background: rgba(2, 18, 31, .86) !important;
+  border-color: rgba(83, 176, 216, .45) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+.follow-tournament-input:focus {
+  border-color: #e2ff00 !important;
+  box-shadow: 0 0 0 3px rgba(226, 255, 0, .1) !important;
+}
+
+.spectator-match-card {
+  color: #f8fafc;
+  background: linear-gradient(145deg, rgba(18, 57, 84, .96), rgba(5, 27, 45, .99));
+  border-color: rgba(76, 164, 205, .42);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+
+.spectator-match-card--completed {
+  border-color: rgba(226, 255, 0, .42);
+  background: linear-gradient(145deg, rgba(21, 67, 80, .97), rgba(5, 31, 48, .99));
+}
+
+.spectator-score {
+  background: rgba(1, 17, 29, .72);
+  border: 1px solid rgba(74, 166, 207, .28);
 }
 
 /* Minhas Ligas acompanha o mesmo tema noturno das telas de torneio. */
