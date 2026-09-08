@@ -5909,7 +5909,7 @@ O play na palma da mão! 🏆`;
                 </div>
 
                 {/* Tournament Hero Card */}
-                <div className="tournament-hero-card relative mb-4 overflow-hidden rounded-[1.75rem] border border-primary/70 bg-gradient-to-br from-[#07365f] via-primary to-[#075486] px-5 py-5 shadow-xl shadow-primary/15">
+                <div className="tournament-hero-card relative mb-4 overflow-hidden rounded-[1.75rem] border border-primary/70 bg-gradient-to-br from-[#07365f] via-primary to-[#075486] px-4 py-3 shadow-xl shadow-primary/15">
                   <div className="absolute inset-y-0 left-0 w-1.5 bg-secondary" />
                   {/* Illustrations (Simplified) */}
                   <div className="absolute inset-0 pointer-events-none opacity-[0.12] overflow-hidden rounded-[1.75rem] text-white">
@@ -5925,7 +5925,7 @@ O play na palma da mão! 🏆`;
                   <div className="flex justify-between items-start relative z-10 w-full gap-4">
                     <div className="flex min-w-0 items-center gap-2 pl-1">
                        <Sparkles size={13} className="text-secondary" />
-                       <span className="max-w-[150px] truncate rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-white">
+                       <span className="max-w-[150px] truncate rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white">
                          {(() => {
                             const formats: { [key: string]: string } = {
                               'REI_DA_QUADRA': 'REI DA QUADRA',
@@ -5943,23 +5943,23 @@ O play na palma da mão! 🏆`;
                             return formats[activeTournament.format] || 'TORNEIO';
                          })()}
                        </span>
-                       <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/45 text-white transition-all hover:bg-white/10 active:scale-90">
+                       <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/45 text-white transition-all hover:bg-white/10 active:scale-90">
                          <Info size={15} strokeWidth={2.5} />
                        </button>
                     </div>
 
                     <button 
                       onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-400 bg-red-500/10 px-3 py-2 text-red-300 transition-all hover:bg-red-500 hover:text-white"
+                      className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-400 bg-red-500/10 px-3 py-1.5 text-red-300 transition-all hover:bg-red-500 hover:text-white"
                     >
                       <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
                       <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
                     </button>
                   </div>
 
-                  <div className="relative z-10 flex flex-1 flex-col justify-center py-5 pl-1">
-                    <div className="mb-2 flex items-start gap-3">
-                      <h1 className="tournament-name-text min-w-0 flex-1 break-words font-display text-[clamp(1.6rem,7vw,2.35rem)] font-black italic uppercase tracking-tighter text-white">
+                  <div className="relative z-10 flex flex-1 items-center gap-2 py-3 pl-1">
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                      <h1 className="tournament-name-text min-w-0 flex-1 break-words font-display text-[clamp(1.35rem,5.8vw,2rem)] font-black italic uppercase tracking-tighter text-white">
                         {activeTournament.name}
                       </h1>
                       {activeTournament.isFinished && (
@@ -5970,14 +5970,14 @@ O play na palma da mão! 🏆`;
                       )}
                     </div>
                     {activeTournament.accessCode && (
-                      <div className="tournament-access-code flex w-fit max-w-full items-center gap-2 rounded-2xl border border-white/20 bg-white/10 py-2 pl-3 pr-1.5">
+                      <div className="tournament-access-code flex shrink-0 items-center gap-1.5 rounded-2xl border border-white/20 bg-white/10 py-1.5 pl-2.5 pr-1">
                         <div className="min-w-0">
-                          <span className="block text-[7px] font-black uppercase tracking-[0.16em] text-white/65">Compartilhe o torneio</span>
-                          <span className="block font-mono text-base font-black leading-tight tracking-[0.18em] text-secondary">{activeTournament.accessCode}</span>
+                          <span className="block whitespace-nowrap text-[6px] font-black uppercase tracking-[0.1em] text-white/65">Compartilhe o torneio</span>
+                          <span className="block font-mono text-sm font-black leading-tight tracking-[0.15em] text-secondary">{activeTournament.accessCode}</span>
                         </div>
-                        <div className="flex shrink-0 items-center gap-0.5 border-l border-white/15 pl-1.5">
-                          <button type="button" aria-label="Copiar código do torneio" onClick={() => copyTournamentCode(activeTournament)} className="flex h-8 w-8 items-center justify-center rounded-xl text-white hover:bg-white/10 active:scale-90"><Copy size={14}/></button>
-                          <button type="button" aria-label="Compartilhar acesso ao torneio" onClick={() => shareTournamentAccess(activeTournament)} className="flex h-8 w-8 items-center justify-center rounded-xl text-white hover:bg-white/10 active:scale-90"><Share2 size={14}/></button>
+                        <div className="flex shrink-0 items-center border-l border-white/15 pl-1">
+                          <button type="button" aria-label="Copiar código do torneio" onClick={() => copyTournamentCode(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white hover:bg-white/10 active:scale-90"><Copy size={12}/></button>
+                          <button type="button" aria-label="Compartilhar acesso ao torneio" onClick={() => shareTournamentAccess(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white hover:bg-white/10 active:scale-90"><Share2 size={12}/></button>
                         </div>
                       </div>
                     )}
