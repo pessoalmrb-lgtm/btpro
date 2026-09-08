@@ -5727,7 +5727,7 @@ O play na palma da mão! 🏆`;
                           }
                         }}
                         className={cn(
-                          "relative min-w-fit rounded-2xl border px-5 py-3.5 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 bg-white",
+                          "tournament-quick-switch relative min-w-fit rounded-2xl border px-5 py-3.5 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 bg-white",
                           t.id === activeTournament.id 
                             ? "border-primary text-primary shadow-md shadow-primary/10 after:absolute after:bottom-1.5 after:left-1/3 after:right-1/3 after:h-0.5 after:rounded-full after:bg-secondary"
                             : "border-surface-container text-on-surface-variant hover:border-primary/20"
@@ -5741,7 +5741,7 @@ O play na palma da mão! 🏆`;
                 </div>
 
                 {/* Tournament Hero Card */}
-                <div className="relative mb-4 overflow-hidden rounded-[1.75rem] border border-primary/70 bg-gradient-to-br from-[#07365f] via-primary to-[#075486] px-5 py-5 shadow-xl shadow-primary/15">
+                <div className="tournament-hero-card relative mb-4 overflow-hidden rounded-[1.75rem] border border-primary/70 bg-gradient-to-br from-[#07365f] via-primary to-[#075486] px-5 py-5 shadow-xl shadow-primary/15">
                   <div className="absolute inset-y-0 left-0 w-1.5 bg-secondary" />
                   {/* Illustrations (Simplified) */}
                   <div className="absolute inset-0 pointer-events-none opacity-[0.12] overflow-hidden rounded-[1.75rem] text-white">
@@ -5874,7 +5874,7 @@ O play na palma da mão! 🏆`;
                 </AnimatePresence>
 
                 {/* Navigation Tabs - New Style */}
-                <div className="mb-2 flex overflow-hidden rounded-[1.5rem] border border-surface-container bg-white shadow-sm">
+                <div className="tournament-tabs mb-2 flex overflow-hidden rounded-[1.5rem] border border-surface-container bg-white shadow-sm">
                   <button 
                     onClick={() => navigateTo('TOURNAMENT', { tab: 'MATCHES' })}
                     className={cn(
@@ -6018,7 +6018,7 @@ O play na palma da mão! 🏆`;
                       </div>
                     )}
                     {Object.entries(matchesByCourt).sort(([a], [b]) => Number(a) - Number(b)).map(([court, matches]) => (
-                    <section key={court}>
+                    <section key={court} className="tournament-court">
                       <div className="mb-3 flex items-center gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/5 text-primary"><Grid size={16} /></div>
                         <h2 className="font-display text-xs font-black uppercase tracking-widest text-on-surface">
@@ -6040,7 +6040,7 @@ O play na palma da mão! 🏆`;
                                 <div 
                                   key={match.id} 
                                   className={cn(
-                                    "group relative overflow-hidden rounded-[1.75rem] border p-5 shadow-sm transition-all",
+                                    "tournament-match-card group relative overflow-hidden rounded-[1.75rem] border p-5 shadow-sm transition-all",
                                     match.isCompleted ? "bg-[#e8fbf4] border-[#d1f5e8]" : "bg-white border-surface-container"
                                   )}
                                 >
@@ -6049,27 +6049,27 @@ O play na palma da mão! 🏆`;
                                     <div className="flex items-start justify-between gap-2 mb-4">
                                        <div className="flex-1 min-w-0 text-left">
                                          <span className="text-on-surface-variant/30 text-[7px] font-black uppercase tracking-widest block mb-0.5">Dupla A</span>
-                                         <div className="text-[11px] font-black text-primary uppercase leading-tight font-display break-words">
+                                         <div className="tournament-athlete-name text-[11px] font-black text-white uppercase leading-tight font-display break-words">
                                            {p1.name}{p1p?.name ? ` / ${p1p.name}` : ''}
                                          </div>
                                        </div>
                                        
                                        <div className="shrink-0 flex items-center justify-center pt-2">
-                                         <div className="w-8 h-8 rounded-full bg-primary/5 flex items-center justify-center border border-primary/10">
+                                         <div className="tournament-vs w-8 h-8 rounded-full bg-primary/5 flex items-center justify-center border border-primary/10">
                                            <span className="text-primary font-black italic text-[8px]">VS</span>
                                          </div>
                                        </div>
 
                                        <div className="flex-1 min-w-0 text-right">
                                          <span className="text-on-surface-variant/30 text-[7px] font-black uppercase tracking-widest block mb-0.5">Dupla B</span>
-                                         <div className="text-[11px] font-black text-primary uppercase leading-tight font-display break-words">
+                                         <div className="tournament-athlete-name text-[11px] font-black text-white uppercase leading-tight font-display break-words">
                                            {p2.name}{p2p?.name ? ` / ${p2p.name}` : ''}
                                          </div>
                                        </div>
                                     </div>
 
                                     {/* Score Display (Pill) - Compact */}
-                                  <div className="mb-4 flex items-center justify-around gap-2 rounded-2xl border border-surface-container bg-surface-container-low/30 px-4 py-2 shadow-inner">
+                                  <div className="tournament-score-panel mb-4 flex items-center justify-around gap-2 rounded-2xl border border-surface-container bg-surface-container-low/30 px-4 py-2 shadow-inner">
                                     {/* Team 1 Area */}
                                     <div className="flex flex-1 items-center justify-center relative min-h-[3.5rem]">
                                       <div className="absolute left-0 flex flex-col items-center justify-center gap-1.5 h-full">
@@ -6077,7 +6077,7 @@ O play na palma da mão! 🏆`;
                                           onClick={() => updateMatchScore(match.id, 1, 1)} 
                                           disabled={match.isCompleted || !!activeTournament.rankingId && !(() => { const r = rankings.find(rk => rk.id === activeTournament.rankingId); return r && (r.ownerId === user?.uid || r.adminIds?.includes(user?.uid || '')); })()}
                                           className={cn(
-                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            "tournament-score-plus w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
                                             match.isCompleted 
                                               ? "bg-slate-100 text-slate-300 opacity-40 cursor-not-allowed shadow-none" 
                                               : "bg-primary text-white hover:bg-primary-dim shadow-primary/20"
@@ -6089,7 +6089,7 @@ O play na palma da mão! 🏆`;
                                           onClick={() => updateMatchScore(match.id, 1, -1)} 
                                           disabled={match.isCompleted}
                                           className={cn(
-                                            "w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
+                                            "tournament-score-plus w-6 h-6 rounded-md flex items-center justify-center transition-all shadow-sm active:scale-95",
                                             match.isCompleted
                                               ? "bg-slate-50 text-slate-200 opacity-40 cursor-not-allowed shadow-none"
                                               : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
@@ -6143,7 +6143,7 @@ O play na palma da mão! 🏆`;
                                   <button 
                                     onClick={() => match.isCompleted ? editMatch(match.id) : confirmSet(match.id)}
                                     className={cn(
-                                      "w-full rounded-2xl py-3.5 text-[8px] font-black uppercase tracking-widest shadow-md transition-all active:scale-[0.98]",
+                                      "tournament-confirm w-full rounded-2xl py-3.5 text-[8px] font-black uppercase tracking-widest shadow-md transition-all active:scale-[0.98]",
                                       match.isCompleted 
                                         ? "bg-slate-200 text-slate-500 hover:bg-slate-300" 
                                         : "bg-primary text-on-primary hover:bg-primary-dim shadow-primary/10"
@@ -6278,7 +6278,7 @@ O play na palma da mão! 🏆`;
                       return (
                         <>
                           <section>
-                            <div className="relative bg-secondary-container rounded-[2rem] overflow-hidden p-8 flex items-center justify-between shadow-xl shadow-secondary/10 border border-secondary/20 min-h-[14rem]">
+                            <div className="tournament-ranking-leader relative bg-secondary-container rounded-[2rem] overflow-hidden p-8 flex items-center justify-between shadow-xl shadow-secondary/10 border border-secondary/20 min-h-[14rem]">
                               <div className="relative z-10 flex-1">
                                 <div className="inline-flex items-center gap-2 bg-on-secondary-container/10 px-3 py-1 rounded-full mb-4">
                                   <TrophyIcon size={14} className="text-primary" />
@@ -6304,9 +6304,9 @@ O play na palma da mão! 🏆`;
                             </div>
                           </section>
 
-                          <div className="bg-surface-container-low rounded-[2rem] p-4 space-y-3">
+                          <div className="tournament-ranking-list bg-surface-container-low rounded-[2rem] p-4 space-y-3">
                             {rankings.slice(1).map((p, idx) => (
-                              <div key={`tournament-rank-${p.id || idx}`} className="bg-white p-4 rounded-xl flex items-center gap-4 border border-surface-container shadow-sm">
+                              <div key={`tournament-rank-${p.id || idx}`} className="tournament-ranking-row bg-white p-4 rounded-xl flex items-center gap-4 border border-surface-container shadow-sm">
                                 <div className="w-10 h-10 shrink-0 flex items-center justify-center bg-surface-container-highest text-on-surface font-black rounded-full text-xs">
                                   {idx + 2}
                                 </div>
