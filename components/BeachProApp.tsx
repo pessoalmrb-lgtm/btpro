@@ -264,6 +264,7 @@ export default function BeachProApp() {
   const [pendingRequests, setPendingRequests] = useState<Record<string, any[]>>({});
   const [requestSent, setRequestSent] = useState<string | null>(null);
   const [showPendingPopup, setShowPendingPopup] = useState(false);
+  const [showFindLeagueModal, setShowFindLeagueModal] = useState(false);
   const [leagueSearchTerm, setLeagueSearchTerm] = useState('');
   const [leagueSearchResults, setLeagueSearchResults] = useState<any[]>([]);
   const [isSearchingLeague, setIsSearchingLeague] = useState(false);
@@ -3048,7 +3049,8 @@ export default function BeachProApp() {
                         setLeagueSearchTerm('');
                         setLeagueSearchResults([]);
                         setLeagueSearchError(null);
-                        navigateTo('FIND_LEAGUES');
+                        setRequestSent(null);
+                        setShowFindLeagueModal(true);
                       }}
                       className="league-secondary-action w-full py-5 bg-white border-2 border-primary text-primary rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-primary/5 transition-all"
                     >
@@ -5778,7 +5780,7 @@ O play na palma da mão! 🏆`;
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">Ao Vivo</p>
-                    <h1 className="text-lg font-black text-on-surface uppercase italic truncate pr-1">{activeTournament.name}</h1>
+                    <h1 className="tournament-name-text text-lg font-black text-on-surface uppercase italic truncate">{activeTournament.name}</h1>
                   </div>
                   <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
@@ -5956,17 +5958,10 @@ O play na palma da mão! 🏆`;
                   </div>
 
                   <div className="relative z-10 flex flex-1 flex-col justify-center py-5 pl-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h1 className="max-w-full truncate font-display text-[clamp(1.6rem,7vw,2.35rem)] font-black italic uppercase leading-tight tracking-tighter text-white">
+                    <div className="mb-2 flex items-start gap-3">
+                      <h1 className="tournament-name-text min-w-0 flex-1 break-words font-display text-[clamp(1.6rem,7vw,2.35rem)] font-black italic uppercase tracking-tighter text-white">
                         {activeTournament.name}
                       </h1>
-                      {activeTournament.accessCode && (
-                        <div className="tournament-access-code flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-white/10 py-1 pl-2.5 pr-1">
-                          <span className="font-mono text-[10px] font-black tracking-[0.14em] text-secondary">{activeTournament.accessCode}</span>
-                          <button type="button" aria-label="Copiar código do torneio" onClick={() => copyTournamentCode(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-90"><Copy size={12}/></button>
-                          <button type="button" aria-label="Compartilhar acesso ao torneio" onClick={() => shareTournamentAccess(activeTournament)} className="flex h-7 w-7 items-center justify-center rounded-full text-white hover:bg-white/10 active:scale-90"><Share2 size={12}/></button>
-                        </div>
-                      )}
                       {activeTournament.isFinished && (
                         <div className="flex h-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1">
                           <CheckCircle2 size={12} className="text-secondary" />
@@ -5974,6 +5969,18 @@ O play na palma da mão! 🏆`;
                         </div>
                       )}
                     </div>
+                    {activeTournament.accessCode && (
+                      <div className="tournament-access-code flex w-fit max-w-full items-center gap-2 rounded-2xl border border-white/20 bg-white/10 py-2 pl-3 pr-1.5">
+                        <div className="min-w-0">
+                          <span className="block text-[7px] font-black uppercase tracking-[0.16em] text-white/65">Compartilhe o torneio</span>
+                          <span className="block font-mono text-base font-black leading-tight tracking-[0.18em] text-secondary">{activeTournament.accessCode}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5 border-l border-white/15 pl-1.5">
+                          <button type="button" aria-label="Copiar código do torneio" onClick={() => copyTournamentCode(activeTournament)} className="flex h-8 w-8 items-center justify-center rounded-xl text-white hover:bg-white/10 active:scale-90"><Copy size={14}/></button>
+                          <button type="button" aria-label="Compartilhar acesso ao torneio" onClick={() => shareTournamentAccess(activeTournament)} className="flex h-8 w-8 items-center justify-center rounded-xl text-white hover:bg-white/10 active:scale-90"><Share2 size={14}/></button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 relative z-10 pl-1">
@@ -6695,7 +6702,7 @@ O play na palma da mão! 🏆`;
                   <ChevronLeft size={20} />
                 </button>
                 <div className="min-w-0 flex-1 text-right">
-                  <h2 className="text-[10px] font-black text-on-surface-variant/70 uppercase tracking-widest truncate pr-1">{activeTournament.name}</h2>
+                  <h2 className="tournament-name-text text-[10px] font-black text-on-surface-variant/70 uppercase tracking-widest truncate">{activeTournament.name}</h2>
                   <h1 className="text-2xl font-extrabold text-on-surface tracking-tighter font-display uppercase italic">Editar Resultados</h1>
                 </div>
               </div>
@@ -7228,7 +7235,7 @@ O play na palma da mão! 🏆`;
                               >
                                 <span className="text-xl shrink-0">{pos >= 0 && pos < 3 ? medals[pos] : `#${pos + 1}`}</span>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-black text-on-surface uppercase italic truncate pr-1">{t.name}</p>
+                                  <p className="tournament-name-text text-xs font-black text-on-surface uppercase italic truncate">{t.name}</p>
                                   <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest">
                                     {me ? `${me.gamesWon} pts · ${me.wins}V` : ''}
                                   </p>
@@ -7573,7 +7580,7 @@ O play na palma da mão! 🏆`;
                           <div className="flex justify-between items-start mb-3">
                             <div className="flex-1 min-w-0">
                               <h3 className={cn(
-                                "text-lg font-display font-black uppercase italic leading-none truncate pr-1 mb-1.5",
+                                "tournament-name-text text-lg font-display font-black uppercase italic truncate mb-1.5",
                                 t.isFinished ? "text-slate-400" : "text-primary"
                               )}>
                                 {t.name}
@@ -7739,6 +7746,118 @@ O play na palma da mão! 🏆`;
                   {isFollowingTournament ? <RefreshCw size={15} className="animate-spin"/> : <Eye size={15}/>} Acessar placar
                 </button>
                 <p className="mt-3 text-center text-[8px] font-semibold leading-relaxed text-slate-500">O acompanhamento permite visualizar rodadas, quadras e placares, sem editar resultados.</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Find a league by code without leaving the league list */}
+        <AnimatePresence>
+          {showFindLeagueModal && (
+            <motion.div className="follow-tournament-backdrop fixed inset-0 z-[600] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowFindLeagueModal(false)}>
+              <motion.div role="dialog" aria-modal="true" aria-labelledby="find-league-title" onClick={event => event.stopPropagation()} initial={{ opacity: 0, y: 24, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }} className="follow-tournament-dialog w-full max-w-sm rounded-[2rem] border p-5 shadow-2xl">
+                <div className="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="mb-1 text-[8px] font-black uppercase tracking-[.2em] text-secondary">Entrar em uma comunidade</p>
+                    <h2 id="find-league-title" className="font-display text-xl font-black uppercase italic text-white">Encontrar liga</h2>
+                    <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-400">Digite o código de 6 caracteres fornecido pelo administrador.</p>
+                  </div>
+                  <button type="button" aria-label="Fechar" onClick={() => setShowFindLeagueModal(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white"><X size={17}/></button>
+                </div>
+
+                <input
+                  autoFocus
+                  inputMode="text"
+                  maxLength={6}
+                  value={leagueSearchTerm}
+                  onChange={event => {
+                    setLeagueSearchTerm(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                    setLeagueSearchResults([]);
+                    setLeagueSearchError(null);
+                    setRequestSent(null);
+                  }}
+                  onKeyDown={event => { if (event.key === 'Enter') document.getElementById('btn-buscar-liga-modal')?.click(); }}
+                  placeholder="BT4X9K"
+                  className="follow-tournament-input w-full rounded-2xl border px-5 py-4 text-center font-mono text-2xl font-black uppercase tracking-[.28em] outline-none"
+                />
+                {leagueSearchError && <div className="mt-3 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-center text-[9px] font-black leading-relaxed text-red-300">{leagueSearchError}</div>}
+
+                <button
+                  id="btn-buscar-liga-modal"
+                  type="button"
+                  disabled={leagueSearchTerm.length !== 6 || isSearchingLeague}
+                  onClick={async () => {
+                    const term = leagueSearchTerm.trim().toUpperCase();
+                    if (term.length !== 6) { setLeagueSearchError('O código deve ter exatamente 6 caracteres.'); return; }
+                    setIsSearchingLeague(true);
+                    setLeagueSearchResults([]);
+                    setLeagueSearchError(null);
+                    setRequestSent(null);
+                    try {
+                      const qCode = query(collection(db, 'rankings'), where('leagueCode', '==', term));
+                      const snapCode = await getDocs(qCode);
+                      if (snapCode.empty) setLeagueSearchError('Nenhuma liga encontrada com este código.');
+                      else setLeagueSearchResults(snapCode.docs.map(d => ({ ...d.data(), id: d.id })));
+                    } catch {
+                      setLeagueSearchError('Erro ao buscar. Tente novamente.');
+                    } finally {
+                      setIsSearchingLeague(false);
+                    }
+                  }}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                >
+                  {isSearchingLeague ? <RefreshCw size={15} className="animate-spin"/> : <Search size={15}/>} Buscar liga
+                </button>
+
+                {leagueSearchResults.map((league: any) => {
+                  const alreadyMember = rankings.some(r => r.id === league.id);
+                  const isOwner = league.ownerId === user?.uid;
+                  const atLimit = !isPremium && rankings.filter(r => r.ownerId !== user?.uid).length >= 2;
+                  return (
+                    <motion.div key={league.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="league-search-result mt-4 rounded-2xl border p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5 text-secondary"><Award size={21}/></div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate pr-1 text-sm font-black uppercase italic text-white">{league.name}</h3>
+                          <p className="mt-0.5 text-[8px] font-black uppercase tracking-widest text-slate-400">{league.leagueAthletes?.length || 0} atletas{league.arenaName ? ` • ${league.arenaName}` : ''}</p>
+                        </div>
+                      </div>
+                      {requestSent ? (
+                        <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-3 text-center text-[9px] font-black uppercase tracking-wider text-emerald-300">✓ Solicitação enviada</div>
+                      ) : alreadyMember || isOwner ? (
+                        <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-3 py-3 text-center text-[9px] font-black uppercase tracking-wider text-cyan-300">Você já faz parte desta liga</div>
+                      ) : atLimit ? (
+                        <button type="button" onClick={() => { setShowFindLeagueModal(false); setUpgradeReason('RANKING_LIMIT'); setShowUpgradeModal(true); }} className="mt-3 w-full rounded-xl bg-secondary py-3 text-[9px] font-black uppercase tracking-wider text-slate-950"><Lock size={12} className="mr-1 inline"/> Limite de ligas — ver Premium</button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={joiningLeagueId === league.id}
+                          onClick={async () => {
+                            if (!user || !userProfile) return;
+                            setJoiningLeagueId(league.id);
+                            try {
+                              await setDoc(doc(db, 'rankings', league.id, 'pendingRequests', user.uid), {
+                                uid: user.uid,
+                                name: userProfile.displayName || user.displayName || user.email?.split('@')[0] || 'Atleta',
+                                email: user.email || '', userTag: userProfile.userTag || '',
+                                photo: userProfile.photoURL || user.photoURL || '', requestedAt: Date.now(), status: 'pending',
+                              });
+                              setRequestSent(league.name);
+                            } catch (err) {
+                              handleFirestoreError(err, OperationType.WRITE, `rankings/${league.id}/pendingRequests`);
+                            } finally {
+                              setJoiningLeagueId(null);
+                            }
+                          }}
+                          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-[9px] font-black uppercase tracking-wider text-slate-950 disabled:opacity-50"
+                        >
+                          {joiningLeagueId === league.id ? <RefreshCw size={13} className="animate-spin"/> : <Plus size={13}/>} Solicitar entrada
+                        </button>
+                      )}
+                    </motion.div>
+                  );
+                })}
+                <p className="mt-3 text-center text-[8px] font-semibold leading-relaxed text-slate-500">O administrador da liga precisará aprovar sua solicitação.</p>
               </motion.div>
             </motion.div>
           )}

@@ -795,6 +795,16 @@
 .tournament-access-code {
   border-color: rgba(226, 255, 0, .34) !important;
   background: rgba(1, 17, 30, .54) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 8px 18px rgba(0, 0, 0, .16);
+}
+
+/* A fonte display é inclinada e ultrapassa levemente a caixa do glifo.
+   Este respiro evita cortar o último caractere em nomes curtos e longos. */
+.tournament-name-text {
+  line-height: 1.08 !important;
+  padding-right: .16em;
+  padding-bottom: .08em;
+  overflow: visible;
 }
 
 .follow-tournament-backdrop {
@@ -822,6 +832,12 @@
 .follow-tournament-input:focus {
   border-color: #e2ff00 !important;
   box-shadow: 0 0 0 3px rgba(226, 255, 0, .1) !important;
+}
+
+.league-search-result {
+  background: linear-gradient(145deg, rgba(17, 55, 81, .96), rgba(4, 25, 42, .99));
+  border-color: rgba(70, 171, 215, .36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
 }
 
 .spectator-match-card {
