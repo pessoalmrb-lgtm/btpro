@@ -5671,16 +5671,16 @@ O play na palma da mão! 🏆`;
                                 m.isCompleted ? "border-emerald-100 bg-emerald-50/30" : "border-surface-container"
                               )}>
                                 <div className="flex-1 min-w-0 text-right">
-                                  <p className={cn("text-[10px] font-black uppercase truncate", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-600")}>{p1Name}</p>
+                                  <p className="text-[10px] font-black uppercase truncate text-white">{p1Name}</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 px-3 py-1.5 rounded-xl">
-                                  <span className="mr-1 rounded-md bg-primary px-1.5 py-0.5 text-[8px] font-black text-white">Q{m.table}</span>
+                                  <span className="mr-1 rounded-md bg-primary px-1.5 py-0.5 text-[8px] font-black text-white">QUADRA {m.table}</span>
                                   <span className={cn("text-sm font-black font-display", m.isCompleted && s1 > s2 ? "text-primary" : "text-slate-400")}>{s1}</span>
                                   <span className="text-[9px] text-slate-300 font-black">×</span>
                                   <span className={cn("text-sm font-black font-display", m.isCompleted && s2 > s1 ? "text-primary" : "text-slate-400")}>{s2}</span>
                                 </div>
                                 <div className="flex-1 min-w-0 text-left">
-                                  <p className={cn("text-[10px] font-black uppercase truncate", m.isCompleted && s2 > s1 ? "text-primary" : "text-slate-600")}>{p2Name}</p>
+                                  <p className="text-[10px] font-black uppercase truncate text-white">{p2Name}</p>
                                 </div>
                                 {m.isCompleted && (
                                   <span className="shrink-0 text-[8px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-md uppercase">✓</span>
@@ -5842,15 +5842,15 @@ O play na palma da mão! 🏆`;
 
                 <AnimatePresence>
                   {showTournamentInfo && (
-                    <motion.div className="fixed inset-0 z-[500] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentInfo(false)}>
-                      <motion.div role="dialog" aria-modal="true" aria-labelledby="tournament-info-title" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }} className="w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-                        <div className="bg-primary px-5 pb-5 pt-4 text-white">
+                    <motion.div className="tournament-info-backdrop fixed inset-0 z-[500] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentInfo(false)}>
+                      <motion.div role="dialog" aria-modal="true" aria-labelledby="tournament-info-title" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }} className="tournament-info-dialog w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+                        <div className="tournament-info-header bg-primary px-5 pb-5 pt-4 text-white">
                           <div className="flex items-start justify-between gap-4">
                             <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary">Informações do torneio</p><h2 id="tournament-info-title" className="mt-1 font-display text-2xl font-black italic uppercase leading-tight">{activeTournament.name}</h2></div>
                             <button type="button" aria-label="Fechar informações" onClick={() => setShowTournamentInfo(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 active:scale-90"><X size={18}/></button>
                           </div>
                         </div>
-                        <div className="space-y-4 p-5">
+                        <div className="tournament-info-body space-y-4 p-5">
                           {(() => {
                             const formatLabels: Record<string, string> = { REI_DA_QUADRA:'Rei da Quadra', SUPER_8_INDIVIDUAL:'Super 8 individual', SUPER_6_INDIVIDUAL:'Super 6 individual', SUPER_10_INDIVIDUAL:'Super 10 individual', SUPER_12_INDIVIDUAL:'Super 12 individual', SUPER_4_FIXED:'Super 4 duplas', SUPER_6_FIXED:'Super 6 duplas', SUPER_8_FIXED:'Super 8 duplas', SUPER_10_FIXED:'Super 10 duplas', SUPER_12_FIXED:'Super 12 duplas', GROUPS_MATA_MATA:'Grupos + mata-mata', GROUPS:'Fase de grupos', MATA_MATA:'Mata-mata', ROUND_ROBIN:'Todos contra todos', INDIVIDUAL:'Individual' };
                             const matchLabels: Record<string, string> = { '6_GAMES_TIEBREAK':'6 games; em 6 × 6, tie-break', '8_GAMES_MAX':'Até 8 games', '6_GAMES_MAX':'Até 6 games', '5_GAMES_MAX':'Até 5 games', 'SUM_9_GAMES':'Soma de 9 games', 'SUM_7_GAMES':'Soma de 7 games', 'SUM_5_GAMES':'Soma de 5 games' };
@@ -5861,12 +5861,12 @@ O play na palma da mão! 🏆`;
                               ['Partidas', matchLabels[activeTournament.matchFormat] || activeTournament.matchFormat],
                               ['Critérios de desempate', activeTournament.rankingCriteria.map(c => criterionLabels[c] || c).join(' → ') || 'Não informado'],
                               ['Estrutura', `${activeTournament.players.length} atletas · ${regularRounds} rodadas`],
-                              ['Quadras', activeTournament.tables.length ? activeTournament.tables.map(c => `Q${c}`).join(', ') : 'Não informadas'],
+                              ['Quadras', activeTournament.tables.length ? activeTournament.tables.map(c => `QUADRA ${c}`).join(', ') : 'Não informadas'],
                               ['Modalidade', activeTournament.rankingId ? 'Torneio ranqueado' : 'Torneio sem ranking'],
                             ];
-                            return <div className="grid grid-cols-1 gap-2.5">{infoItems.map(([label, value]) => <div key={label} className="rounded-2xl border border-surface-container bg-surface-container-low/40 px-4 py-3"><p className="text-[8px] font-black uppercase tracking-widest text-on-surface-variant/45">{label}</p><p className="mt-1 text-[11px] font-black text-primary">{value}</p></div>)}</div>;
+                            return <div className="grid grid-cols-1 gap-2.5">{infoItems.map(([label, value]) => <div key={label} className="tournament-info-item rounded-2xl border border-surface-container bg-surface-container-low/40 px-4 py-3"><p className="tournament-info-label text-[8px] font-black uppercase tracking-widest text-on-surface-variant/45">{label}</p><p className="tournament-info-value mt-1 text-[11px] font-black text-primary">{value}</p></div>)}</div>;
                           })()}
-                          <button type="button" onClick={() => setShowTournamentInfo(false)} className="w-full rounded-2xl bg-primary py-3.5 text-[10px] font-black uppercase tracking-widest text-white active:scale-[0.98]">Entendi</button>
+                          <button type="button" onClick={() => setShowTournamentInfo(false)} className="tournament-info-confirm w-full rounded-2xl bg-primary py-3.5 text-[10px] font-black uppercase tracking-widest text-white active:scale-[0.98]">Entendi</button>
                         </div>
                       </motion.div>
                     </motion.div>
@@ -6278,8 +6278,10 @@ O play na palma da mão! 🏆`;
                       return (
                         <>
                           <section>
-                            <div className="tournament-ranking-leader relative bg-secondary-container rounded-[2rem] overflow-hidden p-8 flex items-center justify-between shadow-xl shadow-secondary/10 border border-secondary/20 min-h-[14rem]">
-                              <div className="relative z-10 flex-1">
+                            <h2 className="tournament-ranking-title mb-4 font-display text-2xl font-black uppercase tracking-tight text-primary">Classificação</h2>
+                            <div className="tournament-ranking-leader relative bg-secondary-container rounded-[2rem] overflow-hidden p-6 flex items-center gap-5 shadow-xl shadow-secondary/10 border border-secondary/20 min-h-[13rem]">
+                              <div className="tournament-ranking-position relative z-10 flex h-24 w-24 shrink-0 items-center justify-center rounded-full font-display text-4xl font-black">1º</div>
+                              <div className="relative z-10 min-w-0 flex-1">
                                 <div className="inline-flex items-center gap-2 bg-on-secondary-container/10 px-3 py-1 rounded-full mb-4">
                                   <TrophyIcon size={14} className="text-primary" />
                                   <span className="font-display font-black text-on-secondary-container text-[10px] uppercase tracking-tighter italic">LÍDER</span>
@@ -6296,35 +6298,35 @@ O play na palma da mão! 🏆`;
                                     <p className="font-black text-[9px] uppercase text-on-secondary-container/40 tracking-widest">Saldo</p>
                                     <p className="font-display text-xl font-black text-on-secondary-container">{champion.gameBalance > 0 ? `+${champion.gameBalance}` : champion.gameBalance}</p>
                                   </div>
+                                  <div>
+                                    <p className="font-black text-[9px] uppercase text-on-secondary-container/40 tracking-widest">Pontos</p>
+                                    <p className="font-display text-xl font-black text-on-secondary-container">{champion.gamesWon}</p>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="relative z-10 w-24 h-24 flex items-center justify-center shrink-0">
+                              <div className="relative z-10 hidden h-24 w-24 shrink-0 items-center justify-center sm:flex">
                                 <TrophyIcon size={48} className="text-primary/20" />
                               </div>
                             </div>
                           </section>
 
+                          <div className="tournament-ranking-head grid grid-cols-[2.5rem_1fr_2.7rem_2.7rem_2.7rem] gap-2 px-4 text-[8px] font-black uppercase tracking-widest text-primary">
+                            <span>Pos.</span><span>Atleta</span><span className="text-center">Vit.</span><span className="text-center">Saldo</span><span className="text-center">Pts.</span>
+                          </div>
                           <div className="tournament-ranking-list bg-surface-container-low rounded-[2rem] p-4 space-y-3">
                             {rankings.slice(1).map((p, idx) => (
-                              <div key={`tournament-rank-${p.id || idx}`} className="tournament-ranking-row bg-white p-4 rounded-xl flex items-center gap-4 border border-surface-container shadow-sm">
-                                <div className="w-10 h-10 shrink-0 flex items-center justify-center bg-surface-container-highest text-on-surface font-black rounded-full text-xs">
+                              <div key={`tournament-rank-${p.id || idx}`} className="tournament-ranking-row grid grid-cols-[2.5rem_1fr_2.7rem_2.7rem_2.7rem] items-center gap-2 bg-white p-3 rounded-xl border border-surface-container shadow-sm">
+                                <div className="tournament-ranking-medal w-10 h-10 shrink-0 flex items-center justify-center bg-surface-container-highest text-on-surface font-black rounded-full text-xs">
                                   {idx + 2}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="w-full font-black text-sm text-primary uppercase tracking-tight mb-1 break-words">
+                                  <div className="w-full font-black text-sm text-white uppercase tracking-tight break-words">
                                     {p.name}
                                   </div>
-                                  <div className="flex gap-4">
-                                    <div className="flex items-baseline gap-1">
-                                      <span className="font-black text-[8px] uppercase text-on-surface-variant/40 tracking-widest">Vit:</span>
-                                      <span className="font-black text-[10px] text-on-surface">{p.wins}</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-1">
-                                      <span className="font-black text-[8px] uppercase text-on-surface-variant/40 tracking-widest">Sal:</span>
-                                      <span className="font-black text-[10px] text-on-surface">{p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}</span>
-                                    </div>
-                                  </div>
                                 </div>
+                                <span className="text-center text-xs font-black text-white">{p.wins}</span>
+                                <span className="text-center text-xs font-black text-white">{p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}</span>
+                                <span className="text-center text-xs font-black text-white">{p.gamesWon}</span>
                               </div>
                             ))}
                           </div>
@@ -6374,20 +6376,20 @@ O play na palma da mão! 🏆`;
                             return (
                               <div key={m.id} className="bg-white p-3 rounded-xl flex items-center justify-between gap-3 border border-surface-container/30">
                                 <div className="flex-1 text-right min-w-0">
-                                  <div className="text-[9px] font-black text-primary uppercase leading-tight break-words">
+                                  <div className="tournament-round-player text-[9px] font-black text-white uppercase leading-tight break-words">
                                     <p>{p1Name}{p1p ? ` / ${p1p.name}` : ''}</p>
                                   </div>
                                 </div>
                                   
                                   <div className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1 rounded-full border border-surface-container scale-90">
-                                    <span className="rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white shadow-sm">Q{m.table}</span>
+                                    <span className="rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white shadow-sm">QUADRA {m.table}</span>
                                     <span className={cn("text-xs font-black font-display", m.isCompleted && p1Games < p2Games ? "text-on-surface-variant/20" : "text-primary")}>{p1Games}</span>
                                     <span className="text-on-surface-variant/20 font-black italic text-[7px] tracking-widest shrink-0">VS</span>
                                     <span className={cn("text-xs font-black font-display", m.isCompleted && p2Games < p1Games ? "text-on-surface-variant/20" : "text-primary")}>{p2Games}</span>
                                   </div>
 
                                   <div className="flex-1 text-left min-w-0">
-                                    <div className="text-[9px] font-black text-primary uppercase leading-tight break-words">
+                                    <div className="tournament-round-player text-[9px] font-black text-white uppercase leading-tight break-words">
                                       <p>{p2Name}{p2p ? ` / ${p2p.name}` : ''}</p>
                                     </div>
                                   </div>
@@ -6570,14 +6572,14 @@ O play na palma da mão! 🏆`;
                           )}>
                             {/* Names row */}
                             <div className="flex items-center justify-between px-4 pt-3 pb-1 gap-2">
-                              <p className="text-[10px] font-black text-primary uppercase leading-tight flex-1 text-right pr-1">
+                              <p className="text-[10px] font-black text-white uppercase leading-tight flex-1 text-right pr-1">
                                 {p1Name}{fp1p ? ` / ${fp1p.name}` : ''}
                               </p>
                               <span className="text-[8px] font-black text-on-surface-variant/30 uppercase tracking-widest shrink-0">VS</span>
-                              <p className="text-[10px] font-black text-primary uppercase leading-tight flex-1 text-left pl-1">
+                              <p className="text-[10px] font-black text-white uppercase leading-tight flex-1 text-left pl-1">
                                 {p2Name}{fp2p ? ` / ${fp2p.name}` : ''}
                               </p>
-                              <span className="shrink-0 rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white">Q{m.table}</span>
+                              <span className="shrink-0 rounded-full bg-primary px-2 py-1 text-[8px] font-black text-white">QUADRA {m.table}</span>
                             </div>
 
                             {/* Score row */}
@@ -6657,25 +6659,25 @@ O play na palma da mão! 🏆`;
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-2xl mx-auto pt-4 px-2 pb-28"
+              className="w-full max-w-2xl mx-auto pt-4 px-2 pb-28 beach-screen beach-screen--tournament beach-screen--finished"
             >
               {/* Quick access menu */}
               {tournaments.filter(t => !t.isHidden).length > 1 && (
                 <div className="space-y-3 mb-6 px-2">
                   <div className="flex items-center gap-2 text-on-surface-variant/50">
                     <Zap size={14} className="text-secondary fill-secondary" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.1em]">ACESSO RÁPIDO AOS SEUS TORNEIOS</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.1em]">ACESSO RÁPIDO AOS SEUS TORNEIOS ATIVOS</span>
                   </div>
-                  <div className="bg-surface-container-low/50 border border-surface-container rounded-full p-1.5 flex gap-1 shadow-sm overflow-x-auto no-scrollbar">
+                  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                     {tournaments.filter(t => !t.isHidden).map(t => (
                       <button
                         key={t.id}
                         onClick={() => t.isFinished ? navigateTo('FINISHED', { tournamentId: t.id }) : navigateTo('TOURNAMENT', { tournamentId: t.id, tab: 'MATCHES' })}
                         className={cn(
-                          "flex-1 py-3 px-4 rounded-full text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 min-w-fit",
+                          "tournament-quick-switch relative min-w-fit rounded-2xl border px-5 py-3.5 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 bg-white",
                           t.id === activeTournament.id
-                            ? "bg-secondary text-primary shadow-lg"
-                            : "text-on-surface-variant hover:bg-surface-container"
+                            ? "border-primary text-primary shadow-md shadow-primary/10 after:absolute after:bottom-1.5 after:left-1/3 after:right-1/3 after:h-0.5 after:rounded-full after:bg-secondary"
+                            : "border-surface-container text-on-surface-variant hover:border-primary/20"
                         )}
                       >
                         {t.isFinished && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
@@ -6687,7 +6689,7 @@ O play na palma da mão! 🏆`;
               )}
 
               {/* Classification Header */}
-              <div className="space-y-4">
+              <div className="finished-classification-header space-y-4">
                 <div className="flex items-center gap-3">
                   <span className="bg-tertiary-container text-on-tertiary-container px-4 py-1 rounded-full font-black text-[10px] tracking-widest uppercase">
                     {activeTournament.format === 'SUPER_8_INDIVIDUAL' ? 'SUPER 8' : 'TORNEIO'}
@@ -6713,7 +6715,7 @@ O play na palma da mão! 🏆`;
                 return (
                   <>
                     <section>
-                      <div className="relative arena-hero-bg rounded-[2rem] overflow-hidden p-6 flex items-center justify-between shadow-xl shadow-primary/20 border border-white/10">
+                      <div className="finished-champion-card tournament-ranking-leader relative arena-hero-bg rounded-[2rem] overflow-hidden p-6 flex items-center justify-between shadow-xl shadow-primary/20 border border-white/10">
                         <div className="relative z-10 flex-1">
                           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full mb-3">
                             <TrophyIcon size={12} className="text-secondary" />
@@ -6747,10 +6749,10 @@ O play na palma da mão! 🏆`;
                     </section>
 
                     {/* Leaderboard */}
-                    <section className="bg-surface-container-low rounded-[2.5rem] p-4 md:p-6 mb-6">
+                    <section className="finished-ranking-list tournament-ranking-list bg-surface-container-low rounded-[2.5rem] p-4 md:p-6 mb-6">
                       <div className="flex flex-col gap-3">
                         {rankings.slice(1).map((p, idx) => (
-                          <div key={p.id} className="bg-white p-5 rounded-2xl flex items-center gap-5 border border-surface-container shadow-sm">
+                          <div key={p.id} className="finished-ranking-row tournament-ranking-row bg-white p-5 rounded-2xl flex items-center gap-5 border border-surface-container shadow-sm">
                             <div className="w-12 h-12 shrink-0 flex items-center justify-center bg-surface-container-highest text-on-surface font-display font-black rounded-full text-lg">
                               {idx + 2}
                             </div>

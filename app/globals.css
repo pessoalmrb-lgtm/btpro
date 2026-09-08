@@ -468,10 +468,14 @@
 }
 
 .beach-screen--tournament .tournament-quick-switch.border-primary {
-  color: #38c7ff !important;
-  border-color: #12bff5 !important;
-  background: linear-gradient(135deg, rgba(0, 115, 190, .78), rgba(7, 62, 113, .92)) !important;
-  box-shadow: 0 10px 28px rgba(0, 144, 216, .18), inset 0 1px 0 rgba(255, 255, 255, .09);
+  color: #061524 !important;
+  border-color: #e2ff00 !important;
+  background: linear-gradient(135deg, #eaff16, #cfff00) !important;
+  box-shadow: 0 10px 30px rgba(226, 255, 0, .18), inset 0 1px 0 rgba(255, 255, 255, .38);
+}
+
+.beach-screen--tournament .tournament-quick-switch.border-primary > div {
+  background: #0477b5 !important;
 }
 
 .beach-screen--tournament .tournament-hero-card {
@@ -504,6 +508,68 @@
 .beach-screen--tournament .tournament-tabs button.text-primary > div:last-child {
   background: linear-gradient(90deg, #078bd0, #20c6f7) !important;
   box-shadow: 0 0 15px rgba(32, 198, 247, .3);
+}
+
+.beach-screen--tournament .tournament-info-backdrop {
+  background: rgba(0, 7, 16, .84) !important;
+  backdrop-filter: blur(9px) saturate(70%);
+  -webkit-backdrop-filter: blur(9px) saturate(70%);
+}
+
+.beach-screen--tournament .tournament-info-dialog {
+  color: #f8fafc;
+  background: linear-gradient(160deg, #0a2b46, #031524 72%) !important;
+  border: 1px solid rgba(40, 194, 244, .7);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .66), inset 0 1px 0 rgba(255, 255, 255, .06) !important;
+}
+
+.beach-screen--tournament .tournament-info-header {
+  background: linear-gradient(135deg, #087bb7, #075a91) !important;
+  border-bottom: 1px solid rgba(78, 207, 255, .35);
+}
+
+.beach-screen--tournament .tournament-info-header h2 {
+  color: #fff !important;
+}
+
+.beach-screen--tournament .tournament-info-header button {
+  color: #dff7ff;
+  background: rgba(2, 25, 44, .28) !important;
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+
+.beach-screen--tournament .tournament-info-body {
+  background:
+    radial-gradient(circle at 90% 0%, rgba(226, 255, 0, .045), transparent 13rem),
+    linear-gradient(180deg, rgba(5, 25, 42, .99), rgba(2, 15, 27, .99)) !important;
+}
+
+.beach-screen--tournament .tournament-info-item {
+  background: linear-gradient(135deg, rgba(26, 62, 89, .98), rgba(14, 43, 67, .98)) !important;
+  border-color: rgba(87, 166, 204, .34) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045), 0 8px 22px rgba(0, 0, 0, .12);
+}
+
+.beach-screen--tournament .tournament-info-label {
+  color: #a9bacb !important;
+  opacity: 1 !important;
+}
+
+.beach-screen--tournament .tournament-info-value {
+  color: #fff !important;
+  font-size: .75rem;
+  line-height: 1.35;
+}
+
+.beach-screen--tournament .tournament-info-item:nth-child(1) {
+  border-left: 3px solid #e2ff00 !important;
+}
+
+.beach-screen--tournament .tournament-info-confirm {
+  color: #fff !important;
+  background: linear-gradient(135deg, #087fc0, #00649f) !important;
+  border: 1px solid rgba(70, 207, 255, .38);
+  box-shadow: 0 12px 30px rgba(0, 92, 150, .3);
 }
 
 .beach-screen--tournament .tournament-court > div:first-child h2 {
@@ -599,6 +665,18 @@
   box-shadow: 0 22px 50px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .07) !important;
 }
 
+.beach-screen--tournament .tournament-ranking-title {
+  color: #38c7ff !important;
+  text-shadow: 0 0 20px rgba(56, 199, 255, .16);
+}
+
+.beach-screen--tournament .tournament-ranking-position {
+  color: #e2ff00;
+  border: 2px solid #e2ff00;
+  background: radial-gradient(circle, rgba(226, 255, 0, .13), rgba(3, 20, 35, .88) 68%);
+  box-shadow: 0 0 24px rgba(226, 255, 0, .2), inset 0 0 24px rgba(226, 255, 0, .055);
+}
+
 .beach-screen--tournament .tournament-ranking-leader h3,
 .beach-screen--tournament .tournament-ranking-leader p,
 .beach-screen--tournament .tournament-ranking-leader span {
@@ -613,6 +691,80 @@
 .beach-screen--tournament .tournament-ranking-row {
   background: linear-gradient(145deg, rgba(10, 34, 55, .96), rgba(5, 23, 39, .98)) !important;
   border-color: rgba(91, 154, 190, .3) !important;
+}
+
+.beach-screen--tournament .tournament-ranking-row:nth-child(1) .tournament-ranking-medal {
+  color: #eef3f8 !important;
+  border: 2px solid #cbd5e1;
+  background: linear-gradient(145deg, #718096, #dce3ea) !important;
+}
+
+.beach-screen--tournament .tournament-ranking-row:nth-child(2) .tournament-ranking-medal {
+  color: #fff !important;
+  border: 2px solid #d17a20;
+  background: linear-gradient(145deg, #6d3114, #bd681f) !important;
+}
+
+.beach-screen--tournament .tournament-ranking-head {
+  color: #38c7ff !important;
+}
+
+.beach-screen--tournament .tournament-round-player {
+  color: #fff !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .3);
+}
+
+.beach-screen--tournament [class*="QUADRA"] {
+  white-space: nowrap;
+}
+
+.beach-screen--finished .finished-classification-header h2 {
+  color: #f8fafc !important;
+  text-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+}
+
+.beach-screen--finished .finished-champion-card {
+  background:
+    radial-gradient(circle at 84% 28%, rgba(226, 255, 0, .13), transparent 30%),
+    linear-gradient(135deg, rgba(24, 70, 103, .98), rgba(5, 30, 49, .98)) !important;
+  border-color: rgba(226, 255, 0, .72) !important;
+}
+
+.beach-screen--finished .finished-champion-card > div:last-child > div:last-child {
+  border-color: rgba(226, 255, 0, .6) !important;
+  background: rgba(226, 255, 0, .08) !important;
+}
+
+.beach-screen--finished .finished-ranking-list {
+  background: rgba(13, 41, 64, .86) !important;
+  border: 1px solid rgba(87, 145, 178, .24);
+}
+
+.beach-screen--finished .finished-ranking-row {
+  background: linear-gradient(145deg, rgba(10, 34, 55, .96), rgba(5, 23, 39, .98)) !important;
+  border-color: rgba(91, 154, 190, .3) !important;
+}
+
+.beach-screen--finished .finished-ranking-row > div:nth-child(2) > div:first-child,
+.beach-screen--finished .finished-ranking-row span {
+  color: #f8fafc !important;
+}
+
+@media (max-width: 420px) {
+  .beach-screen--tournament .tournament-ranking-leader {
+    gap: .9rem;
+    padding: 1.25rem;
+  }
+
+  .beach-screen--tournament .tournament-ranking-position {
+    width: 4.25rem;
+    height: 4.25rem;
+    font-size: 1.8rem;
+  }
+
+  .beach-screen--tournament .tournament-ranking-leader h3 {
+    font-size: 1.7rem;
+  }
 }
 
 .beach-screen--profile .arena-hero-bg {
