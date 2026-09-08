@@ -6715,8 +6715,9 @@ O play na palma da mão! 🏆`;
                 return (
                   <>
                     <section>
-                      <div className="finished-champion-card tournament-ranking-leader relative arena-hero-bg rounded-[2rem] overflow-hidden p-6 flex items-center justify-between shadow-xl shadow-primary/20 border border-white/10">
-                        <div className="relative z-10 flex-1">
+                      <div className="finished-champion-card tournament-ranking-leader relative arena-hero-bg rounded-[2rem] overflow-hidden p-6 flex items-center gap-5 shadow-xl shadow-primary/20 border border-white/10">
+                        <div className="tournament-ranking-position relative z-10 flex h-24 w-24 shrink-0 items-center justify-center rounded-full font-display text-4xl font-black">1º</div>
+                        <div className="relative z-10 min-w-0 flex-1">
                           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full mb-3">
                             <TrophyIcon size={12} className="text-secondary" />
                             <span className="font-display font-black text-white text-[9px] uppercase tracking-tighter italic">CAMPEÃO</span>
@@ -6734,12 +6735,12 @@ O play na palma da mão! 🏆`;
                               <p className="font-display text-xl font-black text-white">{champion.gameBalance > 0 ? `+${champion.gameBalance}` : champion.gameBalance}</p>
                             </div>
                             <div>
-                              <p className="font-black text-[9px] uppercase text-white/40 tracking-widest leading-none mb-1">Pró</p>
+                              <p className="font-black text-[9px] uppercase text-white/40 tracking-widest leading-none mb-1">Pontos</p>
                               <p className="font-display text-xl font-black text-white">{champion.gamesWon}</p>
                             </div>
                           </div>
                         </div>
-                        <div className="relative z-10 w-20 h-20 md:w-24 md:h-24 flex items-center justify-center shrink-0">
+                        <div className="relative z-10 hidden h-20 w-20 shrink-0 items-center justify-center sm:flex md:h-24 md:w-24">
                           <div className="absolute inset-0 bg-secondary/20 rounded-full blur-2xl"></div>
                           <div className="w-full h-full bg-white/10 rounded-full border-2 border-white/30 shadow-lg flex items-center justify-center overflow-hidden">
                             <TrophyIcon size={36} className="text-secondary" />
@@ -6749,32 +6750,24 @@ O play na palma da mão! 🏆`;
                     </section>
 
                     {/* Leaderboard */}
+                    <div className="tournament-ranking-head grid grid-cols-[2.5rem_1fr_2.7rem_2.7rem_2.7rem] gap-2 px-4 pt-5 text-[8px] font-black uppercase tracking-widest text-primary">
+                      <span>Pos.</span><span>Atleta</span><span className="text-center">Vit.</span><span className="text-center">Saldo</span><span className="text-center">Pts.</span>
+                    </div>
                     <section className="finished-ranking-list tournament-ranking-list bg-surface-container-low rounded-[2.5rem] p-4 md:p-6 mb-6">
                       <div className="flex flex-col gap-3">
                         {rankings.slice(1).map((p, idx) => (
-                          <div key={p.id} className="finished-ranking-row tournament-ranking-row bg-white p-5 rounded-2xl flex items-center gap-5 border border-surface-container shadow-sm">
-                            <div className="w-12 h-12 shrink-0 flex items-center justify-center bg-surface-container-highest text-on-surface font-display font-black rounded-full text-lg">
+                          <div key={p.id} className="finished-ranking-row tournament-ranking-row grid grid-cols-[2.5rem_1fr_2.7rem_2.7rem_2.7rem] items-center gap-2 bg-white p-3 rounded-xl border border-surface-container shadow-sm">
+                            <div className="tournament-ranking-medal flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-container-highest font-display text-xs font-black text-on-surface">
                               {idx + 2}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="w-full font-display font-black text-xl text-on-surface tracking-tight mb-2 break-words leading-tight">
+                              <div className="w-full font-display font-black text-sm text-white uppercase tracking-tight break-words leading-tight">
                                 {p.name}
                               </div>
-                              <div className="flex gap-6">
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="font-black text-[9px] uppercase text-on-surface-variant/60 tracking-widest">Vit:</span>
-                                  <span className="font-black text-xs text-on-surface">{p.wins}</span>
-                                </div>
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="font-black text-[9px] uppercase text-on-surface-variant/60 tracking-widest">Sal:</span>
-                                  <span className="font-black text-xs text-on-surface">{p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}</span>
-                                </div>
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="font-black text-[9px] uppercase text-on-surface-variant/60 tracking-widest">Pró:</span>
-                                  <span className="font-black text-xs text-on-surface">{p.gamesWon}</span>
-                                </div>
-                              </div>
                             </div>
+                            <span className="text-center text-xs font-black text-white">{p.wins}</span>
+                            <span className="text-center text-xs font-black text-white">{p.gameBalance > 0 ? `+${p.gameBalance}` : p.gameBalance}</span>
+                            <span className="text-center text-xs font-black text-white">{p.gamesWon}</span>
                           </div>
                         ))}
                       </div>
