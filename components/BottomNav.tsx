@@ -1,24 +1,26 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { Home, Trophy as TrophyIcon, User as UserIcon, Award } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AppStep } from '../types';
 
 export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { activeStep: AppStep, setStep: (s: AppStep) => void, isVisible: boolean, resetApp: () => void }) => {
-  if (!isVisible) return null;
+  if (!isVisible || typeof document === 'undefined') return null;
 
   // A navegação só aparece após o login; todo o app autenticado usa o tema noturno.
   const darkNavigation = true;
 
-  return (
-    <motion.nav 
-      initial={{ y: 100 }}
-      animate={{ y: 0 }}
-      exit={{ y: 100 }}
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[200] flex justify-center px-4">
+    <motion.nav
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 100, opacity: 0 }}
       className={cn(
-        "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-[92%] max-w-[440px] rounded-full px-4 py-1 flex items-center justify-between z-[200] h-[4.5rem] transition-colors duration-500",
+        "pointer-events-auto h-[4.5rem] w-full max-w-[440px] rounded-full px-4 py-1 flex items-center justify-between transition-colors duration-500",
         darkNavigation ? "bottom-nav-night" : "bottom-nav-glass"
       )}
     >
@@ -86,5 +88,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         <span className="text-[8px] font-black uppercase tracking-widest leading-none">Perfil</span>
       </button>
     </motion.nav>
+    </div>,
+    document.body
   );
 };

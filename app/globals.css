@@ -606,6 +606,50 @@
   box-shadow: 0 0 14px rgba(226, 255, 0, .42);
 }
 
+.beach-screen--tournament .tournament-match-card--completed {
+  border-color: rgba(198, 255, 0, .88) !important;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(226, 255, 0, .08), transparent 34%),
+    linear-gradient(145deg, rgba(18, 62, 79, .98), rgba(4, 25, 40, .99)) !important;
+  box-shadow: 0 0 0 1px rgba(226, 255, 0, .12), 0 14px 32px rgba(154, 205, 0, .16), inset 0 1px 0 rgba(255, 255, 255, .06) !important;
+}
+
+.beach-screen--tournament .tournament-match-card--completed::before {
+  width: calc(100% - 3rem);
+  background: linear-gradient(90deg, #e2ff00, rgba(226, 255, 0, .15));
+}
+
+.beach-screen--tournament .tournament-match-card--completed .tournament-score-panel {
+  border-color: rgba(226, 255, 0, .3) !important;
+}
+
+.beach-screen--tournament .tournament-match-card--completed .tournament-confirm {
+  color: #e2ff00 !important;
+  border-color: rgba(226, 255, 0, .75) !important;
+  background: rgba(3, 25, 39, .68) !important;
+  box-shadow: 0 0 18px rgba(226, 255, 0, .08) !important;
+}
+
+.beach-screen--tournament .tournament-round-result--completed {
+  border-color: rgba(226, 255, 0, .55) !important;
+  background: linear-gradient(145deg, rgba(18, 58, 76, .96), rgba(5, 27, 43, .98)) !important;
+  box-shadow: 0 8px 20px rgba(157, 206, 0, .1);
+}
+
+.beach-screen--home .home-tournament-card {
+  background: linear-gradient(145deg, rgba(8, 38, 61, .98), rgba(3, 23, 39, .99)) !important;
+  border-color: rgba(73, 139, 176, .3) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .2) !important;
+}
+
+.beach-screen--home .home-tournament-card--active {
+  border-left-color: rgba(36, 222, 160, .85) !important;
+}
+
+.beach-screen--home .home-tournament-card--finished {
+  border-color: rgba(244, 99, 130, .34) !important;
+}
+
 .beach-screen--tournament .tournament-athlete-name {
   color: #fff !important;
   text-shadow: 0 1px 10px rgba(0, 0, 0, .3);
@@ -778,6 +822,26 @@
   background: rgba(4, 27, 43, .12) !important;
   border: 0 !important;
   box-shadow: none !important;
+}
+
+.authenticated-theme .league-new-tournament > div:first-child > div:first-child {
+  color: #071725 !important;
+  background: rgba(4, 27, 43, .14) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* O modal claro precisa escapar das substituições de cor do tema autenticado. */
+.authenticated-theme .premium-upgrade-modal .premium-annual-price {
+  color: #0f172a !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.authenticated-theme .premium-upgrade-modal .premium-annual-detail {
+  color: #64748b !important;
+  opacity: 1 !important;
 }
 
 .beach-screen--home .follow-tournament-button {

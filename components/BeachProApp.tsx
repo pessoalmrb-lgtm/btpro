@@ -2902,6 +2902,19 @@ export default function BeachProApp() {
                           const types: { [key: number]: string } = { 100: 'Oitavas', 101: 'Quartas', 102: 'Semi', 103: 'Final' };
                           return types[t.currentRound] || `Playoff`;
                         })() : `Rodada ${t.currentRound}/${totalRegular || t.totalRounds}`;
+                        const formatLabel = ({
+                          REI_DA_QUADRA: 'Rei da Quadra',
+                          SUPER_4_FIXED: 'Super 4 de duplas fixas',
+                          SUPER_6_FIXED: 'Super 6 de duplas fixas',
+                          SUPER_8_FIXED: 'Super 8 de duplas fixas',
+                          SUPER_10_FIXED: 'Super 10 de duplas fixas',
+                          SUPER_12_FIXED: 'Super 12 de duplas fixas',
+                          SUPER_6_INDIVIDUAL: 'Super 6 individual',
+                          SUPER_8_INDIVIDUAL: 'Super 8 individual',
+                          SUPER_10_INDIVIDUAL: 'Super 10 individual',
+                          SUPER_12_INDIVIDUAL: 'Super 12 individual',
+                          GROUPS_MATA_MATA: 'Grupos + mata-mata',
+                        } as Record<string, string>)[t.format] || t.format?.replace(/_/g, ' ');
 
                         return (
                           <motion.div
@@ -2914,22 +2927,20 @@ export default function BeachProApp() {
                           >
                             {/* Card */}
                             <div className={cn(
-                              "rounded-[1.75rem] border transition-all overflow-hidden p-5",
+                              "home-tournament-card rounded-2xl border transition-all overflow-hidden px-4 py-4",
                               t.isFinished
-                                ? "bg-white border-rose-100 shadow-sm"
-                                : "bg-white border-primary/10 shadow-md shadow-primary/5"
+                                ? "home-tournament-card--finished bg-white border-rose-100 shadow-sm"
+                                : "home-tournament-card--active bg-white border-primary/10 shadow-md shadow-primary/5"
                             )}>
                               {/* Left stripe — green active, red finished */}
                               <div className={cn(
                                 "absolute left-0 top-4 bottom-4 w-1 rounded-r-full",
                                 t.isFinished ? "bg-rose-400" : "bg-emerald-400"
                               )} />
-                              <div className={cn(t.isFinished ? "p-4" : "")}>
-
                               <div className="flex items-center justify-between gap-3">
                                 {/* Left */}
                                 <div className="flex-1 min-w-0 pl-2">
-                                  <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex items-center gap-2 mb-1.5">
                                     <h4 className="text-sm font-black text-on-surface uppercase italic truncate tracking-tight pr-1">
                                       {t.name}
                                     </h4>
@@ -2937,14 +2948,14 @@ export default function BeachProApp() {
                                       <span className="shrink-0 bg-rose-50 text-rose-400 text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border border-rose-100">✓ FIM</span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2.5">
                                     <div className="flex items-center gap-1 text-on-surface-variant/40">
                                       <Users size={10} />
                                       <span className="text-[9px] font-black uppercase tracking-widest">{(t.athleteCount || t.players.length)} atletas</span>
                                     </div>
                                     <span className="text-on-surface-variant/20 text-[9px]">·</span>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant/40">
-                                      {t.format?.replace('_INDIVIDUAL','').replace(/_/g,' ')}
+                                      {formatLabel}
                                     </span>
                                   </div>
                                 </div>
@@ -2954,10 +2965,10 @@ export default function BeachProApp() {
                                   {t.isFinished ? (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); setTournamentToDelete(t.id); }}
-                                      className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-rose-500/20 active:scale-90 transition-all"
+                                      aria-label="Excluir torneio"
+                                      className="flex h-9 w-9 items-center justify-center rounded-full border border-rose-400/35 bg-rose-500/10 text-rose-400 transition-all active:scale-90"
                                     >
-                                      <Trash2 size={12} />
-                                      EXCLUIR
+                                      <Trash2 size={15} />
                                     </button>
                                   ) : (
                                     <>
@@ -2970,7 +2981,6 @@ export default function BeachProApp() {
                                     </>
                                   )}
                                 </div>
-                              </div>
                               </div>
                             </div>
                           </motion.div>
@@ -3688,7 +3698,7 @@ O play na palma da mão! 🏆`;
                            className="neon-action-button league-new-tournament w-full bg-[#bef264] p-5 rounded-[2.5rem] flex items-center justify-between group shadow-xl shadow-[#bef264]/20 active:scale-[0.98] transition-all"
                          >
                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#bef264] shadow-sm">
+                              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#bef264]">
                                  <Plus size={24} strokeWidth={4} />
                               </div>
                               <div className="text-left">
@@ -6221,7 +6231,7 @@ O play na palma da mão! 🏆`;
                                   key={match.id} 
                                   className={cn(
                                     "tournament-match-card group relative overflow-hidden rounded-[1.75rem] border p-5 shadow-sm transition-all",
-                                    match.isCompleted ? "bg-[#e8fbf4] border-[#d1f5e8]" : "bg-white border-surface-container"
+                                    match.isCompleted ? "tournament-match-card--completed bg-[#e8fbf4] border-[#d1f5e8]" : "bg-white border-surface-container"
                                   )}
                                 >
                                   <div className="relative z-10">
@@ -6554,7 +6564,7 @@ O play na palma da mão! 🏆`;
                             const p2Games = m.isCompleted ? m.sets[0].player2 : m.currentSet.player2;
 
                             return (
-                              <div key={m.id} className="bg-white p-3 rounded-xl flex items-center justify-between gap-3 border border-surface-container/30">
+                              <div key={m.id} className={cn("tournament-round-result bg-white p-3 rounded-xl flex items-center justify-between gap-3 border border-surface-container/30", m.isCompleted && "tournament-round-result--completed")}>
                                 <div className="flex-1 text-right min-w-0">
                                   <div className="tournament-round-player text-[9px] font-black text-white uppercase leading-tight break-words">
                                     <p>{p1Name}{p1p ? ` / ${p1p.name}` : ''}</p>

@@ -140,7 +140,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
   ];
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md overflow-y-auto" onClick={onClose}>
+    <div className="premium-upgrade-modal fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md overflow-y-auto" onClick={onClose}>
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -223,9 +223,9 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
                     Anual — 7 dias grátis
                   </p>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black text-slate-900">R$ 9,90</span>
-                    <span className="text-slate-400 text-xs">/mês</span>
-                    <span className="text-slate-300 text-[9px] font-black">· R$ 118,80/ano</span>
+                    <span className="premium-annual-price text-2xl font-black text-slate-900">R$ 9,90</span>
+                    <span className="premium-annual-detail text-slate-500 text-xs">/mês</span>
+                    <span className="premium-annual-detail text-slate-500 text-[9px] font-black">· R$ 118,80/ano</span>
                   </div>
                   <p className="text-[8px] font-black text-amber-600 mt-0.5">Cancele antes de 7 dias sem custo</p>
                 </div>
