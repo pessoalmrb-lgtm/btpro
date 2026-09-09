@@ -3575,7 +3575,7 @@ export default function BeachProApp() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="w-full px-4 pb-10"
+                className="beach-screen beach-screen--league w-full px-4 pb-10"
               >
                 {!activeRanking ? (
                   <div className="flex flex-col items-center justify-center py-20 px-8">
@@ -3743,7 +3743,7 @@ O play na palma da mão! 🏆`;
                 <div className="relative z-10">
                 {rankingTab === 'RANKING' && (
                   <div className="space-y-6 pb-20">
-                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-2xl relative overflow-hidden">
+                    <div className="league-ranking-card bg-white rounded-[3rem] p-8 border border-slate-100 shadow-2xl relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-[#bef264]/5 rounded-full blur-3xl -mr-16 -mt-16" />
                       
                       <div className="flex items-center justify-between mb-8 relative z-10">
@@ -3760,7 +3760,7 @@ O play na palma da mão! 🏆`;
 
                       {rankingStats.length > 0 ? (
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left">
+                          <table className="league-ranking-table w-full text-left">
                             <thead>
                               <tr className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] italic border-b border-slate-50">
                                 <th className="pb-4 px-2">Pos</th>
@@ -3773,10 +3773,10 @@ O play na palma da mão! 🏆`;
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                               {rankingStats.sort((a,b) => b.totalPoints - a.totalPoints).map((stat, idx) => (
-                                <tr key={`stat-${stat.id || idx}`} onClick={() => setSelectedAthleteStats(stat)} className="group cursor-pointer hover:bg-slate-50/50 transition-all rounded-3xl">
+                                <tr key={`stat-${stat.id || idx}`} onClick={() => setSelectedAthleteStats(stat)} className="league-ranking-row group cursor-pointer hover:bg-slate-50/50 transition-all rounded-3xl">
                                   <td className="py-5 px-2">
                                      <div className={cn(
-                                       "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black italic",
+                                       "league-ranking-position w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black italic",
                                        idx === 0 ? "bg-[#bef264] text-slate-900 shadow-md" : 
                                        idx === 1 ? "bg-slate-200 text-slate-600" :
                                        idx === 2 ? "bg-amber-100 text-amber-700" : "text-slate-400"
