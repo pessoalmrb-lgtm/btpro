@@ -433,11 +433,20 @@ export default function BeachProApp() {
   // --- Auth & Firestore Sync ---
   const [adminProfiles, setAdminProfiles] = useState<Record<string, any>>({});
 
+  const createSecureId = () => {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
+
   const getOrCreateDeviceId = () => {
     const storageKey = 'beachpro_device_id';
     const stored = window.localStorage.getItem(storageKey);
     if (stored) return stored;
-    const created = crypto.randomUUID();
+    const created = createSecureId();
     window.localStorage.setItem(storageKey, created);
     return created;
   };
@@ -470,7 +479,7 @@ export default function BeachProApp() {
       return;
     }
 
-    const sessionId = isThisSession && localSessionId ? localSessionId : crypto.randomUUID();
+    const sessionId = isThisSession && localSessionId ? localSessionId : createSecureId();
     if (!isThisSession) {
       await setDoc(sessionRef, {
         uid: authenticatedUser.uid,
@@ -570,8 +579,10 @@ export default function BeachProApp() {
         try {
           await activateDeviceSession(u);
         } catch (error) {
-          console.error('Falha ao validar a sessão do aparelho:', error);
-          setAuthError('Não foi possível validar este aparelho. Verifique sua conexão e tente novamente.');
+          const sessionError = error as { code?: string; message?: string };
+          console.error('Falha ao validar a sessão do aparelho:', sessionError);
+          const diagnosticCode = sessionError.code ? ` (${sessionError.code})` : '';
+          setAuthError(`Não foi possível validar este aparelho${diagnosticCode}. Verifique sua conexão e tente novamente.`);
           setUser(null);
           setIsAuthReady(true);
           await signOut(auth);
@@ -921,8 +932,9 @@ export default function BeachProApp() {
     e.preventDefault();
     setAuthError(null);
     setIsAuthLoading(true);
+    const normalizedEmail = email.trim().toLowerCase();
 
-    if (!email.includes('@')) {
+    if (!normalizedEmail.includes('@')) {
       setAuthError("Por favor, insira um e-mail válido.");
       setIsAuthLoading(false);
       return;
@@ -936,8 +948,8 @@ export default function BeachProApp() {
 
     try {
       const authRequest = authMode === 'REGISTER'
-        ? createUserWithEmailAndPassword(auth, email, password)
-        : signInWithEmailAndPassword(auth, email, password);
+        ? createUserWithEmailAndPassword(auth, normalizedEmail, password)
+        : signInWithEmailAndPassword(auth, normalizedEmail, password);
 
       await Promise.race([
         authRequest,
@@ -1040,13 +1052,12 @@ export default function BeachProApp() {
       const isNative = Capacitor.isNativePlatform();
 
       if (isNative) {
-        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-        await GoogleAuth.initialize({
+        const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+        await GoogleSignIn.initialize({
           clientId: '931735521781-6bdlejsqic1l4lt7odfl5p7h44pkv7jo.apps.googleusercontent.com',
-          scopes: ['profile', 'email'],
         });
-        const googleUser = await GoogleAuth.signIn();
-        const idToken = googleUser?.authentication?.idToken;
+        const googleUser = await GoogleSignIn.signIn();
+        const idToken = googleUser?.idToken;
         if (!idToken) {
           setAuthError("Não foi possível obter o token do Google. Tente novamente.");
           return;
@@ -7730,8 +7741,8 @@ O play na palma da mão! 🏆`;
                         if (user) await releaseCurrentDeviceSession(user.uid);
                         try {
                           // Limpa o token do Google para permitir troca de conta
-                          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-                          await GoogleAuth.signOut();
+                          const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+                          await GoogleSignIn.signOut();
                         } catch {}
                         try {
                           await signOut(auth);
