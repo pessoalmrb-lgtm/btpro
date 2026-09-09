@@ -9032,7 +9032,7 @@ O play na palma da mão! 🏆`;
     <BottomNav 
       activeStep={step} 
       setStep={navigateTo} 
-      isVisible={!isKeyboardVisible && user !== null} 
+      isVisible={isAuthReady && splashDone && !isKeyboardVisible && user !== null} 
       resetApp={resetApp}
     />
   </main>
