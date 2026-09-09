@@ -7016,7 +7016,7 @@ O play na palma da mão! 🏆`;
               className="w-full pb-32 beach-screen beach-screen--profile"
             >
               {/* 1. Cabeçalho do Perfil (Foto e Nome) */}
-              <div className="arena-hero-bg pt-10 pb-16 px-8 flex flex-col items-center text-center relative overflow-hidden">
+              <div className="profile-hero pt-10 pb-10 px-8 flex flex-col items-center text-center relative overflow-hidden">
                 <div className="relative mb-6">
                   {/* Foto de Perfil Circular */}
                   <div className={cn(
@@ -7131,7 +7131,7 @@ O play na palma da mão! 🏆`;
                 </div>
               </div>
 
-              <div className="wave-container px-6 pt-10 pb-32">
+              <div className="profile-content px-6 pt-7 pb-32">
                 <div className="max-w-xl mx-auto space-y-6">
 
                   {/* ── Stats consolidadas ──────────────────────────────── */}
@@ -7162,9 +7162,9 @@ O play na palma da mão! 🏆`;
                     ];
 
                     return (
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="profile-stats-grid grid grid-cols-3 overflow-hidden rounded-[1.75rem] border">
                         {stats.map(s => (
-                          <div key={s.label} className="bg-white rounded-[1.75rem] p-4 border border-surface-container shadow-sm text-center">
+                          <div key={s.label} className="profile-stat-item p-4 text-center">
                             <div className="text-xl mb-1">{s.icon}</div>
                             <p className="text-xl font-black text-primary leading-none mb-1">{s.value}</p>
                             <p className="text-[8px] font-black text-on-surface-variant/40 uppercase tracking-widest">{s.label}</p>
@@ -7175,9 +7175,43 @@ O play na palma da mão! 🏆`;
                   })()}
                   </div>
 
+                  {/* ── Ações principais no formato do novo perfil ───── */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        setEditName(user?.displayName || '');
+                        setEditEmail(user?.email || '');
+                        setNewPassword('');
+                        setAuthError(null);
+                        navigateTo('EDIT_PROFILE');
+                      }}
+                      className="profile-main-action flex min-h-24 items-center justify-between rounded-[1.75rem] border p-4 text-left transition-all active:scale-[0.98]"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Settings size={25} className="shrink-0 text-sky-400" />
+                        <span className="text-[10px] font-black uppercase leading-tight tracking-wide text-white">Editar perfil</span>
+                      </div>
+                      <ChevronRight size={17} className="shrink-0 text-white/65" />
+                    </button>
+                    <button
+                      onClick={() => { if (!isPremium) { setUpgradeReason('GENERIC'); setShowUpgradeModal(true); } }}
+                      className="profile-main-action profile-premium-action flex min-h-24 items-center justify-between rounded-[1.75rem] border p-4 text-left transition-all active:scale-[0.98]"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl">
+                          <Image src="/icon.png" alt="BeachPró" fill className="object-cover" />
+                        </div>
+                        <span className="text-[9px] font-black uppercase leading-tight tracking-wide text-white">
+                          {isPremium ? <>Plano Premium<br/><span className="text-secondary">ativo</span></> : <>Conhecer o<br/><span className="text-secondary">Plano Premium</span></>}
+                        </span>
+                      </div>
+                      <ChevronRight size={17} className="shrink-0 text-white/75" />
+                    </button>
+                  </div>
+
                   {/* ── Ligas que participa ──────────────────────────────── */}
                   {rankings.filter(r => r.athleteIds?.includes(user?.uid || '')).length > 0 && (
-                    <div className="bg-white rounded-[2.5rem] p-5 border border-surface-container shadow-sm">
+                    <div className="profile-section-card rounded-[2rem] p-5 border">
                       <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-4 px-1">Minhas Ligas</p>
                       <div className="space-y-3">
                         {rankings.filter(r => r.athleteIds?.includes(user?.uid || '')).map(r => {
@@ -7192,7 +7226,7 @@ O play na palma da mão! 🏆`;
                             <button
                               key={r.id}
                               onClick={() => navigateTo('RANKING_DETAILS', { rankingId: r.id })}
-                              className="w-full flex items-center gap-3 p-3 bg-slate-50 rounded-2xl hover:bg-primary/5 transition-all active:scale-98 text-left"
+                              className="profile-list-row w-full flex items-center gap-3 p-3 transition-all active:scale-98 text-left"
                             >
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
                                 {r.coverUrl && !r.coverUrl.startsWith('data:') ? (
@@ -7229,7 +7263,7 @@ O play na palma da mão! 🏆`;
                       .slice(0, 4);
                     if (recent.length === 0) return null;
                     return (
-                      <div className="bg-white rounded-[2.5rem] p-5 border border-surface-container shadow-sm">
+                      <div className="profile-section-card rounded-[2rem] p-5 border">
                         <p className="text-[9px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-4 px-1">Histórico Recente</p>
                         <div className="space-y-2">
                           {recent.map(t => {
@@ -7241,7 +7275,7 @@ O play na palma da mão! 🏆`;
                               <button
                                 key={t.id}
                                 onClick={() => navigateTo('FINISHED', { tournamentId: t.id })}
-                                className="w-full flex items-center gap-3 p-3 bg-slate-50 rounded-2xl hover:bg-primary/5 transition-all text-left active:scale-98"
+                                className="profile-list-row w-full flex items-center gap-3 p-3 transition-all text-left active:scale-98"
                               >
                                 <span className="text-xl shrink-0">{pos >= 0 && pos < 3 ? medals[pos] : `#${pos + 1}`}</span>
                                 <div className="flex-1 min-w-0">
@@ -7258,26 +7292,6 @@ O play na palma da mão! 🏆`;
                       </div>
                     );
                   })()}
-
-                  {/* Premium CTA — shown only to free users */}
-                  {!isPremium && (
-                    <motion.button
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => { setUpgradeReason('GENERIC'); setShowUpgradeModal(true); }}
-                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-[2rem] p-5 flex items-center justify-between shadow-xl shadow-amber-400/30 active:scale-95 transition-all"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
-                          <Zap size={24} className="fill-slate-900 text-slate-900" />
-                        </div>
-                        <div className="text-left">
-                          <p className="text-xs font-black text-slate-900 uppercase italic tracking-tight leading-none mb-1">SEJA BEACH PRÓ PREMIUM</p>
-                          <p className="text-[9px] font-black text-slate-900/60 uppercase tracking-widest">A partir de R$ 9,90/mês</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={20} className="text-slate-900/70 shrink-0" />
-                    </motion.button>
-                  )}
 
                   {/* Premium status card — only for premium users */}
                   {isPremium && (
@@ -7315,27 +7329,6 @@ O play na palma da mão! 🏆`;
                         <div className="text-left">
                           <p className="text-on-surface font-black text-xs uppercase tracking-widest leading-none mb-1">Sugestões</p>
                           <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Nos ajude a melhorar o app</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={18} className="text-on-surface-variant/20" />
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setEditName(user?.displayName || '');
-                        setEditEmail(user?.email || '');
-                        setNewPassword('');
-                        setAuthError(null);
-                        navigateTo('EDIT_PROFILE');
-                      }}
-                      className="w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest rounded-2xl transition-all group"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors">
-                          <Settings size={20} />
-                        </div>
-                        <div className="text-left">
-                          <p className="text-on-surface font-black text-xs uppercase tracking-widest leading-none mb-1">Editar Perfil</p>
-                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Nome, e-mail e dados</p>
                         </div>
                       </div>
                       <ChevronRight size={18} className="text-on-surface-variant/20" />
