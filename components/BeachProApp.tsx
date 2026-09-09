@@ -51,7 +51,7 @@ import { Capacitor } from '@capacitor/core';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage } from '../firebase';
+import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage, deleteCurrentAccount } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
 import { generateUniqueUserTag, generateUniqueNumericId } from '../lib/user-utils';
 import type { User } from '../firebase';
@@ -253,6 +253,10 @@ export default function BeachProApp() {
   const [reauthPassword, setReauthPassword] = useState('');
   const [isProfileUpdating, setIsProfileUpdating] = useState(false);
   const [snackMessage, setSnackMessage] = useState<string | null>(null);
+  const [accountDeleteStep, setAccountDeleteStep] = useState<0 | 1 | 2>(0);
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState('');
+  const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   
   // Rankings State
   const [rankings, setRankings] = useState<Ranking[]>([]);
@@ -1129,6 +1133,52 @@ export default function BeachProApp() {
       }
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || accountDeleteConfirmation.trim().toUpperCase() !== 'EXCLUIR') return;
+    setIsDeletingAccount(true);
+    setAccountDeleteError(null);
+
+    try {
+      const usesApple = user.providerData.some(provider => provider.providerId === 'apple.com');
+      if (usesApple && Capacitor.getPlatform() === 'ios') {
+        const { AppleSignIn } = await import('@capawesome/capacitor-apple-sign-in');
+        const appleResult = await AppleSignIn.signIn({ scopes: [] });
+        if (!appleResult.authorizationCode) throw new Error('APPLE_REVOCATION_FAILED');
+        const { revokeAccessToken } = await import('firebase/auth');
+        await revokeAccessToken(auth, appleResult.authorizationCode);
+      }
+
+      await deleteCurrentAccount();
+      try {
+        const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+        await GoogleSignIn.signOut();
+      } catch {}
+      try { await signOut(auth); } catch {}
+
+      setAccountDeleteStep(0);
+      setAccountDeleteConfirmation('');
+      setUser(null);
+      setUserProfile(null);
+      setTournaments([]);
+      setRankings([]);
+      setActiveTournamentId(null);
+      setActiveRankingId(null);
+      setStep('HOME');
+    } catch (error) {
+      console.error('Falha ao excluir conta:', error);
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('APPLE_REVOCATION_FAILED') || message.toLowerCase().includes('apple')) {
+        setAccountDeleteError('Confirme novamente com a Apple para revogar o acesso e concluir a exclusão.');
+      } else if (message.includes('unauthenticated')) {
+        setAccountDeleteError('Sua sessão expirou. Entre novamente e repita a exclusão.');
+      } else {
+        setAccountDeleteError('Não foi possível concluir a exclusão agora. Verifique sua conexão e tente novamente.');
+      }
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -7715,10 +7765,13 @@ O play na palma da mão! 🏆`;
                       </div>
                       <ChevronRight size={18} className="text-on-surface-variant/20" />
                     </button>
-                    <a
-                      href="https://btsuper.vercel.app/delete-account"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountDeleteStep(1);
+                        setAccountDeleteConfirmation('');
+                        setAccountDeleteError(null);
+                      }}
                       className="w-full flex items-center justify-between p-4 hover:bg-red-50 rounded-2xl transition-all group"
                     >
                       <div className="flex items-center gap-4">
@@ -7727,11 +7780,11 @@ O play na palma da mão! 🏆`;
                         </div>
                         <div className="text-left">
                           <p className="text-red-600 font-black text-xs uppercase tracking-widest leading-none mb-1">Excluir minha conta</p>
-                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Solicitar exclusão dos dados</p>
+                          <p className="text-on-surface-variant/40 text-[9px] font-black uppercase tracking-widest">Apagar conta e dados permanentemente</p>
                         </div>
                       </div>
                       <ChevronRight size={18} className="text-red-300" />
-                    </a>
+                    </button>
                   </div>
 
                   {/* 4. Rodapé (Ação Destrutiva) */}
@@ -9153,6 +9206,49 @@ O play na palma da mão! 🏆`;
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {accountDeleteStep > 0 && user && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/80 p-5 backdrop-blur-md">
+              <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 12 }} className="w-full max-w-sm rounded-[2rem] border border-red-400/25 bg-[#071a2b] p-7 text-center shadow-2xl">
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-400"><Trash2 size={27} /></div>
+                <p className="text-[8px] font-black uppercase tracking-[.24em] text-red-400">Ação permanente</p>
+                <h2 className="mt-1 font-display text-2xl font-black uppercase italic text-white">{accountDeleteStep === 1 ? 'Excluir sua conta?' : 'Confirmação final'}</h2>
+
+                {accountDeleteStep === 1 ? (
+                  <div className="mt-4 space-y-3 text-left text-[11px] font-semibold leading-relaxed text-slate-300">
+                    <p>Seu perfil, torneios criados, ligas administradas, fotos e dados do Firebase serão apagados permanentemente.</p>
+                    <p>Você também será removido das ligas de outras pessoas. Resultados históricos poderão permanecer sem vínculo com seu perfil.</p>
+                    <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200">Excluir a conta não cancela uma assinatura ativa da App Store ou Google Play. Cancele-a na loja do aparelho para evitar novas cobranças.</p>
+                  </div>
+                ) : (
+                  <div className="mt-4 text-left">
+                    <p className="text-[11px] font-semibold leading-relaxed text-slate-300">Digite <strong className="text-white">EXCLUIR</strong> para confirmar. Não será possível recuperar a conta ou os dados apagados.</p>
+                    <input autoFocus value={accountDeleteConfirmation} onChange={event => setAccountDeleteConfirmation(event.target.value.toUpperCase())} disabled={isDeletingAccount} placeholder="EXCLUIR" className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-sm font-black uppercase tracking-[.25em] text-white outline-none focus:border-red-400" />
+                  </div>
+                )}
+
+                {accountDeleteError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-[10px] font-bold leading-relaxed text-red-200">{accountDeleteError}</p>}
+
+                <div className="mt-7 grid grid-cols-2 gap-3">
+                  <button type="button" disabled={isDeletingAccount} onClick={() => {
+                    if (accountDeleteStep === 2) {
+                      setAccountDeleteStep(1);
+                      setAccountDeleteConfirmation('');
+                      setAccountDeleteError(null);
+                    } else {
+                      setAccountDeleteStep(0);
+                    }
+                  }} className="rounded-full border border-white/15 py-4 text-[9px] font-black uppercase tracking-widest text-slate-300 disabled:opacity-50">{accountDeleteStep === 1 ? 'Cancelar' : 'Voltar'}</button>
+                  <button type="button" disabled={isDeletingAccount || (accountDeleteStep === 2 && accountDeleteConfirmation.trim() !== 'EXCLUIR')} onClick={() => accountDeleteStep === 1 ? setAccountDeleteStep(2) : handleDeleteAccount()} className="flex items-center justify-center gap-2 rounded-full bg-red-500 py-4 text-[9px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 disabled:opacity-40">
+                    {isDeletingAccount ? <RefreshCw size={14} className="animate-spin" /> : null}
+                    {accountDeleteStep === 1 ? 'Continuar' : isDeletingAccount ? 'Excluindo' : 'Excluir conta'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
 

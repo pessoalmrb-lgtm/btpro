@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { getFirestore, enableIndexedDbPersistence, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocFromServer, getDocs, or, writeBatch, runTransaction } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // As variáveis NEXT_PUBLIC_ são seguras para o browser — não contêm segredos.
 // Os valores reais ficam em .env.local (não commitado no git).
@@ -48,6 +49,12 @@ const getFirebaseAuth = () => {
 export const auth    = typeof window !== 'undefined' ? getFirebaseAuth()                                      : null as any;
 export const db      = typeof window !== 'undefined' ? getFirestore(getFirebaseApp(), firestoreDatabaseId)   : null as any;
 export const storage = typeof window !== 'undefined' ? getStorage(getFirebaseApp())                          : null as any;
+export const functions = typeof window !== 'undefined' ? getFunctions(getFirebaseApp(), 'us-central1')       : null as any;
+
+export async function deleteCurrentAccount(): Promise<void> {
+  const deleteAccount = httpsCallable(functions, 'deleteAccount');
+  await deleteAccount({ confirmation: 'EXCLUIR' });
+}
 
 // ─── Cache offline ───────────────────────────────────────────────────────────
 if (typeof window !== 'undefined') {
