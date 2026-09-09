@@ -63,7 +63,7 @@ service cloud.firestore {
 
     function isValidRanking(data) {
       let req = ['id', 'name', 'ownerId', 'adminIds', 'pointsConfig', 'createdAt'];
-      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 20) &&
+      return data.keys().hasAll(req) && (data.keys().size() >= 6 && data.keys().size() <= 24) &&
              data.id is string && data.id.size() <= 100 &&
              data.name is string && data.name.size() <= 200 &&
              data.ownerId is string &&
@@ -74,7 +74,7 @@ service cloud.firestore {
 
     function isValidTournament(data) {
       let req = ['id', 'name', 'uid', 'players', 'matches', 'currentRound', 'totalRounds', 'tables', 'format', 'matchFormat', 'registrationType', 'isFinished', 'createdAt'];
-      return data.keys().hasAll(req) && (data.keys().size() >= 13 && data.keys().size() <= 30) &&
+      return data.keys().hasAll(req) && (data.keys().size() >= 13 && data.keys().size() <= 35) &&
              data.id is string && data.id.size() <= 100 &&
              data.name is string && data.name.size() <= 200 &&
              data.uid is string &&
@@ -139,7 +139,8 @@ service cloud.firestore {
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly([
             'name', 'description', 'arenaName', 'adminIds', 'logoUrl', 'coverUrl',
-            'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address'
+            'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address',
+            'currentSeason', 'lastRankingResetAt', 'lastRankingResetBy'
           ])
         )
       );
@@ -149,6 +150,16 @@ service cloud.firestore {
       match /players/{playerId} {
         allow read: if isSignedIn();
         allow write: if isRankingAdmin(rankingId);
+      }
+
+      match /seasons/{seasonId} {
+        allow read: if isSignedIn();
+        allow create: if isRankingAdmin(rankingId) &&
+          incoming().number is int && incoming().number > 0 &&
+          isNum(incoming().archivedAt) &&
+          incoming().archivedBy == request.auth.uid &&
+          incoming().standings is list && incoming().standings.size() <= 200;
+        allow update, delete: if false;
       }
 
       match /pendingRequests/{requestId} {
@@ -191,7 +202,7 @@ service cloud.firestore {
             'format', 'matchFormat', 'registrationType', 'rankingCriteria', 'isFinished', 'isHidden',
             'rankingId', 'championsPhotoUrl', 'finalResults', 'matches_group_stage',
             'matches_knockout_stage', 'teamsPerGroup', 'playoffRounds', 'athleteCount',
-            'accessCode'
+            'accessCode', 'groups', 'hasEverFinished'
           ])
         )
       );

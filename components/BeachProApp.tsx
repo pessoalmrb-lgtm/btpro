@@ -47,6 +47,7 @@ import {
   Share2
 } from 'lucide-react';
 import Image from 'next/image';
+import { Capacitor } from '@capacitor/core';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
@@ -80,6 +81,24 @@ const compareGroupIds = (left?: string, right?: string) =>
 
 const compareMatchesForDisplay = (left: Match, right: Match) =>
   left.table - right.table || compareGroupIds(left.groupId, right.groupId) || left.id.localeCompare(right.id);
+
+const editableMatchFormats: { id: MatchFormat; label: string }[] = [
+  { id: '5_GAMES_MAX', label: 'Até 5 games' },
+  { id: '6_GAMES_MAX', label: 'Até 6 games' },
+  { id: '6_GAMES_TIEBREAK', label: '6 games + tie-break em 6 × 6' },
+  { id: '8_GAMES_MAX', label: 'Até 8 games' },
+  { id: 'SUM_5_GAMES', label: 'Soma de 5 games' },
+  { id: 'SUM_7_GAMES', label: 'Soma de 7 games' },
+  { id: 'SUM_9_GAMES', label: 'Soma de 9 games' },
+];
+
+const editableRankingCriteria: { id: RankingCriterion; label: string }[] = [
+  { id: 'WINS', label: 'Vitórias' },
+  { id: 'GAME_BALANCE', label: 'Saldo de games' },
+  { id: 'HEAD_TO_HEAD', label: 'Confronto direto' },
+  { id: 'GAMES_WON', label: 'Games pró' },
+  { id: 'SET_BALANCE', label: 'Saldo de sets' },
+];
 
 export default function BeachProApp() {
 
@@ -129,6 +148,12 @@ export default function BeachProApp() {
   const [showLimitPopup, setShowLimitPopup] = useState(false);
   const [showFinishedLimitPopup, setShowFinishedLimitPopup] = useState(false);
   const [showSharePopup, setShowSharePopup] = useState(false);
+  const [showTournamentEditor, setShowTournamentEditor] = useState(false);
+  const [tournamentEditError, setTournamentEditError] = useState<string | null>(null);
+  const [tournamentEditPlayers, setTournamentEditPlayers] = useState<Player[]>([]);
+  const [tournamentEditMatchFormat, setTournamentEditMatchFormat] = useState<MatchFormat>('6_GAMES_TIEBREAK');
+  const [tournamentEditCriteria, setTournamentEditCriteria] = useState<RankingCriterion[]>([]);
+  const [isSavingTournamentEdit, setIsSavingTournamentEdit] = useState(false);
   const [viewedTournamentIds, setViewedTournamentIds] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
     try { return new Set(JSON.parse(localStorage.getItem('btpro_viewed_tournaments') || '[]')); } catch { return new Set(); }
@@ -142,6 +167,9 @@ export default function BeachProApp() {
   const [leagueToExit, setLeagueToExit] = useState<string | null>(null);
   const [leagueDeleteStep, setLeagueDeleteStep] = useState<1|2>(1);
   const [leagueExitStep, setLeagueExitStep] = useState<1|2>(1);
+  const [leagueResetStep, setLeagueResetStep] = useState<0|1|2>(0);
+  const [isResettingLeague, setIsResettingLeague] = useState(false);
+  const [leagueSeasons, setLeagueSeasons] = useState<any[]>([]);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const handleRankingPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -776,6 +804,15 @@ export default function BeachProApp() {
   // --- Actions ---
 
   useEffect(() => {
+    if (!activeRankingId || rankingTab !== 'CONFIG') return;
+    getDocs(collection(db, `rankings/${activeRankingId}/seasons`))
+      .then(snapshot => setLeagueSeasons(snapshot.docs
+        .map(season => ({ id: season.id, ...season.data() }))
+        .sort((a: any, b: any) => (b.archivedAt || 0) - (a.archivedAt || 0))))
+      .catch(err => console.warn('Não foi possível carregar temporadas arquivadas:', err));
+  }, [activeRankingId, rankingTab]);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step, activeTournament?.currentRound]);
 
@@ -936,6 +973,37 @@ export default function BeachProApp() {
         // usuário cancelou, ignorar
       } else {
         setAuthError(`Erro: ${error.message || error.code || 'Tente novamente.'}`);
+      }
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    if (Capacitor.getPlatform() !== 'ios') return;
+    setAuthError(null);
+    setIsAuthLoading(true);
+    try {
+      const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in');
+      const result = await AppleSignIn.signIn({
+        scopes: [SignInScope.Email, SignInScope.FullName],
+      });
+      if (!result.idToken) throw new Error('A Apple não retornou um token de acesso.');
+
+      const { OAuthProvider, signInWithCredential } = await import('firebase/auth');
+      const provider = new OAuthProvider('apple.com');
+      const credential = provider.credential({ idToken: result.idToken });
+      const signedIn = await signInWithCredential(auth, credential);
+      const appleName = [result.givenName, result.familyName].filter(Boolean).join(' ').trim();
+      if (appleName && !signedIn.user.displayName) {
+        await updateProfile(signedIn.user, { displayName: appleName });
+      }
+    } catch (err) {
+      const appleError = err as { code?: string; message?: string };
+      const cancelled = appleError.code === 'SIGN_IN_CANCELED' || appleError.message?.toLowerCase().includes('cancel');
+      if (!cancelled) {
+        console.error('Apple login error:', appleError);
+        setAuthError('Não foi possível entrar com a Apple. Verifique a configuração do Apple ID e tente novamente.');
       }
     } finally {
       setIsAuthLoading(false);
@@ -1522,6 +1590,7 @@ export default function BeachProApp() {
             registrationType,
             rankingCriteria,
             isFinished: false,
+            hasEverFinished: false,
             createdAt: Date.now(),
             accessCode: await generateUniqueTournamentCode(),
             rankingId: pendingRankingId || undefined
@@ -1582,6 +1651,7 @@ export default function BeachProApp() {
             registrationType,
             rankingCriteria,
             isFinished: false,
+            hasEverFinished: false,
             createdAt: Date.now(),
             accessCode: await generateUniqueTournamentCode(),
             rankingId: pendingRankingId || undefined
@@ -1623,6 +1693,7 @@ export default function BeachProApp() {
         registrationType,
         rankingCriteria,
         isFinished: false,
+        hasEverFinished: false,
         createdAt: Date.now(),
         accessCode: await generateUniqueTournamentCode(),
         rankingId: pendingRankingId || undefined
@@ -1797,6 +1868,7 @@ export default function BeachProApp() {
       const tournamentRef = doc(db, 'tournaments', activeTournament.id);
       batch.update(tournamentRef, {
         isFinished:   true,
+        hasEverFinished: true,
         finalResults: finalResults.length > 0 ? finalResults : null,
       });
 
@@ -2010,6 +2082,140 @@ export default function BeachProApp() {
       console.error("Delete ranking error:", err);
       handleFirestoreError(err, OperationType.DELETE, `rankings/${rankingId}`);
       setError("Erro ao excluir liga.");
+    }
+  };
+
+  const resetLeagueRanking = async () => {
+    if (!activeRanking || !user || isResettingLeague) return;
+    setIsResettingLeague(true);
+    try {
+      const rankingRef = doc(db, 'rankings', activeRanking.id);
+      const latestRanking = await getDoc(rankingRef);
+      if (!latestRanking.exists()) throw new Error('Liga não encontrada.');
+      const rankingData = latestRanking.data() as Ranking;
+      const canReset = rankingData.ownerId === user.uid || rankingData.adminIds?.includes(user.uid);
+      if (!canReset) throw new Error('Somente administradores podem zerar o ranking.');
+
+      const playerSnapshot = await getDocs(collection(db, `rankings/${activeRanking.id}/players`));
+      const seasonNumber = rankingData.currentSeason || 1;
+      const resetAt = Date.now();
+      const seasonId = `season-${seasonNumber}-${resetAt}`;
+      const seasonData = cleanData({
+        number: seasonNumber,
+        archivedAt: resetAt,
+        archivedBy: user.uid,
+        leagueName: rankingData.name,
+        standings: playerSnapshot.docs.map(playerDoc => {
+          const stats = playerDoc.data() as PlayerStats;
+          return cleanData({
+            id: playerDoc.id,
+            name: stats.name,
+            photo: stats.photo,
+            userTag: stats.userTag,
+            totalPoints: stats.totalPoints || 0,
+            victories: stats.victories || 0,
+            pneus: stats.pneus || 0,
+            participations: stats.participations || 0,
+          });
+        }),
+      });
+      const batch = writeBatch(db);
+      batch.set(doc(db, `rankings/${activeRanking.id}/seasons`, seasonId), seasonData);
+      playerSnapshot.docs.forEach(playerDoc => batch.delete(playerDoc.ref));
+      batch.update(rankingRef, {
+        currentSeason: seasonNumber + 1,
+        lastRankingResetAt: resetAt,
+        lastRankingResetBy: user.uid,
+      });
+      await batch.commit();
+      setLeagueSeasons(previous => [{ id: seasonId, ...seasonData }, ...previous]);
+      setLeagueResetStep(0);
+      setSnackMessage(`Ranking zerado. A etapa ${seasonNumber} foi arquivada.`);
+      setTimeout(() => setSnackMessage(null), 4000);
+    } catch (err) {
+      console.error('Reset league ranking error:', err);
+      setError(err instanceof Error ? err.message : 'Não foi possível zerar o ranking.');
+    } finally {
+      setIsResettingLeague(false);
+    }
+  };
+
+  const openTournamentEditor = () => {
+    if (!activeTournament || !user) return;
+    const ranking = activeTournament.rankingId ? rankings.find(item => item.id === activeTournament.rankingId) : null;
+    const canEdit = activeTournament.uid === user.uid || !!ranking?.adminIds?.includes(user.uid);
+    if (!canEdit) return;
+    const blocked = activeTournament.isFinished || activeTournament.hasEverFinished || activeTournament.matches.some(match => match.isCompleted);
+    setTournamentEditError(blocked
+      ? 'Não é possível editar este torneio porque ele já possui resultados confirmados. Para liberar a edição antes da finalização, use “Editar resultado” nas partidas confirmadas.'
+      : null);
+    setTournamentEditPlayers(activeTournament.players.map(player => ({ ...player, memberIds: player.memberIds ? [...player.memberIds] : undefined })));
+    setTournamentEditMatchFormat(activeTournament.matchFormat);
+    setTournamentEditCriteria([...(activeTournament.rankingCriteria || [])]);
+    setShowTournamentEditor(true);
+  };
+
+  const saveTournamentSetup = async () => {
+    if (!activeTournament || !user || tournamentEditError || isSavingTournamentEdit) return;
+    if (tournamentEditPlayers.some(player => !player.name.trim())) {
+      setTournamentEditError('Preencha o nome de todos os atletas e duplas.');
+      return;
+    }
+    const rankedIds = tournamentEditPlayers.flatMap(player => player.memberIds?.length ? player.memberIds : [player.id]);
+    if (activeTournament.rankingId && new Set(rankedIds).size !== rankedIds.length) {
+      setTournamentEditError('O mesmo atleta não pode ocupar duas vagas no torneio.');
+      return;
+    }
+
+    setIsSavingTournamentEdit(true);
+    try {
+      const tournamentRef = doc(db, 'tournaments', activeTournament.id);
+      await runTransaction(db, async transaction => {
+        const latestSnapshot = await transaction.get(tournamentRef);
+        if (!latestSnapshot.exists()) throw new Error('Torneio não encontrado.');
+        const latest = latestSnapshot.data() as TournamentState;
+        if (latest.isFinished || latest.hasEverFinished || latest.matches.some(match => match.isCompleted)) {
+          throw new Error('O torneio recebeu um resultado enquanto estava sendo editado. Recarregue a tela.');
+        }
+
+        const idMap = new Map<string, string>();
+        latest.players.forEach((player, index) => idMap.set(player.id, tournamentEditPlayers[index]?.id || player.id));
+        const remapMatch = (match: Match): Match => cleanData({
+          ...match,
+          player1Id: idMap.get(match.player1Id) || match.player1Id,
+          player1PartnerId: match.player1PartnerId ? (idMap.get(match.player1PartnerId) || match.player1PartnerId) : undefined,
+          player2Id: idMap.get(match.player2Id) || match.player2Id,
+          player2PartnerId: match.player2PartnerId ? (idMap.get(match.player2PartnerId) || match.player2PartnerId) : undefined,
+          restingPlayerIds: match.restingPlayerIds?.map(id => idMap.get(id) || id),
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          winnerId: undefined,
+          isCompleted: false,
+        });
+        const updatedMatches = latest.matches.map(remapMatch);
+        const playerByOldId = new Map(latest.players.map((player, index) => [player.id, tournamentEditPlayers[index] || player]));
+        const updatedGroups = latest.groups?.map(group => ({
+          ...group,
+          teams: group.teams.map(team => playerByOldId.get(team.id) || team),
+        }));
+
+        transaction.update(tournamentRef, cleanData({
+          players: tournamentEditPlayers,
+          groups: updatedGroups,
+          matches: updatedMatches,
+          matches_group_stage: updatedMatches.filter(match => match.round < 100),
+          matches_knockout_stage: updatedMatches.filter(match => match.round >= 100),
+          matchFormat: tournamentEditMatchFormat,
+          rankingCriteria: tournamentEditCriteria,
+        }));
+      });
+      setShowTournamentEditor(false);
+      setSnackMessage('Torneio atualizado sem alterar as duplas ou rodadas.');
+      setTimeout(() => setSnackMessage(null), 4000);
+    } catch (err) {
+      setTournamentEditError(err instanceof Error ? err.message : 'Não foi possível salvar as alterações.');
+    } finally {
+      setIsSavingTournamentEdit(false);
     }
   };
 
@@ -2608,7 +2814,7 @@ export default function BeachProApp() {
                   <div className="w-full bg-surface-container-low p-2 rounded-[2rem] shadow-xl space-y-4">
                     {/* Segmented Control (Tabs) */}
                     <div className="grid grid-cols-2 bg-surface-container gap-1 p-1 rounded-full">
-                      <button 
+                      <button
                         onClick={() => setAuthMode('LOGIN')}
                         className={cn(
                           "py-4 px-6 rounded-full text-[10px] font-black font-display transition-all duration-200 uppercase tracking-widest",
@@ -2745,6 +2951,20 @@ export default function BeachProApp() {
                         </svg>
                         <span>ACESSO COM GOOGLE</span>
                       </button>
+
+                      {Capacitor.getPlatform() === 'ios' && (
+                        <button
+                          type="button"
+                          onClick={handleAppleLogin}
+                          disabled={isAuthLoading}
+                          className="w-full py-5 bg-black text-white rounded-full font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                          <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M17.05 12.54c-.03-3.16 2.58-4.7 2.7-4.77-1.48-2.16-3.78-2.45-4.59-2.48-1.93-.2-3.81 1.16-4.79 1.16-1 0-2.51-1.14-4.14-1.11-2.1.03-4.07 1.25-5.15 3.14-2.22 3.84-.56 9.49 1.56 12.59 1.06 1.52 2.29 3.21 3.92 3.15 1.59-.07 2.18-1.01 4.1-1.01 1.9 0 2.46 1.01 4.12.97 1.71-.03 2.79-1.53 3.81-3.07 1.22-1.74 1.7-3.45 1.72-3.54-.04-.01-3.23-1.23-3.26-5.03ZM13.9 3.24A5.45 5.45 0 0 0 15.15-.68a5.54 5.54 0 0 0-3.58 1.86 5.2 5.2 0 0 0-1.28 3.77c1.34.1 2.7-.68 3.61-1.71Z" />
+                          </svg>
+                          <span>CONTINUAR COM A APPLE</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -4463,6 +4683,33 @@ O play na palma da mão! 🏆`;
                       </div>
                     )}
 
+                    {(activeRanking.ownerId === user?.uid || activeRanking.adminIds.includes(user?.uid || '')) && (
+                      <div className="rounded-[2.5rem] border border-amber-400/35 bg-amber-500/5 p-7 shadow-xl">
+                        <div className="mb-4 flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300"><RefreshCw size={19} /></div>
+                          <div>
+                            <h3 className="text-xs font-black uppercase italic text-white">Nova etapa da liga</h3>
+                            <p className="text-[8px] font-black uppercase tracking-widest text-amber-200/60">Temporada atual: {activeRanking.currentSeason || 1}</p>
+                          </div>
+                        </div>
+                        <p className="mb-5 text-[10px] font-semibold leading-relaxed text-slate-300">Arquiva a classificação atual e começa uma nova etapa com todos os atletas zerados.</p>
+                        <button type="button" onClick={() => setLeagueResetStep(1)} className="w-full rounded-2xl border border-amber-400/50 bg-amber-400/10 py-4 text-[9px] font-black uppercase tracking-widest text-amber-200 transition-all active:scale-95">Zerar ranking e iniciar nova etapa</button>
+                        {leagueSeasons.length > 0 && (
+                          <div className="mt-5 border-t border-white/10 pt-4">
+                            <p className="mb-3 text-[8px] font-black uppercase tracking-widest text-slate-400">Etapas arquivadas</p>
+                            <div className="space-y-2">
+                              {leagueSeasons.map((season: any) => (
+                                <div key={season.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/25 px-4 py-3">
+                                  <span className="text-[10px] font-black text-white">Etapa {season.number}</span>
+                                  <span className="text-[8px] font-bold text-slate-400">{new Date(season.archivedAt).toLocaleDateString('pt-BR')} · {season.standings?.length || 0} atletas</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="bg-white rounded-[2.5rem] p-8 border-2 border-rose-100 shadow-xl shadow-rose-500/5">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500">
@@ -5447,6 +5694,7 @@ O play na palma da mão! 🏆`;
                         groupsMatchPlay,
                         playoffRounds: tournamentFormat === 'GROUPS_MATA_MATA' ? normalizePlayoffRounds(playoffRounds) : [],
                         isFinished: false,
+                        hasEverFinished: false,
                         createdAt: Date.now(),
                         accessCode: await generateUniqueTournamentCode(),
                         rankingId: pendingRankingId || undefined
@@ -5958,13 +6206,25 @@ O play na palma da mão! 🏆`;
                        </button>
                     </div>
 
-                    <button 
-                      onClick={() => setTournamentToDelete(activeTournament.id)}
-                      className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-400 bg-red-500/10 px-3 py-1.5 text-red-300 transition-all hover:bg-red-500 hover:text-white"
-                    >
-                      <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
-                      <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {(activeTournament.uid === user?.uid || (activeTournament.rankingId && rankings.find(item => item.id === activeTournament.rankingId)?.adminIds?.includes(user?.uid || ''))) && (
+                        <button
+                          type="button"
+                          onClick={openTournamentEditor}
+                          className="group flex items-center gap-1.5 rounded-full border border-sky-400/60 bg-sky-400/10 px-2.5 py-1.5 text-sky-300 transition-all hover:bg-sky-500 hover:text-white"
+                        >
+                          <Pencil size={11} />
+                          <span className="text-[7px] font-black uppercase tracking-wider">Editar torneio</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setTournamentToDelete(activeTournament.id)}
+                        className="group flex items-center gap-1.5 rounded-full border border-red-400 bg-red-500/10 px-2.5 py-1.5 text-red-300 transition-all hover:bg-red-500 hover:text-white"
+                      >
+                        <X size={10} className="bg-red-500 text-white rounded-full p-0.5" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Encerrar</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="relative z-10 flex flex-1 items-center gap-2 py-3 pl-1">
@@ -8809,6 +9069,105 @@ O play na palma da mão! 🏆`;
 
         {/* Suggestion Modal */}
         <AnimatePresence>
+          {leagueResetStep > 0 && activeRanking && (
+            <motion.div className="fixed inset-0 z-[900] flex items-center justify-center bg-black/75 p-5 backdrop-blur-md" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.div initial={{ scale: .94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm rounded-[2rem] border border-amber-400/30 bg-[#081d30] p-7 text-center shadow-2xl">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300"><AlertTriangle size={26} /></div>
+                <h3 className="text-xl font-black uppercase italic text-white">{leagueResetStep === 1 ? 'Zerar ranking da liga?' : 'Tem certeza?'}</h3>
+                <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-300">{leagueResetStep === 1 ? 'Ao continuar, todos os pontos atuais da liga serão perdidos.' : 'Todos os pontos serão perdidos e a classificação da liga ficará zerada. A etapa atual será arquivada.'}</p>
+                <div className="mt-7 grid grid-cols-2 gap-3">
+                  <button type="button" disabled={isResettingLeague} onClick={() => leagueResetStep === 1 ? setLeagueResetStep(0) : setLeagueResetStep(1)} className="rounded-full border border-white/15 py-4 text-[9px] font-black uppercase tracking-widest text-slate-300">{leagueResetStep === 1 ? 'Cancelar' : 'Voltar'}</button>
+                  <button type="button" disabled={isResettingLeague} onClick={() => leagueResetStep === 1 ? setLeagueResetStep(2) : resetLeagueRanking()} className="flex items-center justify-center gap-2 rounded-full bg-amber-400 py-4 text-[9px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50">{isResettingLeague ? <RefreshCw size={14} className="animate-spin" /> : null}{leagueResetStep === 1 ? 'Continuar' : 'Sim, zerar'}</button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {showTournamentEditor && activeTournament && (() => {
+            const tournamentLeague = activeTournament.rankingId ? rankings.find(item => item.id === activeTournament.rankingId) : null;
+            const updateTeamMemberName = (playerIndex: number, memberIndex: number, name: string) => {
+              setTournamentEditPlayers(current => current.map((player, index) => {
+                if (index !== playerIndex) return player;
+                const parts = player.name.split('/').map(part => part.trim());
+                while (parts.length < 2) parts.push('');
+                parts[memberIndex] = name.toUpperCase();
+                return { ...player, name: parts.join(' / ') };
+              }));
+            };
+            const replaceRankedMember = (playerIndex: number, memberIndex: number, athleteId: string) => {
+              const athlete = tournamentLeague?.leagueAthletes?.find(item => item.id === athleteId);
+              if (!athlete) return;
+              setTournamentEditPlayers(current => current.map((player, index) => {
+                if (index !== playerIndex) return player;
+                if (player.memberIds?.length) {
+                  const memberIds = [...player.memberIds];
+                  memberIds[memberIndex] = athlete.id;
+                  const names = player.name.split('/').map(part => part.trim());
+                  while (names.length < 2) names.push('');
+                  names[memberIndex] = athlete.name;
+                  return { ...player, memberIds, name: names.join(' / ') };
+                }
+                return { ...player, id: athlete.id, name: athlete.name };
+              }));
+            };
+            return (
+              <motion.div className="fixed inset-0 z-[850] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentEditor(false)}>
+                <motion.div initial={{ scale: .96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={event => event.stopPropagation()} className="max-h-[86dvh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-sky-400/25 bg-[#071c2e] p-6 shadow-2xl">
+                  <div className="mb-6 flex items-start justify-between gap-4">
+                    <div><p className="text-[8px] font-black uppercase tracking-[.22em] text-sky-400">Configuração</p><h3 className="text-xl font-black uppercase italic text-white">Editar torneio</h3></div>
+                    <button type="button" onClick={() => setShowTournamentEditor(false)} className="rounded-xl bg-white/5 p-2 text-slate-400"><X size={18} /></button>
+                  </div>
+
+                  {tournamentEditError ? (
+                    <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-5 text-center">
+                      <AlertTriangle className="mx-auto mb-3 text-amber-300" size={25} />
+                      <p className="text-xs font-bold leading-relaxed text-amber-100">{tournamentEditError}</p>
+                      <button type="button" onClick={() => setShowTournamentEditor(false)} className="mt-5 w-full rounded-full bg-white py-3 text-[9px] font-black uppercase tracking-widest text-slate-900">Entendi</button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <section>
+                        <h4 className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Atletas e duplas</h4>
+                        <div className="space-y-3">
+                          {tournamentEditPlayers.map((player, playerIndex) => {
+                            const isTeam = !!player.memberIds?.length || player.name.includes('/');
+                            const names = player.name.split('/').map(part => part.trim());
+                            return <div key={`edit-player-${playerIndex}`} className="rounded-2xl border border-white/10 bg-white/[.035] p-4">
+                              <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-sky-400">{isTeam ? `Dupla ${playerIndex + 1}` : `Atleta ${playerIndex + 1}`}</p>
+                              {isTeam ? [0, 1].map(memberIndex => tournamentLeague ? (
+                                <select key={memberIndex} value={player.memberIds?.[memberIndex] || ''} onChange={event => replaceRankedMember(playerIndex, memberIndex, event.target.value)} className="mb-2 w-full rounded-xl border border-white/10 bg-[#0b2942] p-3 text-sm font-bold text-white">
+                                  {tournamentLeague.leagueAthletes.map(athlete => <option key={athlete.id} value={athlete.id}>{athlete.name}{athlete.isManual ? ' (não pontua)' : ''}</option>)}
+                                </select>
+                              ) : (
+                                <input key={memberIndex} value={names[memberIndex] || ''} onChange={event => updateTeamMemberName(playerIndex, memberIndex, event.target.value)} className="mb-2 w-full rounded-xl border border-white/10 bg-[#0b2942] p-3 text-sm font-bold text-white" placeholder={`Atleta ${memberIndex + 1}`} />
+                              )) : tournamentLeague ? (
+                                <select value={player.id} onChange={event => replaceRankedMember(playerIndex, 0, event.target.value)} className="w-full rounded-xl border border-white/10 bg-[#0b2942] p-3 text-sm font-bold text-white">
+                                  {tournamentLeague.leagueAthletes.map(athlete => <option key={athlete.id} value={athlete.id}>{athlete.name}{athlete.isManual ? ' (não pontua)' : ''}</option>)}
+                                </select>
+                              ) : (
+                                <input value={player.name} onChange={event => setTournamentEditPlayers(current => current.map((item, index) => index === playerIndex ? { ...item, name: event.target.value.toUpperCase() } : item))} className="w-full rounded-xl border border-white/10 bg-[#0b2942] p-3 text-sm font-bold text-white" />
+                              )}
+                            </div>;
+                          })}
+                        </div>
+                      </section>
+
+                      <section><h4 className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Formato dos jogos</h4><select value={tournamentEditMatchFormat} onChange={event => setTournamentEditMatchFormat(event.target.value as MatchFormat)} className="w-full rounded-2xl border border-white/10 bg-[#0b2942] p-4 text-sm font-bold text-white">{editableMatchFormats.map(format => <option key={format.id} value={format.id}>{format.label}</option>)}</select></section>
+
+                      <section>
+                        <h4 className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Ordem dos critérios de desempate</h4>
+                        <div className="space-y-2">{tournamentEditCriteria.map((criterion, index) => <div key={criterion} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.035] p-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-[10px] font-black text-white">{index + 1}</span><span className="flex-1 text-xs font-bold text-white">{editableRankingCriteria.find(item => item.id === criterion)?.label || criterion}</span><button type="button" disabled={index === 0} onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronUp size={17} /></button><button type="button" disabled={index === tournamentEditCriteria.length - 1} onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronDown size={17} /></button></div>)}</div>
+                      </section>
+
+                      <p className="rounded-xl bg-sky-400/10 p-3 text-[9px] font-semibold leading-relaxed text-sky-200">Ao mudar o formato, placares ainda não confirmados serão zerados. Duplas, rodadas e quadras serão preservadas.</p>
+                      <button type="button" disabled={isSavingTournamentEdit} onClick={saveTournamentSetup} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50">{isSavingTournamentEdit && <RefreshCw size={15} className="animate-spin" />}Salvar alterações</button>
+                    </div>
+                  )}
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+
           {/* Share Result Popup */}
           <AnimatePresence>
             {showSharePopup && activeTournament && (() => {
@@ -8942,12 +9301,12 @@ O play na palma da mão! 🏆`;
               };
 
               return (
-                <div className="fixed inset-0 z-[500] flex items-end justify-center p-4 bg-black/70 backdrop-blur-md">
+                <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
                   <motion.div
-                    initial={{ y: 60, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 60, opacity: 0 }}
-                    className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl"
+                    initial={{ scale: .94, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: .94, opacity: 0 }}
+                    className="bg-white w-full max-w-sm max-h-[84dvh] overflow-y-auto rounded-[2.25rem] shadow-2xl"
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 pt-6 pb-4">

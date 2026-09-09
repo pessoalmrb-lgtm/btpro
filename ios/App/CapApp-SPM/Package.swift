@@ -16,6 +16,7 @@ let package = Package(
         .package(name: "CapacitorApp", path: "..\..\..\node_modules\@capacitor\app"),
         .package(name: "CapacitorFilesystem", path: "..\..\..\node_modules\@capacitor\filesystem"),
         .package(name: "CapacitorShare", path: "..\..\..\node_modules\@capacitor\share"),
+        .package(name: "CapawesomeCapacitorAppleSignIn", path: "..\..\..\node_modules\@capawesome\capacitor-apple-sign-in"),
         .package(name: "RevenuecatPurchasesCapacitor", path: "..\..\..\node_modules\@revenuecat\purchases-capacitor")
     ],
     targets: [
@@ -28,6 +29,7 @@ let package = Package(
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorFilesystem", package: "CapacitorFilesystem"),
                 .product(name: "CapacitorShare", package: "CapacitorShare"),
+                .product(name: "CapawesomeCapacitorAppleSignIn", package: "CapawesomeCapacitorAppleSignIn"),
                 .product(name: "RevenuecatPurchasesCapacitor", package: "RevenuecatPurchasesCapacitor")
             ]
         )

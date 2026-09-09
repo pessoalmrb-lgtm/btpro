@@ -89,6 +89,7 @@ export type TournamentState = {
   groupsMatchPlay?: 'INTRA' | 'INTER';
   playoffRounds?: PlayoffRound[];
   isFinished: boolean;
+  hasEverFinished?: boolean;
   isHidden?: boolean;
   createdAt: number;
   uid?: string;
@@ -163,6 +164,9 @@ export type Ranking = {
   athleteIds?: string[];
   leagueCode?: string;
   createdAt: number;
+  currentSeason?: number;
+  lastRankingResetAt?: number;
+  lastRankingResetBy?: string;
   playerStats?: Record<string, PlayerStats>;
 };
 
