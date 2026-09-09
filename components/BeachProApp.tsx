@@ -2523,7 +2523,7 @@ export default function BeachProApp() {
 
     return (
       <main className={cn(
-        "min-h-[100dvh] flex flex-col items-center overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+6rem)] transition-colors duration-500",
+        "app-safe-shell min-h-[100dvh] flex flex-col items-center overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+6rem)] transition-colors duration-500",
         bgColor,
         user && "authenticated-theme"
       )} data-app-step={step} data-authenticated={Boolean(user)}>

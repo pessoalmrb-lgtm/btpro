@@ -8,6 +8,10 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
     backgroundColor: '#0a1628',
   },
+  ios: {
+    contentInset: 'never',
+    backgroundColor: '#020b17',
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2500,

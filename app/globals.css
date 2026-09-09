@@ -49,9 +49,33 @@
 }
 
 @layer base {
+  html {
+    min-height: 100%;
+    background: #020b17;
+  }
+
   body {
     @apply font-sans bg-surface text-on-surface selection:bg-primary/30;
     min-height: -webkit-fill-available;
+    margin: 0;
+  }
+}
+
+/*
+ * Reserva a área física ocupada pela barra de status, notch e Dynamic Island.
+ * O fallback de 44px cobre WebViews iOS antigas que retornam o inset como zero;
+ * nos demais sistemas o espaçamento continua sendo o inset real (normalmente 0).
+ */
+.app-safe-shell {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--app-safe-top);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@supports (-webkit-touch-callout: none) {
+  .app-safe-shell {
+    --app-safe-top: max(env(safe-area-inset-top, 0px), 44px);
   }
 }
 
