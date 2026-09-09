@@ -109,6 +109,20 @@ service cloud.firestore {
       );
     }
 
+    // Uma única sessão ativa por conta. O documento usa o UID como chave e
+    // somente o próprio usuário pode consultar, assumir ou liberar a sessão.
+    match /userSessions/{userId} {
+      allow get: if isSignedIn() && userId == request.auth.uid;
+      allow list: if false;
+      allow create, update: if isSignedIn() && userId == request.auth.uid &&
+        incoming().uid == request.auth.uid &&
+        incoming().deviceId is string && incoming().deviceId.size() <= 128 &&
+        incoming().sessionId is string && incoming().sessionId.size() <= 128 &&
+        incoming().deviceLabel is string && incoming().deviceLabel.size() <= 80 &&
+        isNum(incoming().updatedAt);
+      allow delete: if isSignedIn() && userId == request.auth.uid;
+    }
+
     // Contador permanente da franquia gratuita. Só pode aumentar, nunca ser
     // reduzido, e fica limitado aos dois torneios gratuitos.
     match /tournamentUsage/{userId} {

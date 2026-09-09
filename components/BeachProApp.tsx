@@ -116,6 +116,8 @@ export default function BeachProApp() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [pendingSessionTakeover, setPendingSessionTakeover] = useState<{ user: User; deviceLabel: string } | null>(null);
+  const sessionListenerRef = useRef<null | (() => void)>(null);
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   // Veredito do RevenueCat (fonte da verdade no app nativo).
@@ -431,6 +433,91 @@ export default function BeachProApp() {
   // --- Auth & Firestore Sync ---
   const [adminProfiles, setAdminProfiles] = useState<Record<string, any>>({});
 
+  const getOrCreateDeviceId = () => {
+    const storageKey = 'beachpro_device_id';
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored) return stored;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(storageKey, created);
+    return created;
+  };
+
+  const getDeviceLabel = () => {
+    const platform = Capacitor.getPlatform();
+    if (platform === 'ios') return 'iPhone ou iPad';
+    if (platform === 'android') return 'dispositivo Android';
+    return 'navegador';
+  };
+
+  const activateDeviceSession = async (authenticatedUser: User, forceTakeover = false) => {
+    const deviceId = getOrCreateDeviceId();
+    const localSessionKey = `beachpro_session_${authenticatedUser.uid}`;
+    const localSessionId = window.localStorage.getItem(localSessionKey);
+    const sessionRef = doc(db, 'userSessions', authenticatedUser.uid);
+    const sessionSnapshot = await getDoc(sessionRef);
+    const activeSession = sessionSnapshot.exists() ? sessionSnapshot.data() : null;
+    const isThisSession = !!activeSession &&
+      activeSession.deviceId === deviceId &&
+      activeSession.sessionId === localSessionId;
+
+    if (activeSession && !isThisSession && !forceTakeover) {
+      setPendingSessionTakeover({
+        user: authenticatedUser,
+        deviceLabel: typeof activeSession.deviceLabel === 'string' ? activeSession.deviceLabel : 'outro aparelho',
+      });
+      setUser(null);
+      setIsAuthReady(true);
+      return;
+    }
+
+    const sessionId = isThisSession && localSessionId ? localSessionId : crypto.randomUUID();
+    if (!isThisSession) {
+      await setDoc(sessionRef, {
+        uid: authenticatedUser.uid,
+        deviceId,
+        sessionId,
+        deviceLabel: getDeviceLabel(),
+        updatedAt: Date.now(),
+      });
+      window.localStorage.setItem(localSessionKey, sessionId);
+    }
+
+    sessionListenerRef.current?.();
+    sessionListenerRef.current = onSnapshot(sessionRef, snapshot => {
+      const session = snapshot.exists() ? snapshot.data() : null;
+      if (!session || session.sessionId !== sessionId || session.deviceId !== deviceId) {
+        sessionListenerRef.current?.();
+        sessionListenerRef.current = null;
+        window.localStorage.removeItem(localSessionKey);
+        setUser(null);
+        setUserProfile(null);
+        setAuthError('Sua conta foi acessada em outro aparelho. Por segurança, este dispositivo foi desconectado.');
+        void signOut(auth);
+      }
+    });
+
+    setPendingSessionTakeover(null);
+    setUser(authenticatedUser);
+    setIsAuthReady(true);
+  };
+
+  const releaseCurrentDeviceSession = async (uid: string) => {
+    const localSessionKey = `beachpro_session_${uid}`;
+    const localSessionId = window.localStorage.getItem(localSessionKey);
+    const sessionRef = doc(db, 'userSessions', uid);
+    try {
+      const snapshot = await getDoc(sessionRef);
+      if (snapshot.exists() && snapshot.data().sessionId === localSessionId) {
+        await deleteDoc(sessionRef);
+      }
+    } catch (error) {
+      console.warn('Não foi possível liberar a sessão do aparelho:', error);
+    }
+    window.localStorage.removeItem(localSessionKey);
+    sessionListenerRef.current?.();
+    sessionListenerRef.current = null;
+  };
+
   useEffect(() => {
     if (activeRankingId && rankings.length > 0) {
       const currentRanking = rankings.find(r => r.id === activeRankingId);
@@ -469,12 +556,25 @@ export default function BeachProApp() {
 
     const unsubscribe = onAuthStateChanged(
       auth,
-      (u) => {
+      async (u) => {
         window.clearTimeout(authFallbackTimer);
-        setUser(u);
-        setIsAuthReady(true);
         if (!u) {
+          sessionListenerRef.current?.();
+          sessionListenerRef.current = null;
+          setPendingSessionTakeover(null);
+          setUser(null);
+          setIsAuthReady(true);
           setStep('HOME');
+          return;
+        }
+        try {
+          await activateDeviceSession(u);
+        } catch (error) {
+          console.error('Falha ao validar a sessão do aparelho:', error);
+          setAuthError('Não foi possível validar este aparelho. Verifique sua conexão e tente novamente.');
+          setUser(null);
+          setIsAuthReady(true);
+          await signOut(auth);
         }
       },
       (error) => {
@@ -491,6 +591,7 @@ export default function BeachProApp() {
     return () => {
       window.clearTimeout(splashTimer);
       window.clearTimeout(authFallbackTimer);
+      sessionListenerRef.current?.();
       unsubscribe();
     };
   }, []);
@@ -984,15 +1085,24 @@ export default function BeachProApp() {
     setAuthError(null);
     setIsAuthLoading(true);
     try {
+      const nonceCharacters = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+      const randomValues = crypto.getRandomValues(new Uint8Array(32));
+      const rawNonce = Array.from(randomValues, value => nonceCharacters[value % nonceCharacters.length]).join('');
+      const nonceDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawNonce));
+      const hashedNonce = Array.from(new Uint8Array(nonceDigest))
+        .map(value => value.toString(16).padStart(2, '0'))
+        .join('');
+
       const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in');
       const result = await AppleSignIn.signIn({
         scopes: [SignInScope.Email, SignInScope.FullName],
+        nonce: hashedNonce,
       });
       if (!result.idToken) throw new Error('A Apple não retornou um token de acesso.');
 
       const { OAuthProvider, signInWithCredential } = await import('firebase/auth');
       const provider = new OAuthProvider('apple.com');
-      const credential = provider.credential({ idToken: result.idToken });
+      const credential = provider.credential({ idToken: result.idToken, rawNonce });
       const signedIn = await signInWithCredential(auth, credential);
       const appleName = [result.givenName, result.familyName].filter(Boolean).join(' ').trim();
       if (appleName && !signedIn.user.displayName) {
@@ -1003,7 +1113,8 @@ export default function BeachProApp() {
       const cancelled = appleError.code === 'SIGN_IN_CANCELED' || appleError.message?.toLowerCase().includes('cancel');
       if (!cancelled) {
         console.error('Apple login error:', appleError);
-        setAuthError('Não foi possível entrar com a Apple. Verifique a configuração do Apple ID e tente novamente.');
+        const diagnosticCode = appleError.code ? ` (${appleError.code})` : '';
+        setAuthError(`Não foi possível entrar com a Apple${diagnosticCode}. Tente novamente.`);
       }
     } finally {
       setIsAuthLoading(false);
@@ -2938,20 +3049,6 @@ export default function BeachProApp() {
                         <div className="h-[1px] flex-grow bg-surface-container-highest/50"></div>
                       </div>
 
-                      <button 
-                        type="button" 
-                        onClick={handleGoogleLogin} 
-                        className="w-full py-5 border-2 border-surface-container hover:bg-surface-container-low text-on-surface rounded-full font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95"
-                      >
-                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                        </svg>
-                        <span>ACESSO COM GOOGLE</span>
-                      </button>
-
                       {Capacitor.getPlatform() === 'ios' && (
                         <button
                           type="button"
@@ -2965,6 +3062,20 @@ export default function BeachProApp() {
                           <span>CONTINUAR COM A APPLE</span>
                         </button>
                       )}
+
+                      <button 
+                        type="button" 
+                        onClick={handleGoogleLogin} 
+                        className="w-full py-5 border-2 border-surface-container hover:bg-surface-container-low text-on-surface rounded-full font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95"
+                      >
+                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        <span>ACESSO COM GOOGLE</span>
+                      </button>
                     </div>
                   </div>
 
@@ -7616,6 +7727,7 @@ O play na palma da mão! 🏆`;
                   <div className="pt-4 flex justify-center">
                     <button 
                       onClick={async () => {
+                        if (user) await releaseCurrentDeviceSession(user.uid);
                         try {
                           // Limpa o token do Google para permitir troca de conta
                           const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
@@ -9173,7 +9285,6 @@ O play na palma da mão! 🏆`;
             {showSharePopup && activeTournament && (() => {
               const rkgs = calculateFinalRankings(activeTournament);
               const champion = rkgs[0];
-              const top3 = rkgs.slice(0, 3);
               if (!champion) return null;
 
               const generateAndShare = async () => {
@@ -9233,37 +9344,33 @@ O play na palma da mão! 🏆`;
                     ctx.fillText(text, px, py);
                   };
 
-                  const ligaNome = activeTournament.rankingId
-                    ? (rankings.find(r => r.id === activeTournament.rankingId)?.name || activeTournament.name)
-                    : activeTournament.name;
-
                   // Coordenadas reais 1080x1920 (sem escala — direto em pixels reais)
-                  const champPoints = activeTournament.finalResults?.find(r => r.placement === 1)?.points;
-                  const totalMatches = activeTournament.matches.filter(m => m.isCompleted).length;
-                  const totalPoints = activeTournament.matches.reduce((acc, m) => acc + (m.sets[0]?.player1 || 0) + (m.sets[0]?.player2 || 0), 0);
-                  const athleteCount = activeTournament.athleteCount || activeTournament.players.length;
-                  const date = new Date(activeTournament.createdAt).toLocaleDateString('pt-BR');
+                  const championPlayer = activeTournament.players.find(player => player.id === champion.id);
+                  const championIds = new Set([
+                    champion.id,
+                    ...(championPlayer?.memberIds || []),
+                  ]);
+                  const championMatches = activeTournament.matches.filter(match => {
+                    if (!match.isCompleted) return false;
+                    return [match.player1Id, match.player1PartnerId, match.player2Id, match.player2PartnerId]
+                      .some(playerId => !!playerId && championIds.has(playerId));
+                  });
+                  const championGames = championMatches.reduce((total, match) => {
+                    const scores = match.sets.length > 0 ? match.sets : [match.currentSet];
+                    return total + scores.reduce(
+                      (matchTotal, score) => matchTotal + (score?.player1 || 0) + (score?.player2 || 0),
+                      0
+                    );
+                  }, 0);
 
-                  // ① Liga
-                  drawText(ligaNome.toUpperCase(), 42, 297, 42, '#ffffff', 'left', 900);
-                  // ② Campeão
-                  drawText(champion.name.toUpperCase(), 531, 1167, 72, '#ffffff', 'center', 900);
-                  // ③ Vitórias
-                  drawText(String(champion.wins), 426, 1317, 58, '#bef264', 'center');
-                  // ④ Pts campeão
-                  drawText(champPoints != null ? String(champPoints) : String(champion.gamesWon), 636, 1317, 58, '#bef264', 'center');
-                  // ⑤ Jogos
-                  drawText(String(totalMatches), 168, 1545, 50, '#ffffff', 'center');
-                  // ⑥ Pontos totais
-                  drawText(String(totalPoints), 411, 1545, 50, '#ffffff', 'center');
-                  // ⑦ Atletas
-                  drawText(String(athleteCount), 636, 1542, 50, '#ffffff', 'center');
-                  // ⑧ Data
-                  drawText(date, 879, 1545, 44, '#ffffff', 'center');
-                  // ⑨ 2º lugar
-                  if (top3[1]) drawText(top3[1].name.toUpperCase(), 357, 1782, 38, '#ffffff', 'center', 500);
-                  // ⑩ 3º lugar
-                  if (top3[2]) drawText(top3[2].name.toUpperCase(), 843, 1782, 38, '#ffffff', 'center', 500);
+                  // Nome do torneio no campo central superior.
+                  drawText('TORNEIO', 540, 842, 26, '#dfff00', 'center');
+                  drawText(activeTournament.name.toUpperCase(), 540, 920, 60, '#ffffff', 'center', 920);
+                  // Nome da dupla ou atleta campeão, imediatamente acima da medalha.
+                  drawText(champion.name.toUpperCase(), 540, 1250, 68, '#ffffff', 'center', 900);
+                  // Estatísticas exclusivas do campeão.
+                  drawText(String(championMatches.length), 310, 1750, 76, '#dfff00', 'center');
+                  drawText(String(championGames), 770, 1750, 76, '#dfff00', 'center');
 
                   // 4. Share via Capacitor (Android nativo)
                   const base64 = canvas.toDataURL('image/png').split(',')[1];
@@ -9384,6 +9491,65 @@ O play na palma da mão! 🏆`;
               userEmail={user.email || ''}
               userName={userProfile?.displayName || user.displayName || ''}
             />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {pendingSessionTakeover && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/75 p-5 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 12 }}
+                className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-[#071a2b] p-7 text-center shadow-2xl"
+              >
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300">
+                  <AlertTriangle size={28} />
+                </div>
+                <h2 className="font-display text-2xl font-black uppercase italic tracking-tight text-white">Conta já conectada</h2>
+                <p className="mt-3 text-[11px] font-bold leading-relaxed text-slate-300">
+                  Esta conta está ativa em {pendingSessionTakeover.deviceLabel}. Se continuar neste aparelho, a sessão anterior será desconectada automaticamente.
+                </p>
+                <div className="mt-7 space-y-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsAuthLoading(true);
+                      try {
+                        await activateDeviceSession(pendingSessionTakeover.user, true);
+                      } catch (error) {
+                        console.error('Falha ao transferir a sessão:', error);
+                        setAuthError('Não foi possível transferir a sessão para este aparelho. Tente novamente.');
+                        await signOut(auth);
+                      } finally {
+                        setIsAuthLoading(false);
+                      }
+                    }}
+                    disabled={isAuthLoading}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50"
+                  >
+                    {isAuthLoading && <RefreshCw size={15} className="animate-spin" />}
+                    Continuar neste aparelho
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setPendingSessionTakeover(null);
+                      await signOut(auth);
+                    }}
+                    disabled={isAuthLoading}
+                    className="w-full rounded-full border border-white/15 py-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                  >
+                    Cancelar acesso
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
     </div>
