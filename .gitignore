@@ -10,6 +10,7 @@ build
 .env.*.local
 
 android/.gradle
+.gradle-local
 android/app/build
 android/build
 android/.idea
