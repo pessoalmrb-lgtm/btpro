@@ -37,7 +37,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         )}>
           <Home size={20} className={activeStep === 'HOME' ? "fill-primary/10" : ""} />
         </div>
-        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Home</span>
+        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Início</span>
       </button>
       
       <button 

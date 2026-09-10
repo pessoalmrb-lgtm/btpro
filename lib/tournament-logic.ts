@@ -848,9 +848,7 @@ export function getTournamentScheduleIntegrityErrors(
     SUPER_8_INDIVIDUAL: { competitors: 8, matches: 14, rounds: 7, individual: true },
     SUPER_12_INDIVIDUAL: { competitors: 12, matches: 33, rounds: 11, individual: true },
     SUPER_16_INDIVIDUAL: { competitors: 16, matches: 60, rounds: 15, individual: true },
-    SUPER_3_FIXED: { competitors: 3, matches: 3, rounds: 3, individual: false },
     SUPER_4_FIXED: { competitors: 4, matches: 6, rounds: 3, individual: false },
-    SUPER_5_FIXED: { competitors: 5, matches: 10, rounds: 5, individual: false },
     SUPER_6_FIXED: { competitors: 6, matches: 15, rounds: 5, individual: false },
     SUPER_8_FIXED: { competitors: 8, matches: 28, rounds: 7, individual: false },
     SUPER_10_FIXED: { competitors: 10, matches: 45, rounds: 9, individual: false },
@@ -871,6 +869,14 @@ export function getTournamentScheduleIntegrityErrors(
     if (!shape.individual && hasPartners) errors.push(`${format}: partida de duplas fixas contém parceiros individuais.`);
   });
   return [...new Set(errors)];
+}
+
+export function isTournamentSetupLocked(
+  tournament: Pick<TournamentState, 'matches' | 'isFinished' | 'hasEverFinished'>,
+): boolean {
+  if (tournament.isFinished || tournament.hasEverFinished) return true;
+  const firstRoundMatches = tournament.matches.filter(match => match.round === 1);
+  return firstRoundMatches.length > 0 && firstRoundMatches.every(match => match.isCompleted);
 }
 
 export function validateSetScore(s1: number, s2: number, format: MatchFormat): { isValid: boolean; error?: string } {

@@ -49,7 +49,7 @@ import {
 import Image from 'next/image';
 import { Capacitor } from '@capacitor/core';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
-import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, getScheduleIntegrityErrors, getTournamentScheduleIntegrityErrors, FinalRankingResult } from '../lib/tournament-logic';
+import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, getScheduleIntegrityErrors, getTournamentScheduleIntegrityErrors, isTournamentSetupLocked, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
 import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage, deleteCurrentAccount } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
@@ -99,6 +99,17 @@ const editableRankingCriteria: { id: RankingCriterion; label: string }[] = [
   { id: 'GAMES_WON', label: 'Games pró' },
   { id: 'SET_BALANCE', label: 'Saldo de sets' },
 ];
+
+const createAppleNonce = async () => {
+  const nonceCharacters = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+  const randomValues = crypto.getRandomValues(new Uint8Array(32));
+  const rawNonce = Array.from(randomValues, value => nonceCharacters[value % nonceCharacters.length]).join('');
+  const nonceDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawNonce));
+  const hashedNonce = Array.from(new Uint8Array(nonceDigest))
+    .map(value => value.toString(16).padStart(2, '0'))
+    .join('');
+  return { rawNonce, hashedNonce };
+};
 
 export default function BeachProApp() {
 
@@ -155,6 +166,7 @@ export default function BeachProApp() {
   const [tournamentEditPlayers, setTournamentEditPlayers] = useState<Player[]>([]);
   const [tournamentEditMatchFormat, setTournamentEditMatchFormat] = useState<MatchFormat>('6_GAMES_TIEBREAK');
   const [tournamentEditCriteria, setTournamentEditCriteria] = useState<RankingCriterion[]>([]);
+  const [showTournamentCriteriaPicker, setShowTournamentCriteriaPicker] = useState(false);
   const [isSavingTournamentEdit, setIsSavingTournamentEdit] = useState(false);
   const [viewedTournamentIds, setViewedTournamentIds] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -309,6 +321,22 @@ export default function BeachProApp() {
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId) ||
     (followedTournament?.id === activeTournamentId ? followedTournament : undefined);
+
+  // O menu inferior vive em um portal no <body> para permanecer fixo durante a
+  // rolagem. Ocultá-lo enquanto há uma camada modal aberta evita que o portal
+  // atravesse contextos de empilhamento e apareça sobre qualquer pop-up.
+  const hasBlockingOverlay = Boolean(
+    showUpgradeModal || showMatchHistory || courtWarning || showLimitPopup ||
+    showFinishedLimitPopup || showSharePopup || showTournamentEditor ||
+    showTournamentCriteriaPicker || showFinishConfirmPopup || tournamentToDelete ||
+    leagueToDelete || leagueToExit || leagueResetStep || coverCropImage ||
+    showRoundSelector || showTournamentInfo || showFollowTournament ||
+    showReauthModal || accountDeleteStep || showAddressPopup || selectedAthleteStats ||
+    athleteToRemove || showDuplicatePopup || showManualAthletePopup ||
+    showLowCourtsPopup || showSupportPopup || showSuggestionModal ||
+    showPendingPopup || showFindLeagueModal || showHistoryDetail ||
+    pendingSessionTakeover
+  );
 
   // Torneios que o usuário pode gerenciar (próprios ou de ligas onde é admin)
   const manageableTournaments = tournaments.filter(t => {
@@ -1110,13 +1138,7 @@ export default function BeachProApp() {
     setAuthError(null);
     setIsAuthLoading(true);
     try {
-      const nonceCharacters = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
-      const randomValues = crypto.getRandomValues(new Uint8Array(32));
-      const rawNonce = Array.from(randomValues, value => nonceCharacters[value % nonceCharacters.length]).join('');
-      const nonceDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawNonce));
-      const hashedNonce = Array.from(new Uint8Array(nonceDigest))
-        .map(value => value.toString(16).padStart(2, '0'))
-        .join('');
+      const { rawNonce, hashedNonce } = await createAppleNonce();
 
       const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in');
       const result = await AppleSignIn.signIn({
@@ -1155,9 +1177,13 @@ export default function BeachProApp() {
       const usesApple = user.providerData.some(provider => provider.providerId === 'apple.com');
       if (usesApple && Capacitor.getPlatform() === 'ios') {
         const { AppleSignIn } = await import('@capawesome/capacitor-apple-sign-in');
-        const appleResult = await AppleSignIn.signIn({ scopes: [] });
-        if (!appleResult.authorizationCode) throw new Error('APPLE_REVOCATION_FAILED');
-        const { revokeAccessToken } = await import('firebase/auth');
+        const { rawNonce, hashedNonce } = await createAppleNonce();
+        const appleResult = await AppleSignIn.signIn({ scopes: [], nonce: hashedNonce });
+        if (!appleResult.idToken || !appleResult.authorizationCode) throw new Error('APPLE_REAUTH_FAILED');
+        const { OAuthProvider, revokeAccessToken } = await import('firebase/auth');
+        const provider = new OAuthProvider('apple.com');
+        const credential = provider.credential({ idToken: appleResult.idToken, rawNonce });
+        await reauthenticateWithCredential(user, credential);
         await revokeAccessToken(auth, appleResult.authorizationCode);
       }
 
@@ -1180,8 +1206,8 @@ export default function BeachProApp() {
     } catch (error) {
       console.error('Falha ao excluir conta:', error);
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('APPLE_REVOCATION_FAILED') || message.toLowerCase().includes('apple')) {
-        setAccountDeleteError('Confirme novamente com a Apple para revogar o acesso e concluir a exclusão.');
+      if (message.includes('APPLE_REAUTH_FAILED') || message.toLowerCase().includes('apple')) {
+        setAccountDeleteError('Não foi possível confirmar sua identidade com a Apple. Tente novamente e conclua a confirmação exibida pelo iPhone.');
       } else if (message.includes('unauthenticated')) {
         setAccountDeleteError('Sua sessão expirou. Entre novamente e repita a exclusão.');
       } else {
@@ -1937,9 +1963,7 @@ export default function BeachProApp() {
     if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return 3;
     if (tournamentFormat === 'SUPER_16_INDIVIDUAL') return 4;
     if (tournamentFormat === 'REI_DA_QUADRA')       return 1;
-    if (tournamentFormat === 'SUPER_3_FIXED')       return 1;
     if (tournamentFormat === 'SUPER_4_FIXED')       return 2;
-    if (tournamentFormat === 'SUPER_5_FIXED')       return 2;
     if (tournamentFormat === 'SUPER_6_FIXED')       return 3;
     if (tournamentFormat === 'SUPER_8_FIXED')       return 4;
     if (tournamentFormat === 'SUPER_10_FIXED')      return 5;
@@ -2328,13 +2352,17 @@ export default function BeachProApp() {
     const ranking = activeTournament.rankingId ? rankings.find(item => item.id === activeTournament.rankingId) : null;
     const canEdit = activeTournament.uid === user.uid || !!ranking?.adminIds?.includes(user.uid);
     if (!canEdit) return;
-    const blocked = activeTournament.isFinished || activeTournament.hasEverFinished || activeTournament.matches.some(match => match.isCompleted);
+    const blocked = isTournamentSetupLocked(activeTournament);
     setTournamentEditError(blocked
-      ? 'Não é possível editar este torneio porque ele já possui resultados confirmados. Para liberar a edição antes da finalização, use “Editar resultado” nas partidas confirmadas.'
+      ? 'As edições só podem acontecer enquanto a primeira rodada não estiver finalizada. Como todos os resultados da primeira rodada já foram confirmados, este torneio não pode mais ser editado.'
       : null);
     setTournamentEditPlayers(activeTournament.players.map(player => ({ ...player, memberIds: player.memberIds ? [...player.memberIds] : undefined })));
     setTournamentEditMatchFormat(activeTournament.matchFormat);
-    setTournamentEditCriteria([...(activeTournament.rankingCriteria || [])]);
+    const currentCriteria: RankingCriterion[] = activeTournament.rankingCriteria?.length
+      ? activeTournament.rankingCriteria
+      : ['WINS', 'HEAD_TO_HEAD', 'GAME_BALANCE'];
+    setTournamentEditCriteria([...currentCriteria]);
+    setShowTournamentCriteriaPicker(false);
     setShowTournamentEditor(true);
   };
 
@@ -2349,6 +2377,10 @@ export default function BeachProApp() {
       setTournamentEditError('O mesmo atleta não pode ocupar duas vagas no torneio.');
       return;
     }
+    if (tournamentEditCriteria.length === 0) {
+      setTournamentEditError('Selecione pelo menos um critério de desempate.');
+      return;
+    }
 
     setIsSavingTournamentEdit(true);
     try {
@@ -2357,8 +2389,8 @@ export default function BeachProApp() {
         const latestSnapshot = await transaction.get(tournamentRef);
         if (!latestSnapshot.exists()) throw new Error('Torneio não encontrado.');
         const latest = latestSnapshot.data() as TournamentState;
-        if (latest.isFinished || latest.hasEverFinished || latest.matches.some(match => match.isCompleted)) {
-          throw new Error('O torneio recebeu um resultado enquanto estava sendo editado. Recarregue a tela.');
+        if (isTournamentSetupLocked(latest)) {
+          throw new Error('A primeira rodada foi finalizada enquanto o torneio estava sendo editado. Não é mais possível salvar alterações.');
         }
 
         const idMap = new Map<string, string>();
@@ -5121,10 +5153,8 @@ O play na palma da mão! 🏆`;
               <div className="space-y-4 pr-2 custom-scrollbar">
                 {[
                   { id: 'REI_DA_QUADRA',       title: 'REI DA QUADRA — 4 Atletas',         desc: '3 rodadas individuais. Cada atleta joga uma vez ao lado de cada um dos outros 3. Ao final, o melhor desempenho geral vence.', icon: TrophyIcon, req: 4 },
-                  { id: 'SUPER_3_FIXED',       title: 'SUPER 3 DUPLAS FIXAS — 6 Atletas',  desc: '3 duplas formadas antes do torneio começar. Cada dupla enfrenta todas as outras 2 duplas. Disputam 2 partidas cada.', icon: Users, req: 6 },
                   { id: 'SUPER_4_FIXED',       title: 'SUPER 4 DUPLAS FIXAS — 8 Atletas',  desc: '4 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 3. Total de 6 partidas no torneio.', icon: Users, req: 8 },
                   { id: 'SUPER_8_INDIVIDUAL',  title: 'SUPER 8 INDIVIDUAL — 8 Atletas',    desc: '7 rodadas. Cada atleta joga ao lado de todos os outros 7, um por rodada. Parceiros mudam a cada rodada. O desempenho individual acumulado define o campeão.', icon: Users, req: 8 },
-                  { id: 'SUPER_5_FIXED',       title: 'SUPER 5 DUPLAS FIXAS — 10 Atletas', desc: '5 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 4. Total de 10 partidas no torneio.', icon: Users, req: 10 },
                   { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL — 12 Atletas',  desc: '11 rodadas. Parceiros mudam a cada rodada. Todos os atletas jogam juntos ao longo do torneio. O melhor aproveitamento individual determina o campeão.', icon: Users, req: 12 },
                   { id: 'SUPER_6_FIXED',       title: 'SUPER 6 DUPLAS FIXAS — 12 Atletas', desc: '6 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 5. Total de 15 partidas no torneio.', icon: Users, req: 12 },
                   { id: 'SUPER_16_INDIVIDUAL', title: 'SUPER 16 INDIVIDUAL — 16 Atletas',  desc: '15 rodadas e 4 partidas por rodada. Cada atleta joga com todos os outros uma vez e enfrenta cada adversário duas vezes.', icon: Users, req: 16 },
@@ -5998,9 +6028,7 @@ O play na palma da mão! 🏆`;
               if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: 1, min: 1, max: 1, reason: `4 atletas — 1 quadra suficiente.` };
 
               // Fixed duplas formats
-              if (tournamentFormat === 'SUPER_3_FIXED')  return { ideal: 1, min: 1, max: 1, reason: `3 duplas — 1 quadra por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_4_FIXED')  return { ideal: 2, min: 1, max: 2, reason: `4 duplas — 2 quadras por rodada (sem espera).` };
-              if (tournamentFormat === 'SUPER_5_FIXED')  return { ideal: 2, min: 1, max: 2, reason: `5 duplas — 2 quadras por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_6_FIXED')  return { ideal: 3, min: 1, max: 3, reason: `6 duplas — 3 quadras por rodada (sem espera).` };
               if (tournamentFormat === 'SUPER_8_FIXED')  return { ideal: 4, min: 2, max: 4, reason: `8 duplas — 4 quadras por rodada (sem espera).` };
               if (tournamentFormat === 'SUPER_10_FIXED') return { ideal: 5, min: 2, max: 5, reason: `10 duplas — 5 quadras por rodada (sem espera).` };
@@ -6364,26 +6392,8 @@ O play na palma da mão! 🏆`;
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-start relative z-10 w-full gap-4">
-                    <div className="flex min-w-0 items-center gap-2 pl-1">
-                       <Sparkles size={13} className="text-secondary" />
-                       <span className="max-w-[150px] truncate rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-white">
-                         {(() => {
-                            const formats: { [key: string]: string } = {
-                              'REI_DA_QUADRA': 'REI DA QUADRA',
-                              'SUPER_8_INDIVIDUAL': 'SUPER 8 IND',
-                              'SUPER_4_FIXED': 'SUPER 4 DUPLAS',
-                              'SUPER_12_INDIVIDUAL': 'SUPER 12 IND',
-                              'SUPER_16_INDIVIDUAL': 'SUPER 16 IND',
-                              'SUPER_6_FIXED': 'SUPER 6 DUPLAS',
-                              'SUPER_8_FIXED': 'SUPER_ 8 DUPLAS',
-                              'SUPER_10_FIXED': 'SUPER 10 DUPLAS',
-                              'SUPER_12_FIXED': 'SUPER 12 DUPLAS',
-                              'GROUPS_MATA_MATA': 'GRUPOS + MATA-MATA',
-                            };
-                            return formats[activeTournament.format] || 'TORNEIO';
-                         })()}
-                       </span>
+                  <div className="flex justify-between items-start relative z-10 w-full gap-2">
+                    <div className="flex shrink-0 items-center pl-1">
                        <button type="button" onClick={() => setShowTournamentInfo(true)} aria-label="Ver informações do torneio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/45 text-white transition-all hover:bg-white/10 active:scale-90">
                          <Info size={15} strokeWidth={2.5} />
                        </button>
@@ -9342,11 +9352,11 @@ O play na palma da mão! 🏆`;
               }));
             };
             return (
-              <motion.div className="fixed inset-0 z-[850] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentEditor(false)}>
-                <motion.div initial={{ scale: .96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={event => event.stopPropagation()} className="max-h-[86dvh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-sky-400/25 bg-[#071c2e] p-6 shadow-2xl">
+              <motion.div className="fixed inset-0 z-[850] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowTournamentCriteriaPicker(false); setShowTournamentEditor(false); }}>
+                <motion.div initial={{ scale: .96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={event => event.stopPropagation()} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-sky-400/25 bg-[#071c2e] p-6 pb-[calc(6rem+env(safe-area-inset-bottom))] shadow-2xl">
                   <div className="mb-6 flex items-start justify-between gap-4">
                     <div><p className="text-[8px] font-black uppercase tracking-[.22em] text-sky-400">Configuração</p><h3 className="text-xl font-black uppercase italic text-white">Editar torneio</h3></div>
-                    <button type="button" onClick={() => setShowTournamentEditor(false)} className="rounded-xl bg-white/5 p-2 text-slate-400"><X size={18} /></button>
+                    <button type="button" onClick={() => { setShowTournamentCriteriaPicker(false); setShowTournamentEditor(false); }} className="rounded-xl bg-white/5 p-2 text-slate-400"><X size={18} /></button>
                   </div>
 
                   {tournamentEditError ? (
@@ -9387,11 +9397,48 @@ O play na palma da mão! 🏆`;
 
                       <section>
                         <h4 className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Ordem dos critérios de desempate</h4>
-                        <div className="space-y-2">{tournamentEditCriteria.map((criterion, index) => <div key={criterion} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.035] p-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-[10px] font-black text-white">{index + 1}</span><span className="flex-1 text-xs font-bold text-white">{editableRankingCriteria.find(item => item.id === criterion)?.label || criterion}</span><button type="button" disabled={index === 0} onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronUp size={17} /></button><button type="button" disabled={index === tournamentEditCriteria.length - 1} onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronDown size={17} /></button></div>)}</div>
+                        <div className="space-y-2">
+                          {tournamentEditCriteria.map((criterion, index) => (
+                            <div key={criterion} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.035] p-3">
+                              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-[10px] font-black text-white">{index + 1}</span>
+                              <span className="flex-1 text-xs font-bold text-white">{editableRankingCriteria.find(item => item.id === criterion)?.label || criterion}</span>
+                              <button type="button" disabled={index === 0} aria-label="Subir critério" onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronUp size={17} /></button>
+                              <button type="button" disabled={index === tournamentEditCriteria.length - 1} aria-label="Descer critério" onClick={() => setTournamentEditCriteria(current => { const next = [...current]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })} className="p-1 text-slate-300 disabled:opacity-20"><ChevronDown size={17} /></button>
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => setShowTournamentCriteriaPicker(true)} className="mt-3 w-full rounded-full border border-sky-400/40 bg-sky-400/10 py-3 text-[9px] font-black uppercase tracking-widest text-sky-200">Selecionar critérios</button>
                       </section>
 
-                      <p className="rounded-xl bg-sky-400/10 p-3 text-[9px] font-semibold leading-relaxed text-sky-200">Ao mudar o formato, placares ainda não confirmados serão zerados. Duplas, rodadas e quadras serão preservadas.</p>
-                      <button type="button" disabled={isSavingTournamentEdit} onClick={saveTournamentSetup} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-50">{isSavingTournamentEdit && <RefreshCw size={15} className="animate-spin" />}Salvar alterações</button>
+                      <p className="rounded-xl bg-sky-400/10 p-3 text-[9px] font-semibold leading-relaxed text-sky-200">Ao salvar uma edição, eventuais placares parciais da primeira rodada serão zerados. Duplas, rodadas e quadras serão preservadas.</p>
+                      <div className="sticky bottom-0 z-20 -mx-2 bg-gradient-to-t from-[#071c2e] via-[#071c2e] to-transparent px-2 pb-2 pt-6">
+                        <button type="button" disabled={isSavingTournamentEdit} onClick={saveTournamentSetup} className="flex w-full items-center justify-center gap-2 rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase tracking-widest text-slate-950 shadow-xl disabled:opacity-50">{isSavingTournamentEdit && <RefreshCw size={15} className="animate-spin" />}Salvar alterações</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {showTournamentCriteriaPicker && !tournamentEditError && (
+                    <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setShowTournamentCriteriaPicker(false)}>
+                      <motion.div initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} onClick={event => event.stopPropagation()} className="w-full max-w-sm rounded-[2rem] border border-sky-400/30 bg-[#081d30] p-6 shadow-2xl">
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                          <div><p className="text-[8px] font-black uppercase tracking-[.22em] text-sky-400">Desempate</p><h4 className="text-lg font-black uppercase italic text-white">Nova sequência</h4></div>
+                          <button type="button" onClick={() => setShowTournamentCriteriaPicker(false)} className="rounded-xl bg-white/5 p-2 text-slate-300"><X size={17} /></button>
+                        </div>
+                        <p className="mb-4 text-[10px] font-semibold leading-relaxed text-slate-400">Selecione os critérios na ordem em que devem ser aplicados. Toque novamente para remover.</p>
+                        <div className="space-y-2">
+                          {editableRankingCriteria.map(criterion => {
+                            const selectedIndex = tournamentEditCriteria.indexOf(criterion.id);
+                            return (
+                              <button key={criterion.id} type="button" onClick={() => setTournamentEditCriteria(current => current.includes(criterion.id) ? current.filter(item => item !== criterion.id) : [...current, criterion.id])} className={cn("flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all", selectedIndex >= 0 ? "border-sky-400 bg-sky-400/15" : "border-white/10 bg-white/[.035]")}>
+                                <span className={cn("flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-black", selectedIndex >= 0 ? "bg-sky-500 text-white" : "bg-white/5 text-slate-500")}>{selectedIndex >= 0 ? selectedIndex + 1 : '+'}</span>
+                                <span className="flex-1 text-xs font-bold text-white">{criterion.label}</span>
+                                {selectedIndex >= 0 && <CheckCircle2 size={17} className="text-sky-300" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button type="button" disabled={tournamentEditCriteria.length === 0} onClick={() => setShowTournamentCriteriaPicker(false)} className="mt-5 w-full rounded-full bg-[#bef264] py-4 text-[9px] font-black uppercase tracking-widest text-slate-950 disabled:opacity-40">Aplicar sequência</button>
+                      </motion.div>
                     </div>
                   )}
                 </motion.div>
@@ -9676,7 +9723,7 @@ O play na palma da mão! 🏆`;
     <BottomNav 
       activeStep={step} 
       setStep={navigateTo} 
-      isVisible={isAuthReady && splashDone && !isKeyboardVisible && user !== null} 
+      isVisible={isAuthReady && splashDone && !isKeyboardVisible && user !== null && !hasBlockingOverlay} 
       resetApp={resetApp}
     />
   </main>

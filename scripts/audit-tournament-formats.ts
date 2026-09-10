@@ -12,6 +12,7 @@ import {
   getKnockoutQualifiedTeams,
   getTournamentScheduleIntegrityErrors,
   invalidatePlayoffDescendants,
+  isTournamentSetupLocked,
   normalizePlayoffRounds,
   validateSetScore,
 } from '../lib/tournament-logic';
@@ -106,8 +107,8 @@ function auditIndividualModes() {
 }
 
 function auditFixedTeamModes() {
-  const formatByTeamCount: Record<number, TournamentFormat> = { 3: 'SUPER_3_FIXED', 4: 'SUPER_4_FIXED', 5: 'SUPER_5_FIXED', 6: 'SUPER_6_FIXED', 8: 'SUPER_8_FIXED', 10: 'SUPER_10_FIXED', 12: 'SUPER_12_FIXED' };
-  for (const teamCount of [3, 4, 5, 6, 8, 10, 12]) {
+  const formatByTeamCount: Record<number, TournamentFormat> = { 4: 'SUPER_4_FIXED', 6: 'SUPER_6_FIXED', 8: 'SUPER_8_FIXED', 10: 'SUPER_10_FIXED', 12: 'SUPER_12_FIXED' };
+  for (const teamCount of [4, 6, 8, 10, 12]) {
     for (let repetition = 0; repetition < 30; repetition++) {
       const competitors = players(teamCount, 't');
       const courts = [1, 3, 5];
@@ -120,6 +121,19 @@ function auditFixedTeamModes() {
       assert.equal(new Set(confrontations).size, confrontations.length, `Super ${teamCount} fixo: confronto repetido`);
     }
   }
+}
+
+function auditTournamentEditWindow() {
+  const baseMatches = generateIndividualDoubles(players(8), [1, 2]);
+  assert.equal(isTournamentSetupLocked({ matches: baseMatches, isFinished: false, hasEverFinished: false }), false, 'torneio novo deve permitir edição');
+
+  const partiallyCompleted = baseMatches.map((match, index) => ({ ...match, isCompleted: index === 0 }));
+  assert.equal(isTournamentSetupLocked({ matches: partiallyCompleted, isFinished: false, hasEverFinished: false }), false, 'resultado parcial da primeira rodada ainda deve permitir edição');
+
+  const firstRoundCompleted = baseMatches.map(match => ({ ...match, isCompleted: match.round === 1 }));
+  assert.equal(isTournamentSetupLocked({ matches: firstRoundCompleted, isFinished: false, hasEverFinished: false }), true, 'primeira rodada completa deve bloquear edição');
+  assert.equal(isTournamentSetupLocked({ matches: baseMatches, isFinished: true, hasEverFinished: false }), true, 'torneio finalizado deve bloquear edição');
+  assert.equal(isTournamentSetupLocked({ matches: baseMatches, isFinished: false, hasEverFinished: true }), true, 'torneio que já foi finalizado deve continuar bloqueado');
 }
 
 function auditGroupModes() {
@@ -226,6 +240,7 @@ function auditScoreModes() {
 
 auditIndividualModes();
 auditFixedTeamModes();
+auditTournamentEditWindow();
 auditGroupModes();
 auditPlayoffs();
 auditRankingsAndQualification();
