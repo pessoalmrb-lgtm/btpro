@@ -14,7 +14,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
   const darkNavigation = true;
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[200] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[40] flex justify-center px-4">
     <motion.nav
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}

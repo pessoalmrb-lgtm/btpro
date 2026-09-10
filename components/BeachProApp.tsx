@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
@@ -321,22 +322,6 @@ export default function BeachProApp() {
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId) ||
     (followedTournament?.id === activeTournamentId ? followedTournament : undefined);
-
-  // O menu inferior vive em um portal no <body> para permanecer fixo durante a
-  // rolagem. Ocultá-lo enquanto há uma camada modal aberta evita que o portal
-  // atravesse contextos de empilhamento e apareça sobre qualquer pop-up.
-  const hasBlockingOverlay = Boolean(
-    showUpgradeModal || showMatchHistory || courtWarning || showLimitPopup ||
-    showFinishedLimitPopup || showSharePopup || showTournamentEditor ||
-    showTournamentCriteriaPicker || showFinishConfirmPopup || tournamentToDelete ||
-    leagueToDelete || leagueToExit || leagueResetStep || coverCropImage ||
-    showRoundSelector || showTournamentInfo || showFollowTournament ||
-    showReauthModal || accountDeleteStep || showAddressPopup || selectedAthleteStats ||
-    athleteToRemove || showDuplicatePopup || showManualAthletePopup ||
-    showLowCourtsPopup || showSupportPopup || showSuggestionModal ||
-    showPendingPopup || showFindLeagueModal || showHistoryDetail ||
-    pendingSessionTakeover
-  );
 
   // Torneios que o usuário pode gerenciar (próprios ou de ligas onde é admin)
   const manageableTournaments = tournaments.filter(t => {
@@ -3208,7 +3193,7 @@ export default function BeachProApp() {
                     <div className="relative w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden shrink-0">
                       {(userProfile?.photoURL || user?.photoURL) ? (
                         <div className="relative w-full h-full">
-                          <Image src={userProfile?.photoURL || user?.photoURL} alt="Profile" fill className="object-cover" referrerPolicy="no-referrer" />
+                          <img src={userProfile?.photoURL || user?.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                         </div>
                       ) : (
                         <UserIcon size={26} />
@@ -3521,7 +3506,7 @@ export default function BeachProApp() {
                           {/* Cover image strip */}
                           {r.coverUrl && (
                             <div className="relative w-full h-20 overflow-hidden">
-                              <Image src={r.coverUrl} alt={r.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                              <img src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                               {/* Name overlay on cover */}
                               <div className="absolute bottom-0 left-0 right-0 px-5 pb-3 flex items-end justify-between">
@@ -3730,7 +3715,7 @@ export default function BeachProApp() {
                         <div className="flex items-center gap-4 mb-5">
                           <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary overflow-hidden relative shrink-0">
                             {league.coverUrl && !league.coverUrl.startsWith('data:') ? (
-                              <Image src={league.coverUrl} alt={league.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                              <img src={league.coverUrl} alt={league.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
                             ) : <Award size={24} />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -4066,7 +4051,7 @@ O play na palma da mão! 🏆`;
                     {/* Hero Cover Card */}
                     <div className="relative w-full h-48 rounded-[2.5rem] bg-slate-200 overflow-hidden shadow-xl mb-6 group border-4 border-white">
                       {activeRanking.coverUrl ? (
-                         <Image src={activeRanking.coverUrl} alt="Cover" fill className="object-cover" referrerPolicy="no-referrer" />
+                         <img src={activeRanking.coverUrl} alt="Cover" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                          <Image src="/capa-padrao.png" alt="Default League Cover" fill className="object-cover opacity-80" referrerPolicy="no-referrer" />
                       )}
@@ -6484,7 +6469,7 @@ O play na palma da mão! 🏆`;
                 </div>
 
                 <AnimatePresence>
-                  {showTournamentInfo && (
+                  {showTournamentInfo && typeof document !== 'undefined' && createPortal((
                     <motion.div className="tournament-info-backdrop fixed inset-0 z-[500] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTournamentInfo(false)}>
                       <motion.div role="dialog" aria-modal="true" aria-labelledby="tournament-info-title" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }} className="tournament-info-dialog w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl">
                         <div className="tournament-info-header bg-primary px-5 pb-5 pt-4 text-white">
@@ -6513,7 +6498,7 @@ O play na palma da mão! 🏆`;
                         </div>
                       </motion.div>
                     </motion.div>
-                  )}
+                  ), document.body)}
                 </AnimatePresence>
 
                 {/* Navigation Tabs - New Style */}
@@ -7490,11 +7475,10 @@ O play na palma da mão! 🏆`;
                     <div className="absolute inset-1 rounded-full bg-slate-900 z-0" />
                     <div className="relative z-10 w-full h-full rounded-full overflow-hidden flex items-center justify-center">
                       {(userProfile?.photoURL || user?.photoURL) ? (
-                        <Image 
+                        <img 
                           src={userProfile?.photoURL || user?.photoURL} 
                           alt={user?.displayName || 'User'} 
-                          fill
-                          className="object-cover"
+                          className="h-full w-full object-cover"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
@@ -7684,7 +7668,7 @@ O play na palma da mão! 🏆`;
                             >
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
                                 {r.coverUrl && !r.coverUrl.startsWith('data:') ? (
-                                  <Image src={r.coverUrl} alt={r.name} fill className="object-cover" referrerPolicy="no-referrer" />
+                                  <img src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
                                 ) : (
                                   <Award size={18} className="text-primary" />
                                 )}
@@ -9723,7 +9707,7 @@ O play na palma da mão! 🏆`;
     <BottomNav 
       activeStep={step} 
       setStep={navigateTo} 
-      isVisible={isAuthReady && splashDone && !isKeyboardVisible && user !== null && !hasBlockingOverlay} 
+      isVisible={isAuthReady && splashDone && !isKeyboardVisible && user !== null} 
       resetApp={resetApp}
     />
   </main>
