@@ -49,7 +49,7 @@ import {
 import Image from 'next/image';
 import { Capacitor } from '@capacitor/core';
 import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
-import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, FinalRankingResult } from '../lib/tournament-logic';
+import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, getScheduleIntegrityErrors, getTournamentScheduleIntegrityErrors, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
 import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage, deleteCurrentAccount } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
@@ -384,6 +384,16 @@ export default function BeachProApp() {
     const player = activeTournament?.players.find(p => p.id === id);
     if (player) return player.name;
     return id; // Fallback to ID if not found but not TBD
+  };
+
+  const assertGeneratedSchedule = (competitors: Player[], generatedMatches: Match[], courts: number[], allowTbd = false, format?: TournamentFormat) => {
+    const integrityErrors = format
+      ? getTournamentScheduleIntegrityErrors(format, competitors, generatedMatches, courts)
+      : getScheduleIntegrityErrors(competitors, generatedMatches, courts, { allowTbd });
+    if (integrityErrors.length > 0) {
+      console.error('Tabela rejeitada pela auditoria de integridade:', integrityErrors);
+      throw new Error(`A tabela não passou na verificação de segurança: ${integrityErrors[0]}`);
+    }
   };
 
   // --- Scroll to Top on Step Change ---
@@ -1737,6 +1747,7 @@ export default function BeachProApp() {
           setIsDrawing(false);
           
           const matches = generateIndividualDoubles(players, selectedCourts);
+          assertGeneratedSchedule(players, matches, selectedCourts, false, tournamentFormat);
           const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
           
           if (matches.length === 0) {
@@ -1803,6 +1814,7 @@ export default function BeachProApp() {
 
           let matches: Match[] = [];
           matches = generateRoundRobin(finalTeams, selectedCourts);
+          assertGeneratedSchedule(finalTeams, matches, selectedCourts, false, tournamentFormat);
 
           const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
           
@@ -1845,6 +1857,7 @@ export default function BeachProApp() {
       const finalTeams = [...players];
       let matches: Match[] = [];
       matches = generateRoundRobin(finalTeams, selectedCourts);
+      assertGeneratedSchedule(finalTeams, matches, selectedCourts, false, tournamentFormat);
 
       const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
       
@@ -2496,6 +2509,7 @@ export default function BeachProApp() {
 
   const nextRound = async () => {
     if (!activeTournament) return;
+    const playoffCourts = activeTournament.tables?.length ? activeTournament.tables : [1];
     
     const availableRounds = Array.from(new Set(activeTournament.matches.map(m => m.round))).sort((a, b) => a - b);
     const currentIndex = availableRounds.indexOf(activeTournament.currentRound);
@@ -2568,7 +2582,7 @@ export default function BeachProApp() {
             id: 'playoff-SEMI_FINALS-0',
             player1Id: p1?.id || 'TBD',
             player2Id: p2?.id || 'TBD',
-            table: selectedCourts[0] || 1,
+            table: playoffCourts[0],
             sets: [],
             currentSet: { player1: 0, player2: 0 },
             isCompleted: false,
@@ -2578,7 +2592,7 @@ export default function BeachProApp() {
             id: 'playoff-SEMI_FINALS-1',
             player1Id: p3?.id || 'TBD',
             player2Id: p4?.id || 'TBD',
-            table: selectedCourts[1] || selectedCourts[0] || 2,
+            table: playoffCourts[1] || playoffCourts[0],
             sets: [],
             currentSet: { player1: 0, player2: 0 },
             isCompleted: false,
@@ -2586,7 +2600,7 @@ export default function BeachProApp() {
           });
 
           // Generate Final as TBD
-          const finalMatches = generatePlayoffs([], selectedCourts, ['FINAL']);
+          const finalMatches = generatePlayoffs([], playoffCourts, ['FINAL']);
           knockoutMatches = [...knockoutMatches, ...finalMatches];
 
         } else if (actualStandingGroupIds.length === 4 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
@@ -2620,7 +2634,7 @@ export default function BeachProApp() {
           ];
 
           qMatches.forEach((qm, idx) => {
-            const table = selectedCourts[idx % selectedCourts.length];
+            const table = playoffCourts[idx % playoffCourts.length];
             knockoutMatches.push({
               id: qm.id,
               player1Id: qm.t1?.id || 'TBD',
@@ -2634,7 +2648,7 @@ export default function BeachProApp() {
           });
 
           // Gera semifinal e final como uma única sequência, sem IDs duplicados.
-          const remainingMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          const remainingMatches = generatePlayoffs([], playoffCourts, ['SEMI_FINALS']);
           knockoutMatches = [...knockoutMatches, ...remainingMatches];
 
         } else if (actualStandingGroupIds.length === 2 && firstRound === 'QUARTER_FINALS' && qualifiedTeams.length === 8) {
@@ -2672,7 +2686,7 @@ export default function BeachProApp() {
           ];
 
           qMatches.forEach((qm, idx) => {
-            const table = selectedCourts[idx % selectedCourts.length];
+            const table = playoffCourts[idx % playoffCourts.length];
             knockoutMatches.push({
               id: qm.id,
               player1Id: qm.t1?.id || 'TBD',
@@ -2685,12 +2699,14 @@ export default function BeachProApp() {
             });
           });
 
-          const remainingMatches = generatePlayoffs([], selectedCourts, ['SEMI_FINALS']);
+          const remainingMatches = generatePlayoffs([], playoffCourts, ['SEMI_FINALS']);
           knockoutMatches = [...knockoutMatches, ...remainingMatches];
         } else {
           // General Seeding Logic
-          knockoutMatches = generatePlayoffs(qualifiedTeams, selectedCourts, currentKnockoutRounds);
+          knockoutMatches = generatePlayoffs(qualifiedTeams, playoffCourts, currentKnockoutRounds);
         }
+
+        assertGeneratedSchedule(activeTournament.players, knockoutMatches, playoffCourts, true);
 
         const nextRoundNum = 100 + roundsOrder.indexOf(firstRound);
 
@@ -5108,12 +5124,12 @@ O play na palma da mão! 🏆`;
               <div className="space-y-4 pr-2 custom-scrollbar">
                 {[
                   { id: 'REI_DA_QUADRA',       title: 'REI DA QUADRA — 4 Atletas',         desc: '3 rodadas individuais. Cada atleta joga uma vez ao lado de cada um dos outros 3. Ao final, o melhor desempenho geral vence.', icon: TrophyIcon, req: 4 },
-                  { id: 'SUPER_6_INDIVIDUAL',  title: 'SUPER 6 INDIVIDUAL — 6 Atletas',    desc: '5 rodadas. Cada atleta joga ao lado de todos os outros 5 parceiros, um por rodada. Parceiros mudam a cada rodada. O desempenho individual ao longo de todas as partidas determina o campeão.', icon: Users, req: 6 },
+                  { id: 'SUPER_6_INDIVIDUAL',  title: 'SUPER 6 INDIVIDUAL — 6 Atletas',    desc: '6 rodadas. Cada atleta disputa 4 partidas, sem repetir parceria. Em cada rodada, 2 atletas descansam. Todos terminam com a mesma quantidade de jogos.', icon: Users, req: 6 },
                   { id: 'SUPER_3_FIXED',       title: 'SUPER 3 DUPLAS FIXAS — 6 Atletas',  desc: '3 duplas formadas antes do torneio começar. Cada dupla enfrenta todas as outras 2 duplas. Disputam 2 partidas cada.', icon: Users, req: 6 },
                   { id: 'SUPER_4_FIXED',       title: 'SUPER 4 DUPLAS FIXAS — 8 Atletas',  desc: '4 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 3. Total de 6 partidas no torneio.', icon: Users, req: 8 },
                   { id: 'SUPER_8_INDIVIDUAL',  title: 'SUPER 8 INDIVIDUAL — 8 Atletas',    desc: '7 rodadas. Cada atleta joga ao lado de todos os outros 7, um por rodada. Parceiros mudam a cada rodada. O desempenho individual acumulado define o campeão.', icon: Users, req: 8 },
                   { id: 'SUPER_5_FIXED',       title: 'SUPER 5 DUPLAS FIXAS — 10 Atletas', desc: '5 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 4. Total de 10 partidas no torneio.', icon: Users, req: 10 },
-                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL — 10 Atletas',  desc: '9 rodadas. Parceiros mudam a cada rodada. Em cada rodada, 2 atletas descansam enquanto os outros 8 jogam. O melhor aproveitamento individual ao longo das rodadas decide o campeão.', icon: Users, req: 10 },
+                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL — 10 Atletas',  desc: '10 rodadas. Cada atleta disputa 8 partidas, sempre com parcerias diferentes. Em cada rodada, 2 atletas descansam. Todos terminam com a mesma quantidade de jogos.', icon: Users, req: 10 },
                   { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL — 12 Atletas',  desc: '11 rodadas. Parceiros mudam a cada rodada. Todos os atletas jogam juntos ao longo do torneio. O melhor aproveitamento individual determina o campeão.', icon: Users, req: 12 },
                   { id: 'SUPER_6_FIXED',       title: 'SUPER 6 DUPLAS FIXAS — 12 Atletas', desc: '6 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 5. Total de 15 partidas no torneio.', icon: Users, req: 12 },
                   { id: 'SUPER_8_FIXED',       title: 'SUPER 8 DUPLAS FIXAS — 16 Atletas', desc: '8 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 7. Total de 28 partidas. Ideal para torneios de liga.', icon: Users, req: 16 },
@@ -5840,6 +5856,7 @@ O play na palma da mão! 🏆`;
                       const groupsCount = drawnGroups.length;
                       // Pass drawnGroups to skip shuffling inside generateGroupStage
                       const { matches: groupMatches } = generateGroupStage(teamsToGroup, selectedCourts, { groupsCount, teamsPerGroup, type: groupsMatchPlay }, drawnGroups);
+                      assertGeneratedSchedule(teamsToGroup, groupMatches, selectedCourts);
                       
                       const matches = groupMatches;
                       const totalRounds = matches.length > 0 ? Math.max(...matches.map(m => m.round)) : 0;
@@ -5979,7 +5996,7 @@ O play na palma da mão! 🏆`;
               const matchesPerRound = Math.floor(teams / 2);
 
               // Individual formats
-              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 3, reason: `6 atletas — 1 quadra por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 3, reason: `6 atletas — 1 quadra por rodada. 2 atletas descansam por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 2, min: 1, max: 4, reason: `8 atletas — 2 quadras por rodada (sem espera).` };
               if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 1, max: 3, reason: `10 atletas — 2 quadras por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 1, max: 4, reason: `12 atletas — 3 quadras por rodada (sem espera).` };
@@ -7046,6 +7063,7 @@ O play na palma da mão! 🏆`;
             const getFormatLabel = (): string => {
               switch (mFmt) {
                 case '6_GAMES_TIEBREAK': return 'até 7 games (tie-break)';
+                case '8_GAMES_MAX': return 'máx 8 games';
                 case '6_GAMES_MAX': return 'máx 6 games';
                 case '5_GAMES_MAX': return 'máx 5 games';
                 case 'SUM_9_GAMES': return 'soma = 9';

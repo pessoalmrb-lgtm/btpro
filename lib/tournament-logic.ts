@@ -1,10 +1,11 @@
-import { Match, Player, MatchFormat, RankingCriterion, PlayoffRound, TournamentState, Ranking } from "../types";
+import { Match, Player, MatchFormat, RankingCriterion, PlayoffRound, TournamentState, Ranking, TournamentFormat } from "../types";
 
 /**
  * Generates a Round Robin schedule using the Circle Method.
  * Improved to rotate courts better among players.
  */
 export function generateRoundRobin(teams: Player[], selectedCourts: number[]): Match[] {
+  if (teams.length < 2 || selectedCourts.length === 0) return [];
   const n = teams.length;
   const isOdd = n % 2 !== 0;
   const tempTeams = [...teams];
@@ -145,6 +146,9 @@ export function generateGroupStage(
   config: { groupsCount: number, teamsPerGroup: number, type: 'INTRA' | 'INTER' },
   predefinedGroups?: { id: string, teams: Player[] }[]
 ): { matches: Match[], groups: { id: string, teams: Player[] }[] } {
+  if (teams.length < 2 || selectedCourts.length === 0 || config.groupsCount < 1) {
+    return { matches: [], groups: [] };
+  }
   const orderedCourts = [...selectedCourts].sort((a, b) => a - b);
   const compareGroupIds = (left: string, right: string) =>
     left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' });
@@ -488,6 +492,9 @@ export function checkPlayoffPossibility(playerCount: number, rounds: PlayoffRoun
  * Total matches required = N * (N-1) / 4.
  */
 export function generateIndividualDoubles(players: Player[], selectedCourts: number[]): Match[] {
+  if (players.length < 4 || selectedCourts.length === 0 || new Set(players.map(player => player.id)).size !== players.length) {
+    return [];
+  }
   const n = players.length;
   const tempPlayers = [...players];
   if (n % 2 !== 0) {
@@ -534,10 +541,11 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
       { r: 3, p1: 0, p1p: 3, p2: 1, p2p: 4 },
       { r: 4, p1: 1, p1p: 5, p2: 2, p2p: 4 },
       { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 3 },
+      { r: 6, p1: 2, p1p: 5, p2: 3, p2p: 4 },
     ];
 
     const matches: Match[] = [];
-    const rounds = [1, 2, 3, 4, 5];
+    const rounds = [1, 2, 3, 4, 5, 6];
     rounds.forEach(r => {
       const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
       let availableCourtsInRound = [...selectedCourts];
@@ -622,40 +630,33 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
   }
 
   // Custom fixed matrix for Super 10 (10 players)
-  // Optimized: 36 unique partnerships, players 0-1 rest 1x, players 2-9 rest 2x.
+  // Optimized: 40 unique partnerships e todos jogam exatamente 8 vezes.
   // Each round includes restA/restB indicating which player indices rest.
   if (numPlayers === 10) {
     const matrix = [
-      // Round 1 — rest: atleta 0 e atleta 3
-      { r:1, p1:1, p1p:4, p2:5, p2p:8, restA:0, restB:3 },
-      { r:1, p1:2, p1p:6, p2:7, p2p:9, restA:0, restB:3 },
-      // Round 2 — rest: atleta 1 e atleta 5
-      { r:2, p1:3, p1p:4, p2:7, p2p:8, restA:1, restB:5 },
-      { r:2, p1:0, p1p:2, p2:6, p2p:9, restA:1, restB:5 },
-      // Round 3 — rest: atleta 3 e atleta 5
-      { r:3, p1:0, p1p:7, p2:2, p2p:8, restA:3, restB:5 },
-      { r:3, p1:1, p1p:6, p2:4, p2p:9, restA:3, restB:5 },
-      // Round 4 — rest: atleta 7 e atleta 8
-      { r:4, p1:0, p1p:1, p2:3, p2p:9, restA:7, restB:8 },
-      { r:4, p1:2, p1p:4, p2:5, p2p:6, restA:7, restB:8 },
-      // Round 5 — rest: atleta 7 e atleta 8
-      { r:5, p1:0, p1p:5, p2:1, p2p:9, restA:7, restB:8 },
-      { r:5, p1:2, p1p:3, p2:4, p2p:6, restA:7, restB:8 },
-      // Round 6 — rest: atleta 4 e atleta 9
-      { r:6, p1:1, p1p:5, p2:6, p2p:8, restA:4, restB:9 },
-      { r:6, p1:0, p1p:3, p2:2, p2p:7, restA:4, restB:9 },
-      // Round 7 — rest: atleta 4 e atleta 6
-      { r:7, p1:0, p1p:9, p2:1, p2p:8, restA:4, restB:6 },
-      { r:7, p1:2, p1p:5, p2:3, p2p:7, restA:4, restB:6 },
-      // Round 8 — rest: atleta 2 e atleta 6
-      { r:8, p1:0, p1p:8, p2:4, p2p:7, restA:2, restB:6 },
-      { r:8, p1:1, p1p:3, p2:5, p2p:9, restA:2, restB:6 },
-      // Round 9 — rest: atleta 2 e atleta 9
-      { r:9, p1:0, p1p:6, p2:1, p2p:7, restA:2, restB:9 },
-      { r:9, p1:3, p1p:5, p2:4, p2p:8, restA:2, restB:9 },
+      { r:1, p1:2, p1p:3, p2:5, p2p:7, restA:0, restB:1 },
+      { r:1, p1:4, p1p:8, p2:6, p2p:9, restA:0, restB:1 },
+      { r:2, p1:0, p1p:5, p2:4, p2p:9, restA:2, restB:3 },
+      { r:2, p1:1, p1p:7, p2:6, p2p:8, restA:2, restB:3 },
+      { r:3, p1:0, p1p:6, p2:1, p2p:3, restA:4, restB:5 },
+      { r:3, p1:2, p1p:7, p2:8, p2p:9, restA:4, restB:5 },
+      { r:4, p1:0, p1p:2, p2:5, p2p:8, restA:6, restB:7 },
+      { r:4, p1:1, p1p:9, p2:3, p2p:4, restA:6, restB:7 },
+      { r:5, p1:0, p1p:4, p2:3, p2p:7, restA:8, restB:9 },
+      { r:5, p1:1, p1p:6, p2:2, p2p:5, restA:8, restB:9 },
+      { r:6, p1:0, p1p:9, p2:6, p2p:7, restA:1, restB:2 },
+      { r:6, p1:3, p1p:8, p2:4, p2p:5, restA:1, restB:2 },
+      { r:7, p1:0, p1p:7, p2:2, p2p:6, restA:3, restB:4 },
+      { r:7, p1:1, p1p:8, p2:5, p2p:9, restA:3, restB:4 },
+      { r:8, p1:0, p1p:3, p2:2, p2p:9, restA:5, restB:6 },
+      { r:8, p1:1, p1p:4, p2:7, p2p:8, restA:5, restB:6 },
+      { r:9, p1:0, p1p:1, p2:2, p2p:4, restA:7, restB:8 },
+      { r:9, p1:3, p1p:9, p2:5, p2p:6, restA:7, restB:8 },
+      { r:10, p1:1, p1p:5, p2:4, p2p:7, restA:9, restB:0 },
+      { r:10, p1:2, p1p:8, p2:3, p2p:6, restA:9, restB:0 },
     ];
     const matches: Match[] = [];
-    const rounds = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const rounds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     rounds.forEach(r => {
       const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
       // Attach resting players to the first match of each round for display
@@ -689,116 +690,241 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
     return matches;
   }
 
-  const matches: Match[] = [];
-  const gamesPlayed: Record<string, number> = {};
-  const opponentCount: Record<string, Record<string, number>> = {};
+  // Whist Tournament completo para 12 atletas. A base cíclica garante 11
+  // rodadas, 3 partidas por rodada, cada parceria 1 vez e cada adversário 2
+  // vezes. O atleta de índice 11 fica fixo; os demais giram módulo 11.
+  if (numPlayers === 12) {
+    const seed = [
+      { left: [2, 3], right: [1, 6] },
+      { left: [8, 10], right: [4, 7] },
+      { left: [5, 9], right: [11, 0] },
+    ];
+    const rotateIndex = (index: number, roundOffset: number) =>
+      index === 0 ? 0 : ((index - 1 + roundOffset) % 11) + 1;
+    const matches: Match[] = [];
 
-  tempPlayers.forEach(p => {
-    gamesPlayed[p.id] = 0;
-    opponentCount[p.id] = {};
+    for (let roundOffset = 0; roundOffset < 11; roundOffset++) {
+      let availableCourtsInRound = [...selectedCourts];
+      seed.forEach((game, matchIndex) => {
+        const participantIndices = [...game.left, ...game.right].map(index => rotateIndex(index, roundOffset));
+        const participantIds = participantIndices.map(index => tempPlayers[index].id);
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(participantIds, courtCandidates);
+        incUsage(participantIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(court => court !== table);
+        matches.push({
+          id: `super-12-${roundOffset + 1}-${matchIndex}`,
+          player1Id: participantIds[0],
+          player1PartnerId: participantIds[1],
+          player2Id: participantIds[2],
+          player2PartnerId: participantIds[3],
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round: roundOffset + 1,
+        });
+      });
+    }
+    return matches;
+  }
+
+  // Para quantidades divisíveis por quatro (Rei da Quadra, Super 8 e
+  // principalmente Super 12), uma fatoração completa garante matematicamente:
+  // N-1 rodadas, todos jogando uma vez por rodada e cada parceria exatamente
+  // uma vez. O algoritmo guloso anterior podia deixar pares difíceis para o
+  // fim e espalhar o Super 12 por até 36 rodadas.
+  if (numPlayers % 4 === 0) {
+    type Partnership = [string, string];
+    type Pairing = [number, number][];
+    const matches: Match[] = [];
+
+    const enumeratePairings = (indices: number[]): Pairing[] => {
+      if (indices.length === 0) return [[]];
+      const first = indices[0];
+      const possibilities: Pairing[] = [];
+      for (let index = 1; index < indices.length; index++) {
+        const second = indices[index];
+        const remaining = indices.filter(value => value !== first && value !== second);
+        enumeratePairings(remaining).forEach(rest => possibilities.push([[first, second], ...rest]));
+      }
+      return possibilities;
+    };
+
+    const rotation = tempPlayers.map(player => player.id);
+    const partnershipsByRound: Partnership[][] = [];
+    for (let round = 1; round < numPlayers; round++) {
+      const partnerships: Partnership[] = [];
+      for (let index = 0; index < numPlayers / 2; index++) {
+        partnerships.push([rotation[index], rotation[numPlayers - 1 - index]]);
+      }
+      partnershipsByRound.push(partnerships);
+      const last = rotation.pop()!;
+      rotation.splice(1, 0, last);
+    }
+
+    // Resolve o torneio de whist completo, não apenas uma rodada por vez. A
+    // busca é pequena no Super 12 (15 combinações por rodada) e limita cada
+    // confronto individual a duas ocorrências. Como existem exatamente
+    // 2*C(N,2) posições de adversário, o resultado final fica perfeitamente
+    // equilibrado: cada pessoa é adversária de cada outra exatamente 2 vezes.
+    const pairingCandidates = partnershipsByRound.map(partnerships =>
+      enumeratePairings(partnerships.map((_, index) => index)).map(pairing => ({
+        pairing,
+        opponentKeys: pairing.flatMap(([leftIndex, rightIndex]) => {
+          const left = partnerships[leftIndex];
+          const right = partnerships[rightIndex];
+          return left.flatMap(leftId => right.map(rightId => [leftId, rightId].sort().join('|')));
+        }),
+      })),
+    );
+    const selectedPairings: (Pairing | undefined)[] = Array(partnershipsByRound.length);
+    const opponentPairUses = new Map<string, number>();
+
+    const solve = (remainingRounds: number[]): boolean => {
+      if (remainingRounds.length === 0) return true;
+      const rankedRounds = remainingRounds.map(roundIndex => ({
+        roundIndex,
+        valid: pairingCandidates[roundIndex].filter(candidate =>
+          candidate.opponentKeys.every(key => (opponentPairUses.get(key) || 0) < 2)
+        ),
+      })).sort((left, right) => left.valid.length - right.valid.length);
+      const current = rankedRounds[0];
+      if (!current || current.valid.length === 0) return false;
+
+      current.valid.sort((left, right) => {
+        const leftScore = left.opponentKeys.reduce((score, key) => score + (opponentPairUses.get(key) || 0), 0);
+        const rightScore = right.opponentKeys.reduce((score, key) => score + (opponentPairUses.get(key) || 0), 0);
+        return rightScore - leftScore;
+      });
+      for (const candidate of current.valid) {
+        selectedPairings[current.roundIndex] = candidate.pairing;
+        candidate.opponentKeys.forEach(key => opponentPairUses.set(key, (opponentPairUses.get(key) || 0) + 1));
+        if (solve(remainingRounds.filter(roundIndex => roundIndex !== current.roundIndex))) return true;
+        candidate.opponentKeys.forEach(key => {
+          const next = (opponentPairUses.get(key) || 1) - 1;
+          if (next === 0) opponentPairUses.delete(key); else opponentPairUses.set(key, next);
+        });
+        selectedPairings[current.roundIndex] = undefined;
+      }
+      return false;
+    };
+
+    if (!solve(partnershipsByRound.map((_, index) => index))) return [];
+
+    partnershipsByRound.forEach((partnerships, roundIndex) => {
+      const round = roundIndex + 1;
+      const bestPairing = selectedPairings[roundIndex]!;
+
+      let availableCourtsInRound = [...selectedCourts];
+      bestPairing.forEach(([leftIndex, rightIndex], matchIndex) => {
+        const left = partnerships[leftIndex];
+        const right = partnerships[rightIndex];
+        const participantIds = [...left, ...right];
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(participantIds, courtCandidates);
+        incUsage(participantIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(court => court !== table);
+
+        matches.push({
+          id: `super-${numPlayers}-${round}-${matchIndex}`,
+          player1Id: left[0],
+          player1PartnerId: left[1],
+          player2Id: right[0],
+          player2PartnerId: right[1],
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round,
+        });
+      });
+    });
+    return matches;
+  }
+
+  return [];
+}
+
+/**
+ * Última barreira antes de persistir uma tabela. Os geradores têm regras
+ * específicas, mas nenhuma tabela pode conter IDs duplicados, participantes
+ * desconhecidos, a mesma pessoa duas vezes na mesma rodada ou quadras que não
+ * pertencem ao torneio.
+ */
+export function getScheduleIntegrityErrors(
+  competitors: Player[],
+  matches: Match[],
+  selectedCourts: number[],
+  options: { allowTbd?: boolean } = {},
+): string[] {
+  const errors: string[] = [];
+  const knownIds = new Set(competitors.map(competitor => competitor.id));
+  const matchIds = new Set<string>();
+  const participantsByRound = new Map<number, Set<string>>();
+
+  if (matches.length === 0) errors.push('Nenhuma partida foi gerada.');
+  if (selectedCourts.length === 0) errors.push('Nenhuma quadra foi selecionada.');
+
+  matches.forEach(match => {
+    if (matchIds.has(match.id)) errors.push(`ID de partida duplicado: ${match.id}.`);
+    matchIds.add(match.id);
+    if (!Number.isInteger(match.round) || match.round <= 0) errors.push(`Rodada inválida em ${match.id}.`);
+    if (!selectedCourts.includes(match.table)) errors.push(`Quadra inválida em ${match.id}.`);
+
+    const participants = [match.player1Id, match.player1PartnerId, match.player2Id, match.player2PartnerId]
+      .filter((id): id is string => !!id);
+    if (new Set(participants).size !== participants.length) errors.push(`Participante repetido dentro da partida ${match.id}.`);
+
+    const usedInRound = participantsByRound.get(match.round) || new Set<string>();
+    participants.forEach(id => {
+      const isPlaceholder = options.allowTbd && id.startsWith('TBD');
+      if (!knownIds.has(id) && !isPlaceholder) errors.push(`Participante desconhecido (${id}) em ${match.id}.`);
+      if (!isPlaceholder && usedInRound.has(id)) errors.push(`${id} aparece mais de uma vez na rodada ${match.round}.`);
+      if (!isPlaceholder) usedInRound.add(id);
+    });
+    participantsByRound.set(match.round, usedInRound);
   });
 
-  // Generate all possible unique partnerships
-  const allPossiblePairs: [string, string][] = [];
-  for (let i = 0; i < numPlayers; i++) {
-    for (let j = i + 1; j < numPlayers; j++) {
-      allPossiblePairs.push([tempPlayers[i].id, tempPlayers[j].id]);
-    }
+  return [...new Set(errors)];
+}
+
+export function getTournamentScheduleIntegrityErrors(
+  format: TournamentFormat,
+  competitors: Player[],
+  matches: Match[],
+  selectedCourts: number[],
+): string[] {
+  const errors = getScheduleIntegrityErrors(competitors, matches, selectedCourts);
+  const shapes: Partial<Record<TournamentFormat, { competitors: number; matches: number; rounds: number; individual: boolean }>> = {
+    REI_DA_QUADRA: { competitors: 4, matches: 3, rounds: 3, individual: true },
+    SUPER_6_INDIVIDUAL: { competitors: 6, matches: 6, rounds: 6, individual: true },
+    SUPER_8_INDIVIDUAL: { competitors: 8, matches: 14, rounds: 7, individual: true },
+    SUPER_10_INDIVIDUAL: { competitors: 10, matches: 20, rounds: 10, individual: true },
+    SUPER_12_INDIVIDUAL: { competitors: 12, matches: 33, rounds: 11, individual: true },
+    SUPER_3_FIXED: { competitors: 3, matches: 3, rounds: 3, individual: false },
+    SUPER_4_FIXED: { competitors: 4, matches: 6, rounds: 3, individual: false },
+    SUPER_5_FIXED: { competitors: 5, matches: 10, rounds: 5, individual: false },
+    SUPER_6_FIXED: { competitors: 6, matches: 15, rounds: 5, individual: false },
+    SUPER_8_FIXED: { competitors: 8, matches: 28, rounds: 7, individual: false },
+    SUPER_10_FIXED: { competitors: 10, matches: 45, rounds: 9, individual: false },
+    SUPER_12_FIXED: { competitors: 12, matches: 66, rounds: 11, individual: false },
+  };
+  const shape = shapes[format];
+  if (!shape) return errors;
+
+  if (competitors.length !== shape.competitors) errors.push(`${format}: quantidade incorreta de participantes.`);
+  if (matches.length !== shape.matches) errors.push(`${format}: esperado ${shape.matches} partidas, mas foram geradas ${matches.length}.`);
+  const rounds = [...new Set(matches.map(match => match.round))].sort((left, right) => left - right);
+  if (rounds.length !== shape.rounds || rounds.some((round, index) => round !== index + 1)) {
+    errors.push(`${format}: esperado um intervalo contínuo de ${shape.rounds} rodadas.`);
   }
-
-  // Shuffle for variety
-  let remainingPairs = allPossiblePairs.sort(() => Math.random() - 0.5);
-  
-  const maxMatchesPerRound = Math.floor(numPlayers / 4);
-  const maxRounds = numPlayers * 3; // Safety limit
-  
-  for (let r = 1; r <= maxRounds && remainingPairs.length > 0; r++) {
-    const playersUsedThisRound = new Set<string>();
-    let matchesInRound = 0;
-    let availableCourtsInRound = [...selectedCourts];
-
-    // Try to fill matches for this round
-    for (let i = 0; i < remainingPairs.length && matchesInRound < maxMatchesPerRound; i++) {
-        const pair1 = remainingPairs[i];
-        if (playersUsedThisRound.has(pair1[0]) || playersUsedThisRound.has(pair1[1])) continue;
-
-        // Find another pair that hasn't played this round and shares no players
-        let bestPair2Idx = -1;
-        let minCombinedOpponentWeight = Infinity;
-
-        for (let j = i + 1; j < remainingPairs.length; j++) {
-          const pair2 = remainingPairs[j];
-          const combined = [...pair1, ...pair2];
-          if (new Set(combined).size === 4 && !combined.some(p => playersUsedThisRound.has(p))) {
-            let opponentWeight = 0;
-            pair1.forEach(p1 => {
-              pair2.forEach(p2 => {
-                opponentWeight += (opponentCount[p1][p2] || 0);
-              });
-            });
-
-            if (opponentWeight < minCombinedOpponentWeight) {
-              minCombinedOpponentWeight = opponentWeight;
-              bestPair2Idx = j;
-              if (opponentWeight === 0) break;
-            }
-          }
-        }
-
-        if (bestPair2Idx !== -1) {
-          const pair2 = remainingPairs[bestPair2Idx];
-          const pIds = [...pair1, ...pair2];
-          
-          const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
-          const table = getBestCourt(pIds, courtCandidates);
-          
-          const isByeMatch = pair1.includes('BYE') || pair2.includes('BYE');
-          
-          if (!isByeMatch) {
-            matches.push({
-              id: `super-${r}-${matchesInRound}-${Math.random().toString(36).substr(2, 5)}`,
-              player1Id: pair1[0],
-              player1PartnerId: pair1[1],
-              player2Id: pair2[0],
-              player2PartnerId: pair2[1],
-              table,
-              sets: [],
-              currentSet: { player1: 0, player2: 0 },
-              isCompleted: false,
-              round: r
-            });
-            matchesInRound++;
-            
-            incUsage(pIds, table);
-            availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
-
-            // Update opponent counts
-            pair1.forEach(p1 => {
-              pair2.forEach(p2 => {
-                if (p1 !== 'BYE' && p2 !== 'BYE') {
-                  opponentCount[p1][p2] = (opponentCount[p1][p2] || 0) + 1;
-                  opponentCount[p2][p1] = (opponentCount[p2][p1] || 0) + 1;
-                }
-              });
-            });
-          }
-
-          // Mark players as used
-          pair1.forEach(p => playersUsedThisRound.add(p));
-          pair2.forEach(p => playersUsedThisRound.add(p));
-
-          remainingPairs.splice(bestPair2Idx, 1);
-          remainingPairs.splice(i, 1);
-          i--;
-        }
-    }
-
-    if (matchesInRound === 0 && remainingPairs.length > 0) {
-      remainingPairs.push(remainingPairs.shift()!);
-    }
-  }
-
-  return matches;
+  matches.forEach(match => {
+    const hasPartners = !!match.player1PartnerId && !!match.player2PartnerId;
+    if (shape.individual && !hasPartners) errors.push(`${format}: partida individual sem os dois parceiros.`);
+    if (!shape.individual && hasPartners) errors.push(`${format}: partida de duplas fixas contém parceiros individuais.`);
+  });
+  return [...new Set(errors)];
 }
 
 export function validateSetScore(s1: number, s2: number, format: MatchFormat): { isValid: boolean; error?: string } {
