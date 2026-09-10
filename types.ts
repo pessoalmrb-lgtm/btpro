@@ -27,17 +27,16 @@ export type Match = {
 
 export type TournamentFormat = 
   | 'REI_DA_QUADRA' 
-  | 'SUPER_6_INDIVIDUAL' 
   | 'SUPER_6_FIXED'
   | 'SUPER_8_INDIVIDUAL' 
   | 'SUPER_4_FIXED' 
-  | 'SUPER_10_INDIVIDUAL' 
   | 'SUPER_8_FIXED' 
   | 'SUPER_10_FIXED' 
   | 'SUPER_12_FIXED' 
   | 'SUPER_3_FIXED'
   | 'SUPER_5_FIXED'
   | 'SUPER_12_INDIVIDUAL'
+  | 'SUPER_16_INDIVIDUAL'
   | 'GROUPS_MATA_MATA'
   | 'INDIVIDUAL'
   | 'GROUPS'

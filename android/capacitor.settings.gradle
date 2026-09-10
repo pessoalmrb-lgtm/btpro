@@ -17,8 +17,8 @@ project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/sh
 include ':capawesome-capacitor-apple-sign-in'
 project(':capawesome-capacitor-apple-sign-in').projectDir = new File('../node_modules/@capawesome/capacitor-apple-sign-in/android')
 
-include ':codetrix-studio-capacitor-google-auth'
-project(':codetrix-studio-capacitor-google-auth').projectDir = new File('../node_modules/@codetrix-studio/capacitor-google-auth/android')
+include ':capawesome-capacitor-google-sign-in'
+project(':capawesome-capacitor-google-sign-in').projectDir = new File('../node_modules/@capawesome/capacitor-google-sign-in/android')
 
 include ':revenuecat-purchases-capacitor'
 project(':revenuecat-purchases-capacitor').projectDir = new File('../node_modules/@revenuecat/purchases-capacitor/android')

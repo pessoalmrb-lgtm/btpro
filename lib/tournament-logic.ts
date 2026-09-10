@@ -533,47 +533,6 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
     return scores[0].court;
   };
 
-  // Custom fixed matrix for Super 6 (6 players)
-  if (numPlayers === 6) {
-    const matrix = [
-      { r: 1, p1: 0, p1p: 1, p2: 2, p2p: 3 },
-      { r: 2, p1: 0, p1p: 2, p2: 4, p2p: 5 },
-      { r: 3, p1: 0, p1p: 3, p2: 1, p2p: 4 },
-      { r: 4, p1: 1, p1p: 5, p2: 2, p2p: 4 },
-      { r: 5, p1: 0, p1p: 5, p2: 1, p2p: 3 },
-      { r: 6, p1: 2, p1p: 5, p2: 3, p2p: 4 },
-    ];
-
-    const matches: Match[] = [];
-    const rounds = [1, 2, 3, 4, 5, 6];
-    rounds.forEach(r => {
-      const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
-      let availableCourtsInRound = [...selectedCourts];
-      roundMatches.forEach((m, idx) => {
-        const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
-        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
-        const table = getBestCourt(pIds, courtCandidates);
-        
-        incUsage(pIds, table);
-        availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
-
-        matches.push({
-          id: `super-6-${r}-${idx}`,
-          player1Id: tempPlayers[m.p1].id,
-          player1PartnerId: tempPlayers[m.p1p].id,
-          player2Id: tempPlayers[m.p2].id,
-          player2PartnerId: tempPlayers[m.p2p].id,
-          table,
-          sets: [],
-          currentSet: { player1: 0, player2: 0 },
-          isCompleted: false,
-          round: r
-        });
-      });
-    });
-    return matches;
-  }
-
   // Custom fixed matrix for Super 8 (8 players)
   if (numPlayers === 8) {
     const matrix = [
@@ -629,67 +588,6 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
     return matches;
   }
 
-  // Custom fixed matrix for Super 10 (10 players)
-  // Optimized: 40 unique partnerships e todos jogam exatamente 8 vezes.
-  // Each round includes restA/restB indicating which player indices rest.
-  if (numPlayers === 10) {
-    const matrix = [
-      { r:1, p1:2, p1p:3, p2:5, p2p:7, restA:0, restB:1 },
-      { r:1, p1:4, p1p:8, p2:6, p2p:9, restA:0, restB:1 },
-      { r:2, p1:0, p1p:5, p2:4, p2p:9, restA:2, restB:3 },
-      { r:2, p1:1, p1p:7, p2:6, p2p:8, restA:2, restB:3 },
-      { r:3, p1:0, p1p:6, p2:1, p2p:3, restA:4, restB:5 },
-      { r:3, p1:2, p1p:7, p2:8, p2p:9, restA:4, restB:5 },
-      { r:4, p1:0, p1p:2, p2:5, p2p:8, restA:6, restB:7 },
-      { r:4, p1:1, p1p:9, p2:3, p2p:4, restA:6, restB:7 },
-      { r:5, p1:0, p1p:4, p2:3, p2p:7, restA:8, restB:9 },
-      { r:5, p1:1, p1p:6, p2:2, p2p:5, restA:8, restB:9 },
-      { r:6, p1:0, p1p:9, p2:6, p2p:7, restA:1, restB:2 },
-      { r:6, p1:3, p1p:8, p2:4, p2p:5, restA:1, restB:2 },
-      { r:7, p1:0, p1p:7, p2:2, p2p:6, restA:3, restB:4 },
-      { r:7, p1:1, p1p:8, p2:5, p2p:9, restA:3, restB:4 },
-      { r:8, p1:0, p1p:3, p2:2, p2p:9, restA:5, restB:6 },
-      { r:8, p1:1, p1p:4, p2:7, p2p:8, restA:5, restB:6 },
-      { r:9, p1:0, p1p:1, p2:2, p2p:4, restA:7, restB:8 },
-      { r:9, p1:3, p1p:9, p2:5, p2p:6, restA:7, restB:8 },
-      { r:10, p1:1, p1p:5, p2:4, p2p:7, restA:9, restB:0 },
-      { r:10, p1:2, p1p:8, p2:3, p2p:6, restA:9, restB:0 },
-    ];
-    const matches: Match[] = [];
-    const rounds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    rounds.forEach(r => {
-      const roundMatches = matrix.filter(m => m.r === r).sort(() => Math.random() - 0.5);
-      // Attach resting players to the first match of each round for display
-      const restA = roundMatches[0]?.restA ?? -1;
-      const restB = roundMatches[0]?.restB ?? -1;
-      let availableCourtsInRound = [...selectedCourts];
-      roundMatches.forEach((m, idx) => {
-        const pIds = [tempPlayers[m.p1].id, tempPlayers[m.p1p].id, tempPlayers[m.p2].id, tempPlayers[m.p2p].id];
-        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
-        const table = getBestCourt(pIds, courtCandidates);
-        incUsage(pIds, table);
-        availableCourtsInRound = availableCourtsInRound.filter(c => c !== table);
-        matches.push({
-          id: `super-10-${r}-${idx}`,
-          player1Id: tempPlayers[m.p1].id,
-          player1PartnerId: tempPlayers[m.p1p].id,
-          player2Id: tempPlayers[m.p2].id,
-          player2PartnerId: tempPlayers[m.p2p].id,
-          // Store resting players on first match of round for UI display
-          ...(idx === 0 && restA >= 0 ? {
-            restingPlayerIds: [tempPlayers[restA].id, tempPlayers[restB].id]
-          } : {}),
-          table,
-          sets: [],
-          currentSet: { player1: 0, player2: 0 },
-          isCompleted: false,
-          round: r
-        });
-      });
-    });
-    return matches;
-  }
-
   // Whist Tournament completo para 12 atletas. A base cíclica garante 11
   // rodadas, 3 partidas por rodada, cada parceria 1 vez e cada adversário 2
   // vezes. O atleta de índice 11 fica fixo; os demais giram módulo 11.
@@ -726,6 +624,55 @@ export function generateIndividualDoubles(players: Player[], selectedCourts: num
         });
       });
     }
+    return matches;
+  }
+
+  // Whist completo para 16 atletas: 15 rodadas, 4 jogos por rodada,
+  // cada parceria exatamente uma vez e cada adversário exatamente duas vezes.
+  // A tabela explícita evita a busca combinatória pesada no dispositivo.
+  if (numPlayers === 16) {
+    const schedule = [
+      ['ABCD', 'EFGH', 'IJKL', 'MNOP'],
+      ['EGFH', 'ACBD', 'MONP', 'IKJL'],
+      ['ILJK', 'MPNO', 'EHFG', 'ADBC'],
+      ['AEIM', 'BFJN', 'CGKO', 'DHLP'],
+      ['CHIN', 'BELO', 'AFKP', 'DGJM'],
+      ['BHKM', 'CEJP', 'DFIO', 'AGLN'],
+      ['DEKN', 'AHJO', 'BGIP', 'CFLM'],
+      ['BJFN', 'AIEM', 'DLHP', 'CKGO'],
+      ['AJHO', 'DKEN', 'CLFM', 'BIGP'],
+      ['BLEO', 'CIHN', 'DJGM', 'AKFP'],
+      ['CJEP', 'BKHM', 'ALGN', 'DIFO'],
+      ['COGK', 'DPHL', 'BNFJ', 'AMEI'],
+      ['DOFI', 'ANGL', 'CPEJ', 'BMHK'],
+      ['BPGI', 'CMFL', 'AOHJ', 'DNEK'],
+      ['APFK', 'DMGJ', 'BOEL', 'CNHI'],
+    ];
+    const matches: Match[] = [];
+
+    schedule.forEach((roundGames, roundIndex) => {
+      let availableCourtsInRound = [...selectedCourts];
+      roundGames.forEach((game, matchIndex) => {
+        const participantIndices = [...game].map(letter => letter.charCodeAt(0) - 65);
+        const participantIds = participantIndices.map(index => tempPlayers[index].id);
+        const courtCandidates = availableCourtsInRound.length > 0 ? availableCourtsInRound : selectedCourts;
+        const table = getBestCourt(participantIds, courtCandidates);
+        incUsage(participantIds, table);
+        availableCourtsInRound = availableCourtsInRound.filter(court => court !== table);
+        matches.push({
+          id: `super-16-${roundIndex + 1}-${matchIndex}`,
+          player1Id: participantIds[0],
+          player1PartnerId: participantIds[1],
+          player2Id: participantIds[2],
+          player2PartnerId: participantIds[3],
+          table,
+          sets: [],
+          currentSet: { player1: 0, player2: 0 },
+          isCompleted: false,
+          round: roundIndex + 1,
+        });
+      });
+    });
     return matches;
   }
 
@@ -898,10 +845,9 @@ export function getTournamentScheduleIntegrityErrors(
   const errors = getScheduleIntegrityErrors(competitors, matches, selectedCourts);
   const shapes: Partial<Record<TournamentFormat, { competitors: number; matches: number; rounds: number; individual: boolean }>> = {
     REI_DA_QUADRA: { competitors: 4, matches: 3, rounds: 3, individual: true },
-    SUPER_6_INDIVIDUAL: { competitors: 6, matches: 6, rounds: 6, individual: true },
     SUPER_8_INDIVIDUAL: { competitors: 8, matches: 14, rounds: 7, individual: true },
-    SUPER_10_INDIVIDUAL: { competitors: 10, matches: 20, rounds: 10, individual: true },
     SUPER_12_INDIVIDUAL: { competitors: 12, matches: 33, rounds: 11, individual: true },
+    SUPER_16_INDIVIDUAL: { competitors: 16, matches: 60, rounds: 15, individual: true },
     SUPER_3_FIXED: { competitors: 3, matches: 3, rounds: 3, individual: false },
     SUPER_4_FIXED: { competitors: 4, matches: 6, rounds: 3, individual: false },
     SUPER_5_FIXED: { competitors: 5, matches: 10, rounds: 5, individual: false },

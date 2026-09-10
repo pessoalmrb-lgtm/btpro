@@ -49,10 +49,9 @@ function validateGeneralSchedule(schedule: Match[], competitors: Player[], court
 function auditIndividualModes() {
   const cases = [
     { format: 'REI_DA_QUADRA', name: 'Rei da Quadra', count: 4, rounds: 3, matches: 3, appearances: [3, 3, 3, 3], completePartners: true, minOpponents: 3, maxOpponentRepeat: 2 },
-    { format: 'SUPER_6_INDIVIDUAL', name: 'Super 6 individual', count: 6, rounds: 6, matches: 6, appearances: Array(6).fill(4), completePartners: false, minOpponents: 5, maxOpponentRepeat: 2 },
     { format: 'SUPER_8_INDIVIDUAL', name: 'Super 8 individual', count: 8, rounds: 7, matches: 14, appearances: Array(8).fill(7), completePartners: true, minOpponents: 7, maxOpponentRepeat: 2 },
-    { format: 'SUPER_10_INDIVIDUAL', name: 'Super 10 individual', count: 10, rounds: 10, matches: 20, appearances: Array(10).fill(8), completePartners: false, minOpponents: 8, maxOpponentRepeat: 3 },
     { format: 'SUPER_12_INDIVIDUAL', name: 'Super 12 individual', count: 12, rounds: 11, matches: 33, appearances: Array(12).fill(11), completePartners: true, minOpponents: 11, maxOpponentRepeat: 2 },
+    { format: 'SUPER_16_INDIVIDUAL', name: 'Super 16 individual', count: 16, rounds: 15, matches: 60, appearances: Array(16).fill(15), completePartners: true, minOpponents: 15, maxOpponentRepeat: 2 },
   ];
 
   for (const testCase of cases) {

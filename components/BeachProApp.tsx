@@ -1933,10 +1933,9 @@ export default function BeachProApp() {
     const isIndividual = tournamentFormat.includes('INDIVIDUAL') || tournamentFormat === 'REI_DA_QUADRA';
     const teams = isIndividual ? n : Math.floor(n / 2);
     const matchesPerRound = Math.floor(teams / 2);
-    if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return 1;
     if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return 2;
-    if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return 2;
     if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return 3;
+    if (tournamentFormat === 'SUPER_16_INDIVIDUAL') return 4;
     if (tournamentFormat === 'REI_DA_QUADRA')       return 1;
     if (tournamentFormat === 'SUPER_3_FIXED')       return 1;
     if (tournamentFormat === 'SUPER_4_FIXED')       return 2;
@@ -1953,10 +1952,9 @@ export default function BeachProApp() {
 
   const getFormatDisplayName = (): string => {
     const names: Record<string, string> = {
-      'SUPER_6_INDIVIDUAL': 'Super 6 Individual',
       'SUPER_8_INDIVIDUAL': 'Super 8 Individual',
-      'SUPER_10_INDIVIDUAL': 'Super 10 Individual',
       'SUPER_12_INDIVIDUAL': 'Super 12 Individual',
+      'SUPER_16_INDIVIDUAL': 'Super 16 Individual',
       'REI_DA_QUADRA': 'Rei da Quadra',
       'ROUND_ROBIN': 'Round Robin',
       'GROUPS': 'Fase de Grupos',
@@ -3317,10 +3315,9 @@ export default function BeachProApp() {
                           SUPER_8_FIXED: 'Super 8 de duplas fixas',
                           SUPER_10_FIXED: 'Super 10 de duplas fixas',
                           SUPER_12_FIXED: 'Super 12 de duplas fixas',
-                          SUPER_6_INDIVIDUAL: 'Super 6 individual',
                           SUPER_8_INDIVIDUAL: 'Super 8 individual',
-                          SUPER_10_INDIVIDUAL: 'Super 10 individual',
                           SUPER_12_INDIVIDUAL: 'Super 12 individual',
+                          SUPER_16_INDIVIDUAL: 'Super 16 individual',
                           GROUPS_MATA_MATA: 'Grupos + mata-mata',
                         } as Record<string, string>)[t.format] || t.format?.replace(/_/g, ' ');
 
@@ -5124,14 +5121,13 @@ O play na palma da mão! 🏆`;
               <div className="space-y-4 pr-2 custom-scrollbar">
                 {[
                   { id: 'REI_DA_QUADRA',       title: 'REI DA QUADRA — 4 Atletas',         desc: '3 rodadas individuais. Cada atleta joga uma vez ao lado de cada um dos outros 3. Ao final, o melhor desempenho geral vence.', icon: TrophyIcon, req: 4 },
-                  { id: 'SUPER_6_INDIVIDUAL',  title: 'SUPER 6 INDIVIDUAL — 6 Atletas',    desc: '6 rodadas. Cada atleta disputa 4 partidas, sem repetir parceria. Em cada rodada, 2 atletas descansam. Todos terminam com a mesma quantidade de jogos.', icon: Users, req: 6 },
                   { id: 'SUPER_3_FIXED',       title: 'SUPER 3 DUPLAS FIXAS — 6 Atletas',  desc: '3 duplas formadas antes do torneio começar. Cada dupla enfrenta todas as outras 2 duplas. Disputam 2 partidas cada.', icon: Users, req: 6 },
                   { id: 'SUPER_4_FIXED',       title: 'SUPER 4 DUPLAS FIXAS — 8 Atletas',  desc: '4 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 3. Total de 6 partidas no torneio.', icon: Users, req: 8 },
                   { id: 'SUPER_8_INDIVIDUAL',  title: 'SUPER 8 INDIVIDUAL — 8 Atletas',    desc: '7 rodadas. Cada atleta joga ao lado de todos os outros 7, um por rodada. Parceiros mudam a cada rodada. O desempenho individual acumulado define o campeão.', icon: Users, req: 8 },
                   { id: 'SUPER_5_FIXED',       title: 'SUPER 5 DUPLAS FIXAS — 10 Atletas', desc: '5 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 4. Total de 10 partidas no torneio.', icon: Users, req: 10 },
-                  { id: 'SUPER_10_INDIVIDUAL', title: 'SUPER 10 INDIVIDUAL — 10 Atletas',  desc: '10 rodadas. Cada atleta disputa 8 partidas, sempre com parcerias diferentes. Em cada rodada, 2 atletas descansam. Todos terminam com a mesma quantidade de jogos.', icon: Users, req: 10 },
                   { id: 'SUPER_12_INDIVIDUAL', title: 'SUPER 12 INDIVIDUAL — 12 Atletas',  desc: '11 rodadas. Parceiros mudam a cada rodada. Todos os atletas jogam juntos ao longo do torneio. O melhor aproveitamento individual determina o campeão.', icon: Users, req: 12 },
                   { id: 'SUPER_6_FIXED',       title: 'SUPER 6 DUPLAS FIXAS — 12 Atletas', desc: '6 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 5. Total de 15 partidas no torneio.', icon: Users, req: 12 },
+                  { id: 'SUPER_16_INDIVIDUAL', title: 'SUPER 16 INDIVIDUAL — 16 Atletas',  desc: '15 rodadas e 4 partidas por rodada. Cada atleta joga com todos os outros uma vez e enfrenta cada adversário duas vezes.', icon: Users, req: 16 },
                   { id: 'SUPER_8_FIXED',       title: 'SUPER 8 DUPLAS FIXAS — 16 Atletas', desc: '8 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 7. Total de 28 partidas. Ideal para torneios de liga.', icon: Users, req: 16 },
                   { id: 'SUPER_10_FIXED',      title: 'SUPER 10 DUPLAS FIXAS — 20 Atletas', desc: '10 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 9. Total de 45 partidas. Formato de temporada longa.', icon: Users, req: 20 },
                   { id: 'SUPER_12_FIXED',      title: 'SUPER 12 DUPLAS FIXAS — 24 Atletas', desc: '12 duplas formadas antes do torneio. Cada dupla enfrenta todas as outras 11. Total de 66 partidas. O formato mais completo.', icon: Users, req: 24, premium: false },
@@ -5996,10 +5992,9 @@ O play na palma da mão! 🏆`;
               const matchesPerRound = Math.floor(teams / 2);
 
               // Individual formats
-              if (tournamentFormat === 'SUPER_6_INDIVIDUAL')  return { ideal: 1, min: 1, max: 3, reason: `6 atletas — 1 quadra por rodada. 2 atletas descansam por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_8_INDIVIDUAL')  return { ideal: 2, min: 1, max: 4, reason: `8 atletas — 2 quadras por rodada (sem espera).` };
-              if (tournamentFormat === 'SUPER_10_INDIVIDUAL') return { ideal: 2, min: 1, max: 3, reason: `10 atletas — 2 quadras por rodada. 1 dupla descansa por rodada.`, hasWaiting: true };
               if (tournamentFormat === 'SUPER_12_INDIVIDUAL') return { ideal: 3, min: 1, max: 4, reason: `12 atletas — 3 quadras por rodada (sem espera).` };
+              if (tournamentFormat === 'SUPER_16_INDIVIDUAL') return { ideal: 4, min: 1, max: 4, reason: `16 atletas — 4 quadras por rodada (sem espera).` };
               if (tournamentFormat === 'REI_DA_QUADRA')       return { ideal: 1, min: 1, max: 1, reason: `4 atletas — 1 quadra suficiente.` };
 
               // Fixed duplas formats
@@ -6377,10 +6372,9 @@ O play na palma da mão! 🏆`;
                             const formats: { [key: string]: string } = {
                               'REI_DA_QUADRA': 'REI DA QUADRA',
                               'SUPER_8_INDIVIDUAL': 'SUPER 8 IND',
-                              'SUPER_6_INDIVIDUAL': 'SUPER 6 IND',
                               'SUPER_4_FIXED': 'SUPER 4 DUPLAS',
-                              'SUPER_10_INDIVIDUAL': 'SUPER 10 IND',
                               'SUPER_12_INDIVIDUAL': 'SUPER 12 IND',
+                              'SUPER_16_INDIVIDUAL': 'SUPER 16 IND',
                               'SUPER_6_FIXED': 'SUPER 6 DUPLAS',
                               'SUPER_8_FIXED': 'SUPER_ 8 DUPLAS',
                               'SUPER_10_FIXED': 'SUPER 10 DUPLAS',
@@ -6491,7 +6485,7 @@ O play na palma da mão! 🏆`;
                         </div>
                         <div className="tournament-info-body space-y-4 p-5">
                           {(() => {
-                            const formatLabels: Record<string, string> = { REI_DA_QUADRA:'Rei da Quadra', SUPER_8_INDIVIDUAL:'Super 8 individual', SUPER_6_INDIVIDUAL:'Super 6 individual', SUPER_10_INDIVIDUAL:'Super 10 individual', SUPER_12_INDIVIDUAL:'Super 12 individual', SUPER_4_FIXED:'Super 4 duplas', SUPER_6_FIXED:'Super 6 duplas', SUPER_8_FIXED:'Super 8 duplas', SUPER_10_FIXED:'Super 10 duplas', SUPER_12_FIXED:'Super 12 duplas', GROUPS_MATA_MATA:'Grupos + mata-mata', GROUPS:'Fase de grupos', MATA_MATA:'Mata-mata', ROUND_ROBIN:'Todos contra todos', INDIVIDUAL:'Individual' };
+                            const formatLabels: Record<string, string> = { REI_DA_QUADRA:'Rei da Quadra', SUPER_8_INDIVIDUAL:'Super 8 individual', SUPER_12_INDIVIDUAL:'Super 12 individual', SUPER_16_INDIVIDUAL:'Super 16 individual', SUPER_4_FIXED:'Super 4 duplas', SUPER_6_FIXED:'Super 6 duplas', SUPER_8_FIXED:'Super 8 duplas', SUPER_10_FIXED:'Super 10 duplas', SUPER_12_FIXED:'Super 12 duplas', GROUPS_MATA_MATA:'Grupos + mata-mata', GROUPS:'Fase de grupos', MATA_MATA:'Mata-mata', ROUND_ROBIN:'Todos contra todos', INDIVIDUAL:'Individual' };
                             const matchLabels: Record<string, string> = { '6_GAMES_TIEBREAK':'6 games; em 6 × 6, tie-break', '8_GAMES_MAX':'Até 8 games', '6_GAMES_MAX':'Até 6 games', '5_GAMES_MAX':'Até 5 games', 'SUM_9_GAMES':'Soma de 9 games', 'SUM_7_GAMES':'Soma de 7 games', 'SUM_5_GAMES':'Soma de 5 games' };
                             const criterionLabels: Record<string, string> = { WINS:'Vitórias', GAME_BALANCE:'Saldo de games', HEAD_TO_HEAD:'Confronto direto', GAMES_WON:'Games pró', SET_BALANCE:'Saldo de sets' };
                             const regularRounds = Math.max(...activeTournament.matches.map(m => m.round).filter(r => r < 100), 0) || activeTournament.totalRounds;
@@ -7332,7 +7326,7 @@ O play na palma da mão! 🏆`;
               <div className="finished-classification-header space-y-4">
                 <div className="flex items-center gap-3">
                   <span className="bg-tertiary-container text-on-tertiary-container px-4 py-1 rounded-full font-black text-[10px] tracking-widest uppercase">
-                    {activeTournament.format === 'SUPER_8_INDIVIDUAL' ? 'SUPER 8' : 'TORNEIO'}
+                    {({ SUPER_8_INDIVIDUAL: 'SUPER 8', SUPER_12_INDIVIDUAL: 'SUPER 12', SUPER_16_INDIVIDUAL: 'SUPER 16' } as Record<string, string>)[activeTournament.format] || 'TORNEIO'}
                   </span>
                   <span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-black text-[10px] tracking-widest uppercase flex items-center gap-1.5 border border-primary/20">
                     <CheckCircle2 size={10} />
