@@ -167,6 +167,20 @@ export type Ranking = {
   playerStats?: Record<string, PlayerStats>;
 };
 
+export type LeagueEvent = {
+  id: string;
+  rankingId: string;
+  title: string;
+  date: string;
+  time: string;
+  arenaName: string;
+  format?: TournamentFormat | '';
+  createdBy: string;
+  createdAt: number;
+  confirmedUserIds: string[];
+  tournamentId?: string;
+};
+
 export type UserProfile = {
   uid: string;
   email: string;

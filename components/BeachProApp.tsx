@@ -45,14 +45,15 @@ import {
   Search,
   Copy
 ,
-  Share2
+  Share2,
+  CalendarDays
 } from 'lucide-react';
 import Image from 'next/image';
 import { Capacitor } from '@capacitor/core';
-import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete } from '../types';
+import { AppStep, Player, TournamentState, Match, TournamentFormat, MatchFormat, TeamRegistrationType, RankingCriterion, PlayoffRound, Ranking, PlayerStats, Address, LeagueAthlete, LeagueEvent } from '../types';
 import { generateRoundRobin, validateSetScore, calculateRankings, calculateFinalRankings, generateGroupStage, generateIndividualDoubles, getPossibleGroupStructures, checkPlayoffPossibility, generatePlayoffs, getKnockoutQualifiedTeams, getTournamentGroups, normalizePlayoffRounds, advancePlayoffWinner, invalidatePlayoffDescendants, canIncrementScore, calculateTournamentPoints, getScheduleIntegrityErrors, getTournamentScheduleIntegrityErrors, isTournamentSetupLocked, FinalRankingResult } from '../lib/tournament-logic';
 import { cn } from '../lib/utils';
-import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage, deleteCurrentAccount } from '../firebase';
+import { auth, db, storage, getGoogleProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, collection, query, where, onSnapshot, doc, setDoc, getDoc, deleteDoc, updateDoc, handleFirestoreError, OperationType, cleanData, getDocs, or, writeBatch, runTransaction, testConnection, uploadImageToStorage } from '../firebase';
 import { fetchSubscriptionStatus, mirrorExpirationToFirestore } from '../lib/subscription';
 import { generateUniqueUserTag, generateUniqueNumericId } from '../lib/user-utils';
 import type { User } from '../firebase';
@@ -61,6 +62,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { Header } from './Header';
 import { StepContainer } from './StepContainer';
 import { BottomNav } from './BottomNav';
+import { StoredImage } from './StoredImage';
 import { PremiumUpgrade } from './PremiumUpgrade';
 import { SuggestionModal } from './SuggestionModal';
 
@@ -266,7 +268,7 @@ export default function BeachProApp() {
   const [reauthPassword, setReauthPassword] = useState('');
   const [isProfileUpdating, setIsProfileUpdating] = useState(false);
   const [snackMessage, setSnackMessage] = useState<string | null>(null);
-  const [accountDeleteStep, setAccountDeleteStep] = useState<0 | 1 | 2>(0);
+  const [accountDeleteStep, setAccountDeleteStep] = useState<0 | 1 | 2 | 3>(0);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState('');
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -318,10 +320,57 @@ export default function BeachProApp() {
   const [leagueSearchError, setLeagueSearchError] = useState<string | null>(null);
   const [joiningLeagueId, setJoiningLeagueId] = useState<string | null>(null);
   const [showHistoryDetail, setShowHistoryDetail] = useState<string | null>(null);
+  const [leagueConfigModal, setLeagueConfigModal] = useState<'DATA'|'POINTS'|'ADMINS'|'SEASON'|null>(null);
+  const [showLeagueCalendar, setShowLeagueCalendar] = useState(false);
+  const [showScheduleLeagueEvent, setShowScheduleLeagueEvent] = useState(false);
+  const [leagueEvents, setLeagueEvents] = useState<LeagueEvent[]>([]);
+  const [selectedLeagueEvent, setSelectedLeagueEvent] = useState<LeagueEvent | null>(null);
+  const [eventDraft, setEventDraft] = useState({ title: '', date: '', time: '', arenaName: '', format: '' as TournamentFormat | '' });
   const [historyDetailTab, setHistoryDetailTab] = useState<'RESULTS' | 'MATCHES'>('RESULTS');
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId) ||
     (followedTournament?.id === activeTournamentId ? followedTournament : undefined);
+
+  React.useEffect(() => {
+    if (!activeRankingId || !user) { setLeagueEvents([]); return; }
+    return onSnapshot(collection(db, `rankings/${activeRankingId}/events`), snapshot => {
+      setLeagueEvents(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as LeagueEvent)).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)));
+    }, error => console.error('Erro ao carregar agenda da liga:', error));
+  }, [activeRankingId, user]);
+
+  const saveLeagueEvent = async () => {
+    if (!activeRanking || !user || !eventDraft.title.trim() || !eventDraft.date || !eventDraft.time || !eventDraft.arenaName.trim()) return;
+    const eventRef = doc(collection(db, `rankings/${activeRanking.id}/events`));
+    await setDoc(eventRef, cleanData({ id: eventRef.id, rankingId: activeRanking.id, ...eventDraft, createdBy: user.uid, createdAt: Date.now(), confirmedUserIds: [] }));
+    setEventDraft({ title: '', date: '', time: '', arenaName: activeRanking.arenaName || '', format: '' });
+    setShowScheduleLeagueEvent(false);
+    setShowLeagueCalendar(true);
+    setSnackMessage('Torneio agendado!'); setTimeout(() => setSnackMessage(null), 3000);
+  };
+
+  const toggleEventPresence = async (event: LeagueEvent) => {
+    if (!user || !activeRanking) return;
+    const confirmed = event.confirmedUserIds.includes(user.uid);
+    const limits: Partial<Record<TournamentFormat, number>> = { REI_DA_QUADRA:4, SUPER_8_INDIVIDUAL:8, SUPER_12_INDIVIDUAL:12, SUPER_16_INDIVIDUAL:16, SUPER_4_FIXED:8, SUPER_6_FIXED:12, SUPER_8_FIXED:16, SUPER_10_FIXED:20, SUPER_12_FIXED:24 };
+    const limit = event.format ? limits[event.format] : undefined;
+    if (!confirmed && limit && event.confirmedUserIds.length >= limit) {
+      setSnackMessage(`As ${limit} vagas deste formato já foram preenchidas.`); setTimeout(() => setSnackMessage(null), 3500); return;
+    }
+    const next = confirmed ? event.confirmedUserIds.filter(id => id !== user.uid) : [...event.confirmedUserIds, user.uid];
+    await updateDoc(doc(db, `rankings/${activeRanking.id}/events`, event.id), { confirmedUserIds: next });
+    setSelectedLeagueEvent({ ...event, confirmedUserIds: next });
+  };
+
+  const startTournamentFromEvent = (event: LeagueEvent) => {
+    if (!activeRanking) return;
+    const confirmed = activeRanking.leagueAthletes.filter(athlete => event.confirmedUserIds.includes(athlete.id));
+    setPendingRankingId(activeRanking.id); setTournamentName(event.title);
+    setPlayers(confirmed.map(athlete => ({ id: athlete.id, name: athlete.name })));
+    setPlayerCount(confirmed.length);
+    if (event.format) setTournamentFormat(event.format);
+    setShowLeagueCalendar(false); setSelectedLeagueEvent(null);
+    navigateTo(event.format ? 'MATCH_FORMAT' : 'FORMAT_SELECTION');
+  };
 
   // Torneios que o usuário pode gerenciar (próprios ou de ligas onde é admin)
   const manageableTournaments = tournaments.filter(t => {
@@ -1159,45 +1208,52 @@ export default function BeachProApp() {
     setAccountDeleteError(null);
 
     try {
+      // Se a conta usa Apple, tentamos revogar o acesso imediatamente. Uma
+      // eventual falha não pode impedir o usuário de protocolar a exclusão.
       const usesApple = user.providerData.some(provider => provider.providerId === 'apple.com');
       if (usesApple && Capacitor.getPlatform() === 'ios') {
-        const { AppleSignIn } = await import('@capawesome/capacitor-apple-sign-in');
-        const { rawNonce, hashedNonce } = await createAppleNonce();
-        const appleResult = await AppleSignIn.signIn({ scopes: [], nonce: hashedNonce });
-        if (!appleResult.idToken || !appleResult.authorizationCode) throw new Error('APPLE_REAUTH_FAILED');
-        const { OAuthProvider, revokeAccessToken } = await import('firebase/auth');
-        const provider = new OAuthProvider('apple.com');
-        const credential = provider.credential({ idToken: appleResult.idToken, rawNonce });
-        await reauthenticateWithCredential(user, credential);
-        await revokeAccessToken(auth, appleResult.authorizationCode);
+        try {
+          const { AppleSignIn } = await import('@capawesome/capacitor-apple-sign-in');
+          const { hashedNonce } = await createAppleNonce();
+          const appleResult = await AppleSignIn.signIn({ scopes: [], nonce: hashedNonce });
+          if (appleResult.authorizationCode) {
+            const { revokeAccessToken } = await import('firebase/auth');
+            await revokeAccessToken(auth, appleResult.authorizationCode);
+          }
+        } catch (revokeError) {
+          console.warn('Pedido registrado; revogação Apple deverá ser conferida na exclusão manual:', revokeError);
+        }
       }
 
-      await deleteCurrentAccount();
-      try {
-        const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
-        await GoogleSignIn.signOut();
-      } catch {}
-      try { await signOut(auth); } catch {}
+      const { send } = await import('@emailjs/browser');
+      const requestedAt = new Date();
+      const providers = user.providerData.map(provider => provider.providerId).filter(Boolean).join(', ') || 'não informado';
+      await send(
+        'service_h45e5rc',
+        'template_r3body8',
+        {
+          title: 'SOLICITAÇÃO DE EXCLUSÃO DE CONTA — BEACHPRÓ',
+          name: userProfile?.displayName || user.displayName || 'Usuário BeachPró',
+          email: user.email || userProfile?.email || 'Não informado',
+          message: [
+            'O usuário confirmou dentro do aplicativo que deseja excluir permanentemente sua conta e seus dados.',
+            `UID: ${user.uid}`,
+            `E-mail cadastrado: ${user.email || userProfile?.email || 'Não informado'}`,
+            `Provedor(es) de login: ${providers}`,
+            `Plataforma da solicitação: ${Capacitor.getPlatform()}`,
+            'Prazo informado ao usuário: até 7 dias.',
+          ].join('\n'),
+          time: requestedAt.toLocaleString('pt-BR'),
+        },
+        'ylfdKqLyTrF7pbccA'
+      );
 
-      setAccountDeleteStep(0);
       setAccountDeleteConfirmation('');
-      setUser(null);
-      setUserProfile(null);
-      setTournaments([]);
-      setRankings([]);
-      setActiveTournamentId(null);
-      setActiveRankingId(null);
-      setStep('HOME');
+      setAccountDeleteStep(3);
     } catch (error) {
       console.error('Falha ao excluir conta:', error);
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('APPLE_REAUTH_FAILED') || message.toLowerCase().includes('apple')) {
-        setAccountDeleteError('Não foi possível confirmar sua identidade com a Apple. Tente novamente e conclua a confirmação exibida pelo iPhone.');
-      } else if (message.includes('unauthenticated')) {
-        setAccountDeleteError('Sua sessão expirou. Entre novamente e repita a exclusão.');
-      } else {
-        setAccountDeleteError('Não foi possível concluir a exclusão agora. Verifique sua conexão e tente novamente.');
-      }
+      const firebaseError = error as { code?: string; message?: string };
+      setAccountDeleteError(`Não foi possível enviar a solicitação agora${firebaseError.code ? ` (${firebaseError.code})` : ''}. Verifique sua conexão e tente novamente.`);
     } finally {
       setIsDeletingAccount(false);
     }
@@ -3193,7 +3249,7 @@ export default function BeachProApp() {
                     <div className="relative w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm border border-white/20 overflow-hidden shrink-0">
                       {(userProfile?.photoURL || user?.photoURL) ? (
                         <div className="relative w-full h-full">
-                          <img src={userProfile?.photoURL || user?.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                          <StoredImage src={userProfile?.photoURL || user?.photoURL} alt="Profile" className="h-full w-full object-cover" referrerPolicy="no-referrer" fallback={<UserIcon size={26} />} />
                         </div>
                       ) : (
                         <UserIcon size={26} />
@@ -3506,7 +3562,7 @@ export default function BeachProApp() {
                           {/* Cover image strip */}
                           {r.coverUrl && (
                             <div className="relative w-full h-20 overflow-hidden">
-                              <img src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+                              <StoredImage src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                               {/* Name overlay on cover */}
                               <div className="absolute bottom-0 left-0 right-0 px-5 pb-3 flex items-end justify-between">
@@ -3715,7 +3771,7 @@ export default function BeachProApp() {
                         <div className="flex items-center gap-4 mb-5">
                           <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary overflow-hidden relative shrink-0">
                             {league.coverUrl && !league.coverUrl.startsWith('data:') ? (
-                              <img src={league.coverUrl} alt={league.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+                              <StoredImage src={league.coverUrl} alt={league.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" fallback={<Award size={24} />} />
                             ) : <Award size={24} />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -3920,7 +3976,7 @@ export default function BeachProApp() {
           {/* Address Modal */}
           <AnimatePresence>
             {showAddressPopup && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+              <div className="fixed inset-0 z-[1700] flex items-center justify-center p-6">
                 <motion.div 
                   key="address-modal-backdrop"
                   initial={{ opacity: 0 }}
@@ -4051,7 +4107,7 @@ O play na palma da mão! 🏆`;
                     {/* Hero Cover Card */}
                     <div className="relative w-full h-48 rounded-[2.5rem] bg-slate-200 overflow-hidden shadow-xl mb-6 group border-4 border-white">
                       {activeRanking.coverUrl ? (
-                         <img src={activeRanking.coverUrl} alt="Cover" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+                         <StoredImage src={activeRanking.coverUrl} alt="Cover" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" fallback={<Image src="/capa-padrao.png" alt="Default League Cover" fill className="object-cover opacity-80" />} />
                       ) : (
                          <Image src="/capa-padrao.png" alt="Default League Cover" fill className="object-cover opacity-80" referrerPolicy="no-referrer" />
                       )}
@@ -4064,13 +4120,18 @@ O play na palma da mão! 🏆`;
                          capture="environment"
                          onChange={handleRankingPhotoUpload}
                        />
-                       {activeRanking.adminIds.includes(user?.uid || '') && (
+                      {activeRanking.adminIds.includes(user?.uid || '') && (
                         <button 
                           onClick={() => coverInputRef.current?.click()}
                           className="absolute bottom-6 left-6 flex items-center gap-2 px-4 py-2 bg-black/40 backdrop-blur-xl text-white rounded-xl border border-white/20 active:scale-95 transition-all text-[9px] font-black uppercase tracking-widest shadow-lg"
                         >
                           <Camera size={14} />
                           ALTERAR CAPA
+                        </button>
+                      )}
+                      {activeRanking.leagueCode && (
+                        <button onClick={() => { navigator.clipboard.writeText(activeRanking.leagueCode || ''); setSnackMessage('Código da liga copiado!'); setTimeout(() => setSnackMessage(null), 3000); }} className="absolute bottom-6 right-6 flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 text-white backdrop-blur-xl">
+                          <span className="font-mono text-[11px] font-black tracking-widest text-secondary">{activeRanking.leagueCode}</span><Copy size={14}/>
                         </button>
                       )}
                     </div>
@@ -4110,6 +4171,7 @@ O play na palma da mão! 🏆`;
                          );
                        })()}
 
+                       <div className="grid grid-cols-[1.35fr_.85fr] gap-3">
                        {activeRanking.adminIds.includes(user?.uid || '') && (
                          <button 
                            onClick={() => {
@@ -4117,7 +4179,7 @@ O play na palma da mão! 🏆`;
                              setTournamentName(activeRanking.name);
                              navigateTo('PLAYER_COUNT');
                            }}
-                           className="neon-action-button league-new-tournament w-full bg-[#bef264] p-5 rounded-[2.5rem] flex items-center justify-between group shadow-xl shadow-[#bef264]/20 active:scale-[0.98] transition-all"
+                           className="league-new-tournament w-full bg-[#bef264] p-4 rounded-[2rem] flex items-center justify-between group active:scale-[0.98] transition-all"
                          >
                            <div className="flex items-center gap-4">
                               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#bef264]">
@@ -4130,6 +4192,13 @@ O play na palma da mão! 🏆`;
                            </div>
                            <ChevronRight size={20} className="text-slate-900/30 group-hover:translate-x-1 transition-all" />
                          </button>
+                       )}
+                       <button onClick={() => setShowLeagueCalendar(true)} className="w-full rounded-[2rem] border border-sky-400/30 bg-[#07365f] p-4 text-white flex flex-col items-center justify-center gap-2 active:scale-[.98]">
+                         <CalendarDays size={22} className="text-sky-300"/><span className="text-[9px] font-black uppercase tracking-wider">Agenda</span>
+                       </button>
+                       </div>
+                       {activeRanking.adminIds.includes(user?.uid || '') && (
+                         <button onClick={() => { setEventDraft(d => ({ ...d, arenaName: activeRanking.arenaName || '' })); setShowScheduleLeagueEvent(true); }} className="-mt-1 w-full rounded-2xl border border-sky-400/25 bg-sky-400/10 py-3 text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center justify-center gap-2"><CalendarDays size={15}/>Agendar torneio</button>
                        )}
                     </div>
 
@@ -4622,9 +4691,17 @@ O play na palma da mão! 🏆`;
 
                 {rankingTab === 'CONFIG' && (
                   <div className="space-y-6 pb-20">
+                    {activeRanking.adminIds.includes(user?.uid || '') && (
+                      <div className="rounded-[2rem] border border-white/10 bg-[#071a2b] p-4">
+                        <p className="px-2 pb-3 text-[9px] font-black uppercase tracking-widest text-slate-400">Configurações da liga</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[['DATA','Editar dados',Pencil],['POINTS','Pontuação',ClipboardList],['ADMINS','Administradores',Users],['SEASON','Nova etapa',RefreshCw]].map(([id,label,Icon]:any)=><button key={id} onClick={()=>setLeagueConfigModal(id)} className="flex min-h-24 flex-col items-start justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-left text-white active:scale-95"><Icon size={19} className="text-sky-300"/><span className="text-[10px] font-black uppercase tracking-wider">{label}</span></button>)}
+                        </div>
+                      </div>
+                    )}
                     {/* Editar Informações da Liga (Admin Only) */}
                     {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                      <div className="hidden bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
                         <div className="flex items-center gap-3 mb-6">
                           <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                             <Camera size={20} />
@@ -4734,7 +4811,7 @@ O play na palma da mão! 🏆`;
 
                     {/* Código da Liga */}
                     {activeRanking.leagueCode && (
-                      <div className="bg-primary rounded-[2rem] p-6 border border-primary shadow-xl">
+                      <div className="hidden bg-primary rounded-[2rem] p-6 border border-primary shadow-xl">
                         <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-3">Código da Liga</p>
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-4xl font-black text-white tracking-widest font-mono">
@@ -4768,7 +4845,7 @@ O play na palma da mão! 🏆`;
                     )}
 
                     {/* Sobre a Liga */}
-                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                    <div className="hidden bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
                       <div className="flex items-center gap-3 mb-6">
                         <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                           <Info size={20} />
@@ -4803,7 +4880,7 @@ O play na palma da mão! 🏆`;
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                    <div className="hidden bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
                       <div className="flex items-center gap-3 mb-6">
                          <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500">
                             <ClipboardList size={20} />
@@ -4838,7 +4915,7 @@ O play na palma da mão! 🏆`;
                     </div>
 
                     {activeRanking.adminIds.includes(user?.uid || '') && (
-                      <div className="bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
+                      <div className="hidden bg-white rounded-[2.5rem] p-8 border border-surface-container shadow-xl">
                         <h3 className="text-xs font-black text-on-surface uppercase italic mb-6">Administradores da Liga</h3>
                         <div className="flex gap-2 mb-6">
                            <input 
@@ -4886,7 +4963,7 @@ O play na palma da mão! 🏆`;
                     )}
 
                     {(activeRanking.ownerId === user?.uid || activeRanking.adminIds.includes(user?.uid || '')) && (
-                      <div className="rounded-[2.5rem] border border-amber-400/35 bg-amber-500/5 p-7 shadow-xl">
+                      <div className="hidden rounded-[2.5rem] border border-amber-400/35 bg-amber-500/5 p-7 shadow-xl">
                         <div className="mb-4 flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-300"><RefreshCw size={19} /></div>
                           <div>
@@ -7475,11 +7552,12 @@ O play na palma da mão! 🏆`;
                     <div className="absolute inset-1 rounded-full bg-slate-900 z-0" />
                     <div className="relative z-10 w-full h-full rounded-full overflow-hidden flex items-center justify-center">
                       {(userProfile?.photoURL || user?.photoURL) ? (
-                        <img 
+                        <StoredImage 
                           src={userProfile?.photoURL || user?.photoURL} 
                           alt={user?.displayName || 'User'} 
                           className="h-full w-full object-cover"
                           referrerPolicy="no-referrer"
+                          fallback={<div className="text-white font-display font-black text-4xl italic">{user?.email?.charAt(0).toUpperCase()}</div>}
                         />
                       ) : (
                         <div className="text-white font-display font-black text-4xl italic">
@@ -7668,7 +7746,7 @@ O play na palma da mão! 🏆`;
                             >
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0">
                                 {r.coverUrl && !r.coverUrl.startsWith('data:') ? (
-                                  <img src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+                                  <StoredImage src={r.coverUrl} alt={r.name} className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" fallback={<Award size={18} className="text-primary" />} />
                                 ) : (
                                   <Award size={18} className="text-primary" />
                                 )}
@@ -9216,29 +9294,75 @@ O play na palma da mão! 🏆`;
         </AnimatePresence>
 
         <AnimatePresence>
+          {leagueConfigModal && activeRanking && (
+            <motion.div className="fixed inset-0 z-[1600] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setLeagueConfigModal(null)}>
+              <motion.div onClick={e=>e.stopPropagation()} className="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6">
+                <div className="mb-5 flex items-center justify-between"><h3 className="font-display text-xl font-black uppercase italic text-primary">{{DATA:'Editar dados da liga',POINTS:'Regras de pontuação',ADMINS:'Administradores',SEASON:'Nova etapa da liga'}[leagueConfigModal]}</h3><button onClick={()=>setLeagueConfigModal(null)} className="rounded-xl bg-slate-100 p-2"><X size={18}/></button></div>
+                {leagueConfigModal==='DATA'&&<div className="space-y-3"><input value={rankingName} onChange={e=>setRankingName(e.target.value)} placeholder="Nome da liga" className="input-field py-4 text-xs"/><textarea value={rankingDescription} onChange={e=>setRankingDescription(e.target.value)} placeholder="Descrição / sobre a liga" className="min-h-28 w-full rounded-2xl bg-slate-50 p-4 text-xs"/><input value={arenaName} onChange={e=>setArenaName(e.target.value)} placeholder="Nome da arena" className="input-field py-4 text-xs"/><button onClick={()=>setShowAddressPopup(true)} className="w-full rounded-2xl bg-slate-50 p-4 text-left text-xs">{arenaAddress.street?`${arenaAddress.street}, ${arenaAddress.city}`:'Definir endereço da arena'} </button><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar dados</button></div>}
+                {leagueConfigModal==='POINTS'&&<div className="space-y-4"><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Pontos por participação</span><div className="flex items-center gap-3"><button onClick={()=>setPPoints(Math.max(0,pPoints-1))}>−</button><b>{pPoints}</b><button onClick={()=>setPPoints(pPoints+1)}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Posições que pontuam</span><div className="flex items-center gap-3"><button onClick={()=>setPositionsThatScore(Math.max(1,positionsThatScore-1))}>−</button><b>Top {positionsThatScore}</b><button onClick={()=>setPositionsThatScore(Math.min(16,positionsThatScore+1))}>+</button></div></div><div className="grid grid-cols-2 gap-2">{Array.from({length:positionsThatScore}).map((_,i)=><label key={i} className="rounded-xl bg-slate-50 p-3 text-[9px] font-bold">#{i+1} lugar<input type="number" value={placementPoints[i+1]||0} onChange={e=>setPlacementPoints(p=>({...p,[i+1]:Number(e.target.value)}))} className="mt-1 w-full bg-transparent text-lg font-black text-primary"/></label>)}</div><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar pontuação</button></div>}
+                {leagueConfigModal==='ADMINS'&&<div><div className="flex gap-2"><input value={newAdminEmail} onChange={e=>setNewAdminEmail(e.target.value)} placeholder="E-mail do novo administrador" className="min-w-0 flex-1 rounded-2xl bg-slate-50 p-4 text-xs"/><button onClick={()=>addAdminToRanking(activeRanking.id,newAdminEmail)} className="rounded-2xl bg-primary px-5 text-white"><Check/></button></div><div className="mt-4 space-y-2">{activeRanking.adminIds.map(id=><div key={id} className="rounded-xl bg-slate-50 p-3 text-[10px] font-bold">{adminProfiles[id]?.displayName||adminProfiles[id]?.email||id}{id===activeRanking.ownerId?' · Fundador':''}</div>)}</div></div>}
+                {leagueConfigModal==='SEASON'&&<div><p className="text-sm leading-relaxed text-slate-600">A classificação atual será arquivada como etapa {activeRanking.currentSeason||1}. Todos os pontos da liga serão zerados.</p><button onClick={()=>{setLeagueConfigModal(null);setLeagueResetStep(1)}} className="mt-5 w-full rounded-full bg-amber-500 py-4 text-[10px] font-black uppercase text-white">Zerar e iniciar nova etapa</button>{leagueSeasons.length>0&&<div className="mt-5 space-y-2">{leagueSeasons.map((s:any)=><div key={s.id} className="rounded-xl bg-slate-50 p-3 text-xs">Etapa {s.number} · {new Date(s.archivedAt).toLocaleDateString('pt-BR')}</div>)}</div>}</div>}
+              </motion.div>
+            </motion.div>
+          )}
+          {showScheduleLeagueEvent && activeRanking && (
+            <motion.div className="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setShowScheduleLeagueEvent(false)}>
+              <motion.div onClick={e=>e.stopPropagation()} className="w-full max-w-md rounded-[2rem] bg-[#071a2b] p-6 text-white">
+                <div className="flex justify-between"><div><p className="text-[8px] font-black uppercase tracking-widest text-sky-400">Agenda da liga</p><h3 className="text-xl font-black uppercase italic">Agendar torneio</h3></div><button onClick={()=>setShowScheduleLeagueEvent(false)}><X/></button></div>
+                <div className="mt-5 space-y-3">
+                  <input value={eventDraft.title} onChange={e=>setEventDraft(d=>({...d,title:e.target.value}))} placeholder="Nome do torneio" className="w-full rounded-xl bg-white/10 p-4 text-sm outline-none"/>
+                  <div className="grid grid-cols-2 gap-3"><input type="date" value={eventDraft.date} onChange={e=>setEventDraft(d=>({...d,date:e.target.value}))} className="rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"/><input type="time" value={eventDraft.time} onChange={e=>setEventDraft(d=>({...d,time:e.target.value}))} className="rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"/></div>
+                  <input value={eventDraft.arenaName} onChange={e=>setEventDraft(d=>({...d,arenaName:e.target.value}))} placeholder="Arena" className="w-full rounded-xl bg-white/10 p-4 text-sm outline-none"/>
+                  <select value={eventDraft.format} onChange={e=>setEventDraft(d=>({...d,format:e.target.value as TournamentFormat|''}))} className="w-full rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"><option value="">Formato a definir</option><option value="REI_DA_QUADRA">Rei da Quadra</option><option value="SUPER_8_INDIVIDUAL">Super 8 individual</option><option value="SUPER_12_INDIVIDUAL">Super 12 individual</option><option value="SUPER_16_INDIVIDUAL">Super 16 individual</option><option value="SUPER_4_FIXED">Super 4 duplas fixas</option><option value="SUPER_6_FIXED">Super 6 duplas fixas</option><option value="SUPER_8_FIXED">Super 8 duplas fixas</option><option value="SUPER_10_FIXED">Super 10 duplas fixas</option><option value="SUPER_12_FIXED">Super 12 duplas fixas</option><option value="GROUPS_MATA_MATA">Grupos + mata-mata</option></select>
+                </div>
+                <button disabled={!eventDraft.title.trim()||!eventDraft.date||!eventDraft.time||!eventDraft.arenaName.trim()} onClick={saveLeagueEvent} className="mt-5 w-full rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase text-slate-950 disabled:opacity-40">Publicar agendamento</button>
+              </motion.div>
+            </motion.div>
+          )}
+          {showLeagueCalendar && activeRanking && (
+            <motion.div className="fixed inset-0 z-[1450] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>{setShowLeagueCalendar(false);setSelectedLeagueEvent(null)}}>
+              <motion.div onClick={e=>e.stopPropagation()} className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-[#071a2b] p-6 text-white">
+                <div className="flex justify-between"><div><p className="text-[8px] font-black uppercase tracking-widest text-sky-400">{activeRanking.name}</p><h3 className="text-xl font-black uppercase italic">Agenda de torneios</h3></div><button onClick={()=>setShowLeagueCalendar(false)}><X/></button></div>
+                <div className="mt-5 space-y-3">{leagueEvents.length===0?<p className="py-10 text-center text-xs text-slate-400">Nenhum torneio agendado.</p>:leagueEvents.map(event=><button key={event.id} onClick={()=>setSelectedLeagueEvent(event)} className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left"><p className="text-xs font-black uppercase">{event.title}</p><p className="mt-1 text-[10px] text-sky-300">{new Date(`${event.date}T12:00:00`).toLocaleDateString('pt-BR')} · {event.time} · {event.arenaName}</p><p className="mt-2 text-[9px] text-slate-400">{event.confirmedUserIds.length} atleta(s) confirmado(s)</p></button>)}</div>
+                {selectedLeagueEvent&&<div className="mt-5 rounded-2xl border border-sky-400/30 bg-sky-400/10 p-4"><h4 className="font-black uppercase">{selectedLeagueEvent.title}</h4><p className="mt-2 text-[10px] text-slate-300">{selectedLeagueEvent.date.split('-').reverse().join('/')} às {selectedLeagueEvent.time}<br/>{selectedLeagueEvent.arenaName}<br/>{selectedLeagueEvent.confirmedUserIds.length} confirmado(s)</p>{!selectedLeagueEvent.format&&activeRanking.adminIds.includes(user?.uid||'')&&<p className="mt-2 rounded-xl bg-white/5 p-2 text-[9px] text-sky-200">Sugestões atuais: {selectedLeagueEvent.confirmedUserIds.length>=16?'Super 16, Super 8 ou grupos':selectedLeagueEvent.confirmedUserIds.length>=12?'Super 12, Super 6 fixo ou grupos':selectedLeagueEvent.confirmedUserIds.length>=8?'Super 8, Super 4 fixo ou grupos':'aguarde mais confirmações ou use grupos'}</p>}<button onClick={()=>toggleEventPresence(selectedLeagueEvent)} className="mt-4 w-full rounded-full bg-sky-500 py-3 text-[9px] font-black uppercase">{selectedLeagueEvent.confirmedUserIds.includes(user?.uid || '')?'Cancelar presença':'Confirmar presença'}</button>{activeRanking.adminIds.includes(user?.uid || '')&&selectedLeagueEvent.confirmedUserIds.length>0&&<button onClick={()=>startTournamentFromEvent(selectedLeagueEvent)} className="mt-2 w-full rounded-full bg-[#bef264] py-3 text-[9px] font-black uppercase text-slate-950">Criar torneio com confirmados</button>}</div>}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {accountDeleteStep > 0 && user && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/80 p-5 backdrop-blur-md">
               <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 12 }} className="w-full max-w-sm rounded-[2rem] border border-red-400/25 bg-[#071a2b] p-7 text-center shadow-2xl">
                 <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-400"><Trash2 size={27} /></div>
-                <p className="text-[8px] font-black uppercase tracking-[.24em] text-red-400">Ação permanente</p>
-                <h2 className="mt-1 font-display text-2xl font-black uppercase italic text-white">{accountDeleteStep === 1 ? 'Excluir sua conta?' : 'Confirmação final'}</h2>
+                <p className="text-[8px] font-black uppercase tracking-[.24em] text-red-400">{accountDeleteStep === 3 ? 'Solicitação registrada' : 'Ação permanente'}</p>
+                <h2 className="mt-1 font-display text-2xl font-black uppercase italic text-white">{accountDeleteStep === 1 ? 'Excluir sua conta?' : accountDeleteStep === 3 ? 'Pedido enviado' : 'Confirmação final'}</h2>
 
-                {accountDeleteStep === 1 ? (
+                {accountDeleteStep === 3 ? (
+                  <div className="mt-5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-5 text-left">
+                    <p className="text-[12px] font-black leading-relaxed text-emerald-200">Sua solicitação foi enviada com sucesso.</p>
+                    <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-300">Sua conta e os dados associados serão excluídos em até 7 dias. Você receberá uma confirmação no e-mail cadastrado após a conclusão.</p>
+                  </div>
+                ) : accountDeleteStep === 1 ? (
                   <div className="mt-4 space-y-3 text-left text-[11px] font-semibold leading-relaxed text-slate-300">
-                    <p>Seu perfil, torneios criados, ligas administradas, fotos e dados do Firebase serão apagados permanentemente.</p>
+                    <p>Ao confirmar, você enviará uma solicitação para excluir permanentemente seu perfil, torneios criados, ligas administradas, fotos e demais dados.</p>
                     <p>Você também será removido das ligas de outras pessoas. Resultados históricos poderão permanecer sem vínculo com seu perfil.</p>
+                    <p className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-3 text-sky-200">A exclusão será concluída em até 7 dias e você receberá uma confirmação por e-mail.</p>
                     <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200">Excluir a conta não cancela uma assinatura ativa da App Store ou Google Play. Cancele-a na loja do aparelho para evitar novas cobranças.</p>
                   </div>
                 ) : (
                   <div className="mt-4 text-left">
-                    <p className="text-[11px] font-semibold leading-relaxed text-slate-300">Digite <strong className="text-white">EXCLUIR</strong> para confirmar. Não será possível recuperar a conta ou os dados apagados.</p>
+                    <p className="text-[11px] font-semibold leading-relaxed text-slate-300">Digite <strong className="text-white">EXCLUIR</strong> para enviar a solicitação. Após a conclusão, não será possível recuperar a conta ou os dados apagados.</p>
                     <input autoFocus value={accountDeleteConfirmation} onChange={event => setAccountDeleteConfirmation(event.target.value.toUpperCase())} disabled={isDeletingAccount} placeholder="EXCLUIR" className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-center text-sm font-black uppercase tracking-[.25em] text-white outline-none focus:border-red-400" />
                   </div>
                 )}
 
                 {accountDeleteError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-[10px] font-bold leading-relaxed text-red-200">{accountDeleteError}</p>}
 
-                <div className="mt-7 grid grid-cols-2 gap-3">
+                <div className={cn("mt-7 gap-3", accountDeleteStep === 3 ? "grid grid-cols-1" : "grid grid-cols-2")}>
+                  {accountDeleteStep === 3 ? (
+                    <button type="button" onClick={() => setAccountDeleteStep(0)} className="rounded-full bg-emerald-500 py-4 text-[9px] font-black uppercase tracking-widest text-white">Entendi</button>
+                  ) : (<>
                   <button type="button" disabled={isDeletingAccount} onClick={() => {
                     if (accountDeleteStep === 2) {
                       setAccountDeleteStep(1);
@@ -9250,8 +9374,9 @@ O play na palma da mão! 🏆`;
                   }} className="rounded-full border border-white/15 py-4 text-[9px] font-black uppercase tracking-widest text-slate-300 disabled:opacity-50">{accountDeleteStep === 1 ? 'Cancelar' : 'Voltar'}</button>
                   <button type="button" disabled={isDeletingAccount || (accountDeleteStep === 2 && accountDeleteConfirmation.trim() !== 'EXCLUIR')} onClick={() => accountDeleteStep === 1 ? setAccountDeleteStep(2) : handleDeleteAccount()} className="flex items-center justify-center gap-2 rounded-full bg-red-500 py-4 text-[9px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 disabled:opacity-40">
                     {isDeletingAccount ? <RefreshCw size={14} className="animate-spin" /> : null}
-                    {accountDeleteStep === 1 ? 'Continuar' : isDeletingAccount ? 'Excluindo' : 'Excluir conta'}
+                    {accountDeleteStep === 1 ? 'Continuar' : isDeletingAccount ? 'Enviando' : 'Enviar solicitação'}
                   </button>
+                  </>)}
                 </div>
               </motion.div>
             </motion.div>

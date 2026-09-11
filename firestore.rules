@@ -182,6 +182,19 @@ service cloud.firestore {
         allow delete: if isSignedIn() && (request.auth.uid == requestId || isRankingAdmin(rankingId));
         allow update: if false;
       }
+
+      match /events/{eventId} {
+        allow read: if isRankingMemberOrAdmin(rankingId);
+        allow create: if isRankingAdmin(rankingId) &&
+          incoming().rankingId == rankingId && incoming().createdBy == request.auth.uid &&
+          incoming().confirmedUserIds is list;
+        allow update: if isRankingAdmin(rankingId) || (
+          isRankingMemberOrAdmin(rankingId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['confirmedUserIds']) &&
+          incoming().confirmedUserIds is list && incoming().confirmedUserIds.size() <= 200
+        );
+        allow delete: if isRankingAdmin(rankingId);
+      }
     }
 
     match /tournaments/{tournamentId} {

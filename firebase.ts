@@ -153,6 +153,42 @@ export async function uploadImageToStorage(
   });
 }
 
+/**
+ * Converte referências antigas do Storage (gs://, caminho interno ou URL REST)
+ * em uma URL de download atual. Isso também renova links que ficaram sem token.
+ */
+export async function resolveStorageImageUrl(value: string): Promise<string> {
+  const source = value?.trim();
+  if (!source || source.startsWith('data:') || source.startsWith('blob:') || source.startsWith('/')) {
+    return source;
+  }
+
+  let storageReference = source;
+  try {
+    const parsed = new URL(source);
+    const isFirebaseStorage = parsed.hostname === 'firebasestorage.googleapis.com' ||
+      parsed.hostname === 'storage.googleapis.com' ||
+      parsed.hostname.endsWith('.firebasestorage.app');
+
+    if (!isFirebaseStorage) return source;
+
+    const objectMarker = '/o/';
+    const markerIndex = parsed.pathname.indexOf(objectMarker);
+    if (markerIndex >= 0) {
+      storageReference = decodeURIComponent(parsed.pathname.slice(markerIndex + objectMarker.length));
+    } else {
+      const bucketPrefix = `/v0/b/${firebaseConfig.storageBucket}/o/`;
+      storageReference = decodeURIComponent(parsed.pathname.startsWith(bucketPrefix)
+        ? parsed.pathname.slice(bucketPrefix.length)
+        : parsed.pathname.replace(/^\/+/, ''));
+    }
+  } catch {
+    // Não é URL: o valor já pode ser um caminho interno ou uma referência gs://.
+  }
+
+  return getDownloadURL(ref(storage, storageReference));
+}
+
 // ─── Test connection ─────────────────────────────────────────────────────────
 export async function testConnection() {
   if (typeof window === 'undefined') return;
