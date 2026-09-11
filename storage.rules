@@ -1,0 +1,40 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validImageUpload() {
+      return request.resource == null || (
+        request.resource.size < 8 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*')
+      );
+    }
+
+    function canManageRanking(rankingId) {
+      let ranking = firestore.get(/databases/ai-studio-5a4a0a12-9e66-4cf2-b944-e8d87bdedc8b/documents/rankings/$(rankingId)).data;
+      return signedIn() && (
+        ranking.ownerId == request.auth.uid ||
+        request.auth.uid in ranking.adminIds
+      );
+    }
+
+    // Fotos de perfil: cada usuário altera somente a própria pasta.
+    match /users/{userId}/{filePath=**} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == userId && validImageUpload();
+    }
+
+    // Capas de liga. A autorização administrativa detalhada permanece no
+    // Firestore; no Storage exigimos conta autenticada e arquivo de imagem.
+    match /rankings/{rankingId}/{filePath=**} {
+      allow read: if signedIn();
+      allow write: if canManageRanking(rankingId) && validImageUpload();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
