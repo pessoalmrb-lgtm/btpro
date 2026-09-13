@@ -163,6 +163,12 @@ export async function resolveStorageImageUrl(value: string): Promise<string> {
     return source;
   }
 
+  // getDownloadURL já devolve um endereço assinado e pronto para exibição.
+  // Reprocessar esse endereço pode perder o bucket ou o token, especialmente no iOS.
+  if (/^https?:\/\//i.test(source) && (source.includes('alt=media') || source.includes('token='))) {
+    return source;
+  }
+
   let storageReference = source;
   try {
     const parsed = new URL(source);
@@ -176,6 +182,10 @@ export async function resolveStorageImageUrl(value: string): Promise<string> {
     const markerIndex = parsed.pathname.indexOf(objectMarker);
     if (markerIndex >= 0) {
       storageReference = decodeURIComponent(parsed.pathname.slice(markerIndex + objectMarker.length));
+    } else if (parsed.hostname === 'storage.googleapis.com') {
+      const pathParts = parsed.pathname.replace(/^\/+/, '').split('/');
+      if (pathParts[0] === firebaseConfig.storageBucket) pathParts.shift();
+      storageReference = decodeURIComponent(pathParts.join('/'));
     } else {
       const bucketPrefix = `/v0/b/${firebaseConfig.storageBucket}/o/`;
       storageReference = decodeURIComponent(parsed.pathname.startsWith(bucketPrefix)

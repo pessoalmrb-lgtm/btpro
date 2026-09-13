@@ -99,13 +99,17 @@ service cloud.firestore {
       allow create: if isSignedIn() && userId == request.auth.uid && isValidId(userId) && isValidUser(incoming());
 
       allow update: if isSignedIn() && userId == request.auth.uid && (
-        isValidUser(incoming()) &&
-        incoming().uid == existing().uid &&
-        incoming().createdAt == existing().createdAt && (
-          isAdmin() ||
-          (incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'subscriptionExpiresAt']) &&
-           incoming().isPremium == existing().isPremium)
-        )
+        // Perfis de versões antigas podem não passar na validação estrutural
+        // atual. Uma troca isolada da foto continua segura e permitida.
+        (incoming().diff(existing()).affectedKeys().hasOnly(['photoURL']) &&
+         incoming().get('photoURL', '') is string && incoming().get('photoURL', '').size() <= 2048) ||
+        (isValidUser(incoming()) &&
+         incoming().uid == existing().uid &&
+         incoming().createdAt == existing().createdAt && (
+           isAdmin() ||
+           (incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'userTag', 'userNumericId', 'subscriptionExpiresAt']) &&
+            incoming().isPremium == existing().isPremium)
+         ))
       );
     }
 
@@ -145,19 +149,23 @@ service cloud.firestore {
 
       allow create: if isSignedIn() && isValidId(rankingId) && isValidRanking(incoming()) && incoming().ownerId == request.auth.uid;
 
-      allow update: if isSignedIn() && (
-        (existing().ownerId == request.auth.uid || request.auth.uid in existing().adminIds || isAdmin()) &&
-        isValidRanking(incoming()) &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().createdAt == existing().createdAt && (
-          isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'description', 'arenaName', 'adminIds', 'logoUrl', 'coverUrl',
-            'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address',
-            'currentSeason', 'lastRankingResetAt', 'lastRankingResetBy'
-          ])
-        )
-      );
+      allow update: if isSignedIn() &&
+        (existing().ownerId == request.auth.uid || request.auth.uid in existing().adminIds || isAdmin()) && (
+          // Permite atualizar apenas a imagem também em ligas legadas.
+          (incoming().diff(existing()).affectedKeys().hasOnly(['logoUrl', 'coverUrl']) &&
+           incoming().get('logoUrl', '') is string && incoming().get('logoUrl', '').size() <= 2048 &&
+           incoming().get('coverUrl', '') is string && incoming().get('coverUrl', '').size() <= 2048) ||
+          (isValidRanking(incoming()) &&
+           incoming().ownerId == existing().ownerId &&
+           incoming().createdAt == existing().createdAt && (
+             isAdmin() ||
+             incoming().diff(existing()).affectedKeys().hasOnly([
+               'name', 'description', 'arenaName', 'adminIds', 'logoUrl', 'coverUrl',
+               'pointsConfig', 'leagueAthletes', 'athleteIds', 'playerStats', 'address',
+               'currentSeason', 'lastRankingResetAt', 'lastRankingResetBy'
+             ])
+           ))
+        );
 
       allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
 

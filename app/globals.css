@@ -885,19 +885,101 @@
   color: #071725 !important;
 }
 
-.authenticated-theme .league-new-tournament > div:first-child {
+.authenticated-theme .league-new-tournament .league-new-tournament-content,
+.authenticated-theme .league-new-tournament .league-new-tournament-copy {
   color: #071725 !important;
-  background: rgba(4, 27, 43, .12) !important;
+  background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
 }
 
-.authenticated-theme .league-new-tournament > div:first-child > div:first-child {
+.authenticated-theme .league-config-dialog {
+  background: #071a2b !important;
+  border: 1px solid rgba(96, 190, 235, .32) !important;
+  color: #f8fafc !important;
+}
+.authenticated-theme .league-config-dialog input,
+.authenticated-theme .league-config-dialog textarea,
+.authenticated-theme .league-config-dialog .bg-slate-50 {
+  background: #123550 !important;
+  border: 1px solid rgba(125, 211, 252, .4) !important;
+  color: #f8fafc !important;
+}
+.authenticated-theme .league-config-dialog input::placeholder,
+.authenticated-theme .league-config-dialog textarea::placeholder { color: #94a3b8 !important; }
+.authenticated-theme .league-config-dialog .text-slate-600 { color: #cbd5e1 !important; }
+
+.authenticated-theme .league-config-dialog .league-field-label {
+  display: block;
+  color: #bae6fd !important;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.authenticated-theme .league-new-tournament .league-new-tournament-content > div:first-child {
   color: #071725 !important;
   background: rgba(4, 27, 43, .14) !important;
   border: 0 !important;
   box-shadow: none !important;
   filter: none !important;
+}
+
+.authenticated-theme .league-new-tournament .league-new-tournament-copy,
+.authenticated-theme .league-new-tournament .league-new-tournament-copy * {
+  color: #071725 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.authenticated-theme .league-schedule-dialog .schedule-field-label {
+  display: block;
+  color: #bae6fd !important;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.authenticated-theme .league-schedule-dialog .schedule-field-control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: .4rem;
+  padding: .95rem 1rem;
+  border: 2px solid rgba(186, 230, 253, .9) !important;
+  border-radius: .9rem;
+  color: #08253b !important;
+  background: #f8fbff !important;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .22), inset 0 0 0 1px rgba(255, 255, 255, .8) !important;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: normal;
+  text-transform: none;
+  color-scheme: light;
+  -webkit-text-fill-color: #08253b;
+  opacity: 1;
+}
+
+.authenticated-theme .league-schedule-dialog .schedule-field-control::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b;
+  opacity: 1;
+}
+
+.authenticated-theme .league-schedule-dialog .schedule-field-control:focus {
+  border-color: #dfff16 !important;
+  box-shadow: 0 0 0 3px rgba(223, 255, 22, .22), 0 5px 16px rgba(0, 0, 0, .22) !important;
+}
+
+.authenticated-theme .league-schedule-dialog input[type="date"]::-webkit-calendar-picker-indicator,
+.authenticated-theme .league-schedule-dialog input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: .8;
 }
 
 /* O modal claro precisa escapar das substituições de cor do tema autenticado. */

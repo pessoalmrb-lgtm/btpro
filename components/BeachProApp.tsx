@@ -46,7 +46,9 @@ import {
   Copy
 ,
   Share2,
-  CalendarDays
+  CalendarDays,
+  Clock,
+  Images
 } from 'lucide-react';
 import Image from 'next/image';
 import { Capacitor } from '@capacitor/core';
@@ -202,6 +204,11 @@ export default function BeachProApp() {
     e.target.value = '';
   };
 
+  const chooseLeagueCover = () => {
+    if (!Capacitor.isNativePlatform()) { coverInputRef.current?.click(); return; }
+    setPhotoSourceTarget('LEAGUE_COVER');
+  };
+
   const handleCoverCropConfirm = async () => {
     if (!coverCropImage || !activeRanking) return;
     setSnackMessage("Enviando foto...");
@@ -324,28 +331,113 @@ export default function BeachProApp() {
   const [showLeagueCalendar, setShowLeagueCalendar] = useState(false);
   const [showScheduleLeagueEvent, setShowScheduleLeagueEvent] = useState(false);
   const [leagueEvents, setLeagueEvents] = useState<LeagueEvent[]>([]);
+  const [leagueEventsError, setLeagueEventsError] = useState<string | null>(null);
   const [selectedLeagueEvent, setSelectedLeagueEvent] = useState<LeagueEvent | null>(null);
   const [eventDraft, setEventDraft] = useState({ title: '', date: '', time: '', arenaName: '', format: '' as TournamentFormat | '' });
+  const [eventDraftError, setEventDraftError] = useState<string | null>(null);
+  const [isPublishingEvent, setIsPublishingEvent] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [photoSourceTarget, setPhotoSourceTarget] = useState<'PROFILE'|'LEAGUE_COVER'|null>(null);
   const [historyDetailTab, setHistoryDetailTab] = useState<'RESULTS' | 'MATCHES'>('RESULTS');
 
   const activeTournament = tournaments.find(t => t.id === activeTournamentId) ||
     (followedTournament?.id === activeTournamentId ? followedTournament : undefined);
 
   React.useEffect(() => {
-    if (!activeRankingId || !user) { setLeagueEvents([]); return; }
+    if (!activeRankingId || !user) { setLeagueEvents([]); setLeagueEventsError(null); return; }
+    setLeagueEventsError(null);
     return onSnapshot(collection(db, `rankings/${activeRankingId}/events`), snapshot => {
       setLeagueEvents(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as LeagueEvent)).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)));
-    }, error => console.error('Erro ao carregar agenda da liga:', error));
+      setLeagueEventsError(null);
+    }, error => {
+      console.error('Erro ao carregar agenda da liga:', error);
+      const code = (error as {code?: string}).code;
+      setLeagueEventsError(`Não foi possível carregar a agenda${code ? ` (${code})` : ''}.`);
+    });
   }, [activeRankingId, user]);
 
   const saveLeagueEvent = async () => {
-    if (!activeRanking || !user || !eventDraft.title.trim() || !eventDraft.date || !eventDraft.time || !eventDraft.arenaName.trim()) return;
-    const eventRef = doc(collection(db, `rankings/${activeRanking.id}/events`));
-    await setDoc(eventRef, cleanData({ id: eventRef.id, rankingId: activeRanking.id, ...eventDraft, createdBy: user.uid, createdAt: Date.now(), confirmedUserIds: [] }));
-    setEventDraft({ title: '', date: '', time: '', arenaName: activeRanking.arenaName || '', format: '' });
-    setShowScheduleLeagueEvent(false);
-    setShowLeagueCalendar(true);
-    setSnackMessage('Torneio agendado!'); setTimeout(() => setSnackMessage(null), 3000);
+    if (!activeRanking || !user) return;
+    if (!eventDraft.title.trim() || !eventDraft.date || !eventDraft.time || !eventDraft.arenaName.trim()) { setEventDraftError('Preencha nome, data, horário e arena.'); return; }
+    try {
+      setEventDraftError(null);
+      setIsPublishingEvent(true);
+      const eventRef = doc(collection(db, `rankings/${activeRanking.id}/events`));
+      const newEvent = cleanData({ id: eventRef.id, rankingId: activeRanking.id, ...eventDraft, createdBy: user.uid, createdAt: Date.now(), confirmedUserIds: [] }) as LeagueEvent;
+      await setDoc(eventRef, newEvent);
+      setLeagueEvents(previous => [...previous.filter(item => item.id !== newEvent.id), newEvent].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)));
+      setEventDraft({ title: '', date: '', time: '', arenaName: activeRanking.arenaName || '', format: '' });
+      setShowScheduleLeagueEvent(false);
+      setSnackMessage('Torneio agendado!'); setTimeout(() => setSnackMessage(null), 3000);
+    } catch (error) {
+      console.error('Erro ao publicar agendamento:', error);
+      const code = (error as {code?:string}).code;
+      setEventDraftError(`Não foi possível publicar${code ? ` (${code})` : ''}. Tente novamente.`);
+    } finally { setIsPublishingEvent(false); }
+  };
+
+  const uploadProfilePhoto = async (file: File) => {
+    if (!user) return;
+    setIsProfileUpdating(true); setAuthError(null);
+    try {
+      const url = await uploadImageToStorage(file, `users/${user.uid}/avatar.jpg`, 400, 0.82);
+      await updateDoc(doc(db, 'users', user.uid), { photoURL: url });
+      await updateProfile(user, { photoURL: url }).catch(() => undefined);
+      setUserProfile((previous: any) => ({ ...previous, photoURL: url }));
+      await Promise.all(rankings.filter(r => r.athleteIds?.includes(user.uid) || r.ownerId === user.uid).map(r => updateDoc(doc(db, 'rankings', r.id, 'players', user.uid), { photo: url }).catch(() => undefined)));
+      setSnackMessage('Foto atualizada com sucesso!'); setTimeout(() => setSnackMessage(null), 3000);
+    } catch (error) {
+      console.error('Falha detalhada no upload da foto:', error);
+      setSnackMessage(`Não foi possível salvar a foto${(error as {code?:string}).code ? ` (${(error as {code?:string}).code})` : ''}.`); setTimeout(() => setSnackMessage(null), 5000);
+    } finally { setIsProfileUpdating(false); }
+  };
+
+  const chooseProfilePhoto = () => {
+    if (!Capacitor.isNativePlatform()) { avatarInputRef.current?.click(); return; }
+    setPhotoSourceTarget('PROFILE');
+  };
+
+  const chooseNativePhotoSource = async (source: 'CAMERA'|'PHOTOS') => {
+    const target = photoSourceTarget;
+    if (!target) return;
+    setPhotoSourceTarget(null);
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      if (source === 'CAMERA') {
+        const permissions = await Camera.checkPermissions();
+        if (permissions.camera !== 'granted') {
+          const requested = await Camera.requestPermissions({ permissions: ['camera'] });
+          if (requested.camera !== 'granted') throw new Error('Permissão da câmera não concedida');
+        }
+      }
+      const photo = await Camera.getPhoto({
+        quality: 88,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: source === 'CAMERA' ? CameraSource.Camera : CameraSource.Photos,
+        correctOrientation: true,
+        saveToGallery: false,
+        presentationStyle: 'fullscreen'
+      });
+      if (!photo.webPath) throw new Error('A imagem selecionada não pôde ser lida');
+      if (target === 'LEAGUE_COVER') {
+        setCoverCropImage(photo.webPath);
+        setCropOffset({x:0,y:0});
+        setCropScale(1);
+        return;
+      }
+      const response = await fetch(photo.webPath);
+      if (!response.ok) throw new Error('Falha ao preparar a imagem selecionada');
+      const blob = await response.blob();
+      await uploadProfilePhoto(new File([blob], 'avatar.jpg', { type: blob.type || 'image/jpeg' }));
+    } catch (error) {
+      const message = String((error as Error)?.message || error).toLowerCase();
+      if (!message.includes('cancel')) {
+        console.error('Falha no seletor nativo:', error);
+        setSnackMessage(message.includes('permissão') ? 'Permita o acesso à câmera nos Ajustes do iPhone.' : 'Não foi possível abrir ou processar a foto.');
+        setTimeout(() => setSnackMessage(null), 5000);
+      }
+    }
   };
 
   const toggleEventPresence = async (event: LeagueEvent) => {
@@ -4117,21 +4209,20 @@ O play na palma da mão! 🏆`;
                          className="hidden" 
                          ref={coverInputRef} 
                          accept="image/*"
-                         capture="environment"
                          onChange={handleRankingPhotoUpload}
                        />
                       {activeRanking.adminIds.includes(user?.uid || '') && (
                         <button 
-                          onClick={() => coverInputRef.current?.click()}
-                          className="absolute bottom-6 left-6 flex items-center gap-2 px-4 py-2 bg-black/40 backdrop-blur-xl text-white rounded-xl border border-white/20 active:scale-95 transition-all text-[9px] font-black uppercase tracking-widest shadow-lg"
+                          onClick={chooseLeagueCover}
+                          className="absolute bottom-2 left-4 flex items-center gap-2 px-4 py-2 bg-black/40 backdrop-blur-xl text-white rounded-xl border border-white/20 active:scale-95 transition-all text-[9px] font-black uppercase tracking-widest"
                         >
                           <Camera size={14} />
                           ALTERAR CAPA
                         </button>
                       )}
                       {activeRanking.leagueCode && (
-                        <button onClick={() => { navigator.clipboard.writeText(activeRanking.leagueCode || ''); setSnackMessage('Código da liga copiado!'); setTimeout(() => setSnackMessage(null), 3000); }} className="absolute bottom-6 right-6 flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 text-white backdrop-blur-xl">
-                          <span className="font-mono text-[11px] font-black tracking-widest text-secondary">{activeRanking.leagueCode}</span><Copy size={14}/>
+                        <button onClick={() => { navigator.clipboard.writeText(activeRanking.leagueCode || ''); setSnackMessage('Código da liga copiado!'); setTimeout(() => setSnackMessage(null), 3000); }} className="absolute bottom-2 right-4 flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-black/40 px-3 text-white backdrop-blur-xl">
+                          <span><small className="block text-[6px] font-black uppercase tracking-wider text-white/55">Código da liga</small><b className="font-mono text-[11px] tracking-widest text-secondary">{activeRanking.leagueCode}</b></span><Copy size={14}/>
                         </button>
                       )}
                     </div>
@@ -4181,13 +4272,12 @@ O play na palma da mão! 🏆`;
                            }}
                            className="league-new-tournament w-full bg-[#bef264] p-4 rounded-[2rem] flex items-center justify-between group active:scale-[0.98] transition-all"
                          >
-                           <div className="flex items-center gap-4">
+                           <div className="league-new-tournament-content flex items-center gap-4">
                               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#bef264]">
                                  <Plus size={24} strokeWidth={4} />
                               </div>
-                              <div className="text-left">
-                                 <h4 className="text-[11px] font-black text-slate-900 uppercase italic leading-none mb-1">Novo Torneio</h4>
-                                 <p className="text-[11px] font-black text-slate-900 uppercase italic">Ranqueado</p>
+                              <div className="league-new-tournament-copy text-left">
+                                 <span className="text-[11px] font-black uppercase italic leading-tight">Novo Torneio Ranqueado</span>
                               </div>
                            </div>
                            <ChevronRight size={20} className="text-slate-900/30 group-hover:translate-x-1 transition-all" />
@@ -4198,7 +4288,7 @@ O play na palma da mão! 🏆`;
                        </button>
                        </div>
                        {activeRanking.adminIds.includes(user?.uid || '') && (
-                         <button onClick={() => { setEventDraft(d => ({ ...d, arenaName: activeRanking.arenaName || '' })); setShowScheduleLeagueEvent(true); }} className="-mt-1 w-full rounded-2xl border border-sky-400/25 bg-sky-400/10 py-3 text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center justify-center gap-2"><CalendarDays size={15}/>Agendar torneio</button>
+                         <button onClick={() => { setEventDraftError(null); setEventDraft(d => ({ ...d, arenaName: activeRanking.arenaName || '' })); setShowScheduleLeagueEvent(true); }} className="-mt-1 w-full rounded-2xl border border-sky-400/25 bg-sky-400/10 py-3 text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center justify-center gap-2"><CalendarDays size={15}/>Agendar torneio</button>
                        )}
                     </div>
 
@@ -7573,46 +7663,21 @@ O play na palma da mão! 🏆`;
                   </div>
                   
                   {/* Botão de Upload (Badge) */}
-                    <label htmlFor="avatar-upload" className="absolute bottom-1 right-1 w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white z-20 cursor-pointer hover:scale-110 active:scale-95 transition-all">
+                  <button type="button" onClick={chooseProfilePhoto} aria-label="Alterar foto do perfil" className="absolute bottom-1 right-1 w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white z-20 cursor-pointer hover:scale-110 active:scale-95 transition-all">
                     <Camera size={18} />
-                    <input 
-                      id="avatar-upload"
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file || !user) return;
-                        try {
-                          setIsProfileUpdating(true);
-                          const path = `users/${user.uid}/avatar.jpg`;
-                          const url  = await uploadImageToStorage(file, path, 400, 0.8);
-
-                          await updateDoc(doc(db, 'users', user.uid), { photoURL: url });
-                          setUserProfile((prev: any) => ({ ...prev, photoURL: url }));
-
-                          // Sincroniza foto em todos os rankings onde o usuário tem stats
-                          try {
-                            const userRankings = rankings.filter(r =>
-                              r.athleteIds?.includes(user.uid) || r.ownerId === user.uid
-                            );
-                            await Promise.all(userRankings.map(r =>
-                              updateDoc(doc(db, 'rankings', r.id, 'players', user.uid), { photo: url })
-                                .catch(() => {})
-                            ));
-                          } catch {}
-
-                          setSnackMessage("Foto atualizada com sucesso");
-                          setTimeout(() => setSnackMessage(null), 3000);
-                        } catch (err) {
-                          console.error('Error uploading avatar:', err);
-                          setAuthError("Erro ao processar imagem.");
-                        } finally {
-                          setIsProfileUpdating(false);
-                        }
-                      }}
-                    />
-                  </label>
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) await uploadProfilePhoto(file);
+                      e.currentTarget.value = '';
+                    }}
+                  />
                 </div>
 
                 <div className="relative z-10 flex flex-col items-center">
@@ -9296,10 +9361,10 @@ O play na palma da mão! 🏆`;
         <AnimatePresence>
           {leagueConfigModal && activeRanking && (
             <motion.div className="fixed inset-0 z-[1600] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setLeagueConfigModal(null)}>
-              <motion.div onClick={e=>e.stopPropagation()} className="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6">
+              <motion.div onClick={e=>e.stopPropagation()} className="league-config-dialog max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6">
                 <div className="mb-5 flex items-center justify-between"><h3 className="font-display text-xl font-black uppercase italic text-primary">{{DATA:'Editar dados da liga',POINTS:'Regras de pontuação',ADMINS:'Administradores',SEASON:'Nova etapa da liga'}[leagueConfigModal]}</h3><button onClick={()=>setLeagueConfigModal(null)} className="rounded-xl bg-slate-100 p-2"><X size={18}/></button></div>
-                {leagueConfigModal==='DATA'&&<div className="space-y-3"><input value={rankingName} onChange={e=>setRankingName(e.target.value)} placeholder="Nome da liga" className="input-field py-4 text-xs"/><textarea value={rankingDescription} onChange={e=>setRankingDescription(e.target.value)} placeholder="Descrição / sobre a liga" className="min-h-28 w-full rounded-2xl bg-slate-50 p-4 text-xs"/><input value={arenaName} onChange={e=>setArenaName(e.target.value)} placeholder="Nome da arena" className="input-field py-4 text-xs"/><button onClick={()=>setShowAddressPopup(true)} className="w-full rounded-2xl bg-slate-50 p-4 text-left text-xs">{arenaAddress.street?`${arenaAddress.street}, ${arenaAddress.city}`:'Definir endereço da arena'} </button><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar dados</button></div>}
-                {leagueConfigModal==='POINTS'&&<div className="space-y-4"><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Pontos por participação</span><div className="flex items-center gap-3"><button onClick={()=>setPPoints(Math.max(0,pPoints-1))}>−</button><b>{pPoints}</b><button onClick={()=>setPPoints(pPoints+1)}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Posições que pontuam</span><div className="flex items-center gap-3"><button onClick={()=>setPositionsThatScore(Math.max(1,positionsThatScore-1))}>−</button><b>Top {positionsThatScore}</b><button onClick={()=>setPositionsThatScore(Math.min(16,positionsThatScore+1))}>+</button></div></div><div className="grid grid-cols-2 gap-2">{Array.from({length:positionsThatScore}).map((_,i)=><label key={i} className="rounded-xl bg-slate-50 p-3 text-[9px] font-bold">#{i+1} lugar<input type="number" value={placementPoints[i+1]||0} onChange={e=>setPlacementPoints(p=>({...p,[i+1]:Number(e.target.value)}))} className="mt-1 w-full bg-transparent text-lg font-black text-primary"/></label>)}</div><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar pontuação</button></div>}
+                {leagueConfigModal==='DATA'&&<div className="space-y-3"><label className="league-field-label">Nome da liga<input value={rankingName} onChange={e=>setRankingName(e.target.value)} placeholder="Digite o nome da liga" className="input-field mt-1 py-4 text-xs"/></label><label className="league-field-label">Descrição / sobre a liga<textarea value={rankingDescription} onChange={e=>setRankingDescription(e.target.value)} placeholder="Conte aos atletas sobre a liga" className="mt-1 min-h-28 w-full rounded-2xl bg-slate-50 p-4 text-xs"/></label><label className="league-field-label">Nome da arena<input value={arenaName} onChange={e=>setArenaName(e.target.value)} placeholder="Digite o nome da arena" className="input-field mt-1 py-4 text-xs"/></label><label className="league-field-label">Endereço da arena<button onClick={()=>setShowAddressPopup(true)} className="mt-1 w-full rounded-2xl bg-slate-50 p-4 text-left text-xs">{arenaAddress.street?`${arenaAddress.street}, ${arenaAddress.city}`:'Definir endereço da arena'} </button></label><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar dados</button></div>}
+                {leagueConfigModal==='POINTS'&&<div className="space-y-4"><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Pontos por participação</span><div className="flex items-center gap-3"><button onClick={()=>setPPoints(Math.max(0,pPoints-1))}>−</button><b>{pPoints}</b><button onClick={()=>setPPoints(pPoints+1)}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Penalidade por pneu</span><div className="flex items-center gap-3"><button onClick={()=>setPneuBonus(Math.max(-10,pneuBonus-1))}>−</button><b>{pneuBonus}</b><button onClick={()=>setPneuBonus(Math.min(0,pneuBonus+1))}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Posições que pontuam</span><div className="flex items-center gap-3"><button onClick={()=>setPositionsThatScore(Math.max(1,positionsThatScore-1))}>−</button><b>Top {positionsThatScore}</b><button onClick={()=>setPositionsThatScore(Math.min(16,positionsThatScore+1))}>+</button></div></div><div className="grid grid-cols-2 gap-2">{Array.from({length:positionsThatScore}).map((_,i)=><label key={i} className="rounded-xl bg-slate-50 p-3 text-[9px] font-bold">#{i+1} lugar<input type="number" value={placementPoints[i+1]||0} onChange={e=>setPlacementPoints(p=>({...p,[i+1]:Number(e.target.value)}))} className="mt-1 w-full bg-transparent text-lg font-black text-primary"/></label>)}</div><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar pontuação</button></div>}
                 {leagueConfigModal==='ADMINS'&&<div><div className="flex gap-2"><input value={newAdminEmail} onChange={e=>setNewAdminEmail(e.target.value)} placeholder="E-mail do novo administrador" className="min-w-0 flex-1 rounded-2xl bg-slate-50 p-4 text-xs"/><button onClick={()=>addAdminToRanking(activeRanking.id,newAdminEmail)} className="rounded-2xl bg-primary px-5 text-white"><Check/></button></div><div className="mt-4 space-y-2">{activeRanking.adminIds.map(id=><div key={id} className="rounded-xl bg-slate-50 p-3 text-[10px] font-bold">{adminProfiles[id]?.displayName||adminProfiles[id]?.email||id}{id===activeRanking.ownerId?' · Fundador':''}</div>)}</div></div>}
                 {leagueConfigModal==='SEASON'&&<div><p className="text-sm leading-relaxed text-slate-600">A classificação atual será arquivada como etapa {activeRanking.currentSeason||1}. Todos os pontos da liga serão zerados.</p><button onClick={()=>{setLeagueConfigModal(null);setLeagueResetStep(1)}} className="mt-5 w-full rounded-full bg-amber-500 py-4 text-[10px] font-black uppercase text-white">Zerar e iniciar nova etapa</button>{leagueSeasons.length>0&&<div className="mt-5 space-y-2">{leagueSeasons.map((s:any)=><div key={s.id} className="rounded-xl bg-slate-50 p-3 text-xs">Etapa {s.number} · {new Date(s.archivedAt).toLocaleDateString('pt-BR')}</div>)}</div>}</div>}
               </motion.div>
@@ -9307,15 +9372,16 @@ O play na palma da mão! 🏆`;
           )}
           {showScheduleLeagueEvent && activeRanking && (
             <motion.div className="fixed inset-0 z-[1500] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={() => setShowScheduleLeagueEvent(false)}>
-              <motion.div onClick={e=>e.stopPropagation()} className="w-full max-w-md rounded-[2rem] bg-[#071a2b] p-6 text-white">
+              <motion.div onClick={e=>e.stopPropagation()} className="league-schedule-dialog max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-sky-300/30 bg-[#071a2b] p-6 text-white shadow-2xl">
                 <div className="flex justify-between"><div><p className="text-[8px] font-black uppercase tracking-widest text-sky-400">Agenda da liga</p><h3 className="text-xl font-black uppercase italic">Agendar torneio</h3></div><button onClick={()=>setShowScheduleLeagueEvent(false)}><X/></button></div>
                 <div className="mt-5 space-y-3">
-                  <input value={eventDraft.title} onChange={e=>setEventDraft(d=>({...d,title:e.target.value}))} placeholder="Nome do torneio" className="w-full rounded-xl bg-white/10 p-4 text-sm outline-none"/>
-                  <div className="grid grid-cols-2 gap-3"><input type="date" value={eventDraft.date} onChange={e=>setEventDraft(d=>({...d,date:e.target.value}))} className="rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"/><input type="time" value={eventDraft.time} onChange={e=>setEventDraft(d=>({...d,time:e.target.value}))} className="rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"/></div>
-                  <input value={eventDraft.arenaName} onChange={e=>setEventDraft(d=>({...d,arenaName:e.target.value}))} placeholder="Arena" className="w-full rounded-xl bg-white/10 p-4 text-sm outline-none"/>
-                  <select value={eventDraft.format} onChange={e=>setEventDraft(d=>({...d,format:e.target.value as TournamentFormat|''}))} className="w-full rounded-xl bg-white/10 p-4 text-sm [color-scheme:dark]"><option value="">Formato a definir</option><option value="REI_DA_QUADRA">Rei da Quadra</option><option value="SUPER_8_INDIVIDUAL">Super 8 individual</option><option value="SUPER_12_INDIVIDUAL">Super 12 individual</option><option value="SUPER_16_INDIVIDUAL">Super 16 individual</option><option value="SUPER_4_FIXED">Super 4 duplas fixas</option><option value="SUPER_6_FIXED">Super 6 duplas fixas</option><option value="SUPER_8_FIXED">Super 8 duplas fixas</option><option value="SUPER_10_FIXED">Super 10 duplas fixas</option><option value="SUPER_12_FIXED">Super 12 duplas fixas</option><option value="GROUPS_MATA_MATA">Grupos + mata-mata</option></select>
+                  <label className="schedule-field-label">Nome do torneio<input value={eventDraft.title} onChange={e=>setEventDraft(d=>({...d,title:e.target.value}))} placeholder="Ex.: Etapa de setembro" className="schedule-field-control"/></label>
+                  <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2"><label className="schedule-field-label"><span className="flex items-center gap-1.5"><CalendarDays size={13}/>Data</span><input aria-label="Data do torneio" type="date" value={eventDraft.date} onChange={e=>setEventDraft(d=>({...d,date:e.target.value}))} className="schedule-field-control schedule-date-time"/></label><label className="schedule-field-label"><span className="flex items-center gap-1.5"><Clock size={13}/>Horário</span><input aria-label="Horário do torneio" type="time" value={eventDraft.time} onChange={e=>setEventDraft(d=>({...d,time:e.target.value}))} className="schedule-field-control schedule-date-time"/></label></div>
+                  <label className="schedule-field-label">Arena<input value={eventDraft.arenaName} onChange={e=>setEventDraft(d=>({...d,arenaName:e.target.value}))} placeholder="Local do torneio" className="schedule-field-control"/></label>
+                  <label className="schedule-field-label">Formato (opcional)<select value={eventDraft.format} onChange={e=>setEventDraft(d=>({...d,format:e.target.value as TournamentFormat|''}))} className="schedule-field-control"><option value="">Formato a definir</option><option value="REI_DA_QUADRA">Rei da Quadra</option><option value="SUPER_8_INDIVIDUAL">Super 8 individual</option><option value="SUPER_12_INDIVIDUAL">Super 12 individual</option><option value="SUPER_16_INDIVIDUAL">Super 16 individual</option><option value="SUPER_4_FIXED">Super 4 duplas fixas</option><option value="SUPER_6_FIXED">Super 6 duplas fixas</option><option value="SUPER_8_FIXED">Super 8 duplas fixas</option><option value="SUPER_10_FIXED">Super 10 duplas fixas</option><option value="SUPER_12_FIXED">Super 12 duplas fixas</option><option value="GROUPS_MATA_MATA">Grupos + mata-mata</option></select></label>
                 </div>
-                <button disabled={!eventDraft.title.trim()||!eventDraft.date||!eventDraft.time||!eventDraft.arenaName.trim()} onClick={saveLeagueEvent} className="mt-5 w-full rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase text-slate-950 disabled:opacity-40">Publicar agendamento</button>
+                {eventDraftError&&<p className="mt-3 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-[10px] font-bold text-red-200">{eventDraftError}</p>}
+                <button disabled={isPublishingEvent} onClick={saveLeagueEvent} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#bef264] py-4 text-[10px] font-black uppercase text-slate-950 disabled:opacity-60">{isPublishingEvent&&<RefreshCw size={14} className="animate-spin"/>}{isPublishingEvent?'Publicando...':'Publicar agendamento'}</button>
               </motion.div>
             </motion.div>
           )}
@@ -9323,8 +9389,24 @@ O play na palma da mão! 🏆`;
             <motion.div className="fixed inset-0 z-[1450] flex items-center justify-center bg-slate-950/80 p-5" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>{setShowLeagueCalendar(false);setSelectedLeagueEvent(null)}}>
               <motion.div onClick={e=>e.stopPropagation()} className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-[#071a2b] p-6 text-white">
                 <div className="flex justify-between"><div><p className="text-[8px] font-black uppercase tracking-widest text-sky-400">{activeRanking.name}</p><h3 className="text-xl font-black uppercase italic">Agenda de torneios</h3></div><button onClick={()=>setShowLeagueCalendar(false)}><X/></button></div>
-                <div className="mt-5 space-y-3">{leagueEvents.length===0?<p className="py-10 text-center text-xs text-slate-400">Nenhum torneio agendado.</p>:leagueEvents.map(event=><button key={event.id} onClick={()=>setSelectedLeagueEvent(event)} className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left"><p className="text-xs font-black uppercase">{event.title}</p><p className="mt-1 text-[10px] text-sky-300">{new Date(`${event.date}T12:00:00`).toLocaleDateString('pt-BR')} · {event.time} · {event.arenaName}</p><p className="mt-2 text-[9px] text-slate-400">{event.confirmedUserIds.length} atleta(s) confirmado(s)</p></button>)}</div>
+                {leagueEventsError&&<p className="mt-4 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-[10px] font-bold text-red-200">{leagueEventsError}</p>}
+                <div className="mt-5 space-y-3">{!leagueEventsError&&leagueEvents.length===0?<p className="py-10 text-center text-xs text-slate-400">Nenhum torneio agendado.</p>:leagueEvents.map(event=><button key={event.id} onClick={()=>setSelectedLeagueEvent(event)} className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left"><p className="text-xs font-black uppercase">{event.title}</p><p className="mt-1 text-[10px] text-sky-300">{new Date(`${event.date}T12:00:00`).toLocaleDateString('pt-BR')} · {event.time} · {event.arenaName}</p><p className="mt-2 text-[9px] text-slate-400">{event.confirmedUserIds.length} atleta(s) confirmado(s)</p></button>)}</div>
                 {selectedLeagueEvent&&<div className="mt-5 rounded-2xl border border-sky-400/30 bg-sky-400/10 p-4"><h4 className="font-black uppercase">{selectedLeagueEvent.title}</h4><p className="mt-2 text-[10px] text-slate-300">{selectedLeagueEvent.date.split('-').reverse().join('/')} às {selectedLeagueEvent.time}<br/>{selectedLeagueEvent.arenaName}<br/>{selectedLeagueEvent.confirmedUserIds.length} confirmado(s)</p>{!selectedLeagueEvent.format&&activeRanking.adminIds.includes(user?.uid||'')&&<p className="mt-2 rounded-xl bg-white/5 p-2 text-[9px] text-sky-200">Sugestões atuais: {selectedLeagueEvent.confirmedUserIds.length>=16?'Super 16, Super 8 ou grupos':selectedLeagueEvent.confirmedUserIds.length>=12?'Super 12, Super 6 fixo ou grupos':selectedLeagueEvent.confirmedUserIds.length>=8?'Super 8, Super 4 fixo ou grupos':'aguarde mais confirmações ou use grupos'}</p>}<button onClick={()=>toggleEventPresence(selectedLeagueEvent)} className="mt-4 w-full rounded-full bg-sky-500 py-3 text-[9px] font-black uppercase">{selectedLeagueEvent.confirmedUserIds.includes(user?.uid || '')?'Cancelar presença':'Confirmar presença'}</button>{activeRanking.adminIds.includes(user?.uid || '')&&selectedLeagueEvent.confirmedUserIds.length>0&&<button onClick={()=>startTournamentFromEvent(selectedLeagueEvent)} className="mt-2 w-full rounded-full bg-[#bef264] py-3 text-[9px] font-black uppercase text-slate-950">Criar torneio com confirmados</button>}</div>}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {photoSourceTarget && (
+            <motion.div className="fixed inset-0 z-[1900] flex items-center justify-center bg-slate-950/85 p-6 backdrop-blur-md" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setPhotoSourceTarget(null)}>
+              <motion.div initial={{opacity:0,scale:.94,y:14}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.96,y:10}} onClick={event=>event.stopPropagation()} className="w-full max-w-sm rounded-[2rem] border border-sky-300/25 bg-[#071a2b] p-6 text-white shadow-2xl">
+                <div className="flex items-start justify-between"><div><p className="text-[8px] font-black uppercase tracking-[.2em] text-sky-400">Selecionar imagem</p><h3 className="mt-1 font-display text-xl font-black uppercase italic">{photoSourceTarget==='PROFILE'?'Foto do perfil':'Capa da liga'}</h3></div><button type="button" onClick={()=>setPhotoSourceTarget(null)} className="rounded-xl border border-white/10 bg-white/5 p-2"><X size={18}/></button></div>
+                <p className="mt-3 text-[11px] font-semibold leading-relaxed text-slate-300">Escolha de onde deseja adicionar a imagem.</p>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={()=>chooseNativePhotoSource('CAMERA')} className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl border border-[#dfff16]/45 bg-[#dfff16]/10 text-[#dfff16] active:scale-95"><Camera size={28}/><span className="text-[10px] font-black uppercase tracking-wider">Abrir câmera</span></button>
+                  <button type="button" onClick={()=>chooseNativePhotoSource('PHOTOS')} className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl border border-sky-400/40 bg-sky-400/10 text-sky-300 active:scale-95"><Images size={28}/><span className="text-[10px] font-black uppercase tracking-wider">Abrir galeria</span></button>
+                </div>
               </motion.div>
             </motion.div>
           )}
