@@ -1279,6 +1279,36 @@
   @apply w-full px-6 py-4 rounded-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary-container text-on-surface placeholder:text-outline-variant font-medium transition-all outline-none;
 }
 
+/* A área mínima recomendada pela Apple evita toques deslocados nos steppers. */
+.league-stepper-button {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.75rem;
+  background: white;
+  color: rgb(15 23 42);
+  font-weight: 900;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.league-stepper-button:active {
+  transform: scale(0.94);
+}
+
+.league-stepper-button svg {
+  pointer-events: none;
+}
+
 .score-display {
   @apply font-display font-black text-7xl md:text-8xl tracking-tighter text-secondary;
 }

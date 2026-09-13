@@ -3988,9 +3988,9 @@ export default function BeachProApp() {
                       <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Até qual lugar pontua?</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-900 border border-slate-200 shadow-sm active:scale-90 transition-all font-display"><Minus size={18}/></button>
+                      <button type="button" aria-label="Diminuir posições que pontuam" onClick={() => setPositionsThatScore(Math.max(1, positionsThatScore - 1))} className="league-stepper-button bg-white text-slate-900 shadow-sm"><Minus size={18}/></button>
                       <span className="text-xl font-black text-slate-900 w-8 text-center italic">{positionsThatScore}</span>
-                      <button onClick={() => setPositionsThatScore(Math.min(16, positionsThatScore + 1))} className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-900 border border-slate-200 shadow-sm active:scale-90 transition-all font-display"><Plus size={18}/></button>
+                      <button type="button" aria-label="Aumentar posições que pontuam" onClick={() => setPositionsThatScore(Math.min(16, positionsThatScore + 1))} className="league-stepper-button bg-white text-slate-900 shadow-sm"><Plus size={18}/></button>
                     </div>
                   </div>
 
@@ -4006,17 +4006,17 @@ export default function BeachProApp() {
                             <span className="text-[10px] font-black text-slate-900 uppercase italic">Lugar</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button onClick={() => {
+                            <button type="button" aria-label={`Diminuir pontos do ${pos}º lugar`} onClick={() => {
                               const val = Math.max(0, currentPoints - 1);
                               setPlacementPoints(prev => ({ ...prev, [pos]: val }));
-                            }} className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-900 border border-slate-200 active:scale-90 transition-all">
+                            }} className="league-stepper-button bg-slate-50 text-slate-900">
                               <Minus size={14}/>
                             </button>
                             <span className="text-sm font-black text-primary w-6 text-center italic">{currentPoints}</span>
-                            <button onClick={() => {
+                            <button type="button" aria-label={`Aumentar pontos do ${pos}º lugar`} onClick={() => {
                               const val = Math.min(30, currentPoints + 1);
                               setPlacementPoints(prev => ({ ...prev, [pos]: val }));
-                            }} className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-900 border border-slate-200 active:scale-90 transition-all">
+                            }} className="league-stepper-button bg-slate-50 text-slate-900">
                               <Plus size={14}/>
                             </button>
                           </div>
@@ -4034,9 +4034,9 @@ export default function BeachProApp() {
                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Pts por presença</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 border border-slate-200 shadow-sm active:scale-90 transition-all"><Minus size={18}/></button>
+                        <button type="button" aria-label="Diminuir pontos por participação" onClick={() => setPPoints(Math.max(0, pPoints - 1))} className="league-stepper-button bg-slate-50 text-slate-900 shadow-sm"><Minus size={18}/></button>
                         <span className="text-xl font-black text-slate-900 w-8 text-center italic">{pPoints}</span>
-                        <button onClick={() => setPPoints(Math.min(30, pPoints + 1))} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 border border-slate-200 shadow-sm active:scale-90 transition-all"><Plus size={18}/></button>
+                        <button type="button" aria-label="Aumentar pontos por participação" onClick={() => setPPoints(Math.min(30, pPoints + 1))} className="league-stepper-button bg-slate-50 text-slate-900 shadow-sm"><Plus size={18}/></button>
                       </div>
                     </div>
 
@@ -4047,9 +4047,9 @@ export default function BeachProApp() {
                         <p className="text-[8px] font-black text-rose-300 uppercase tracking-widest">Escala 0 a -10</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => setPneuBonus(Math.min(0, pneuBonus + 1))} className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 border border-rose-100 shadow-sm active:scale-90 transition-all"><Plus size={18}/></button>
+                        <button type="button" aria-label="Diminuir penalidade por pneu" onClick={() => setPneuBonus(Math.min(0, pneuBonus + 1))} className="league-stepper-button border-rose-100 bg-rose-50 text-rose-500 shadow-sm"><Plus size={18}/></button>
                         <span className="text-xl font-black text-rose-500 w-8 text-center italic">{pneuBonus}</span>
-                        <button onClick={() => setPneuBonus(Math.max(-10, pneuBonus - 1))} className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 border border-rose-100 shadow-sm active:scale-90 transition-all"><Minus size={18}/></button>
+                        <button type="button" aria-label="Aumentar penalidade por pneu" onClick={() => setPneuBonus(Math.max(-10, pneuBonus - 1))} className="league-stepper-button border-rose-100 bg-rose-50 text-rose-500 shadow-sm"><Minus size={18}/></button>
                       </div>
                     </div>
                   </div>
@@ -9364,7 +9364,51 @@ O play na palma da mão! 🏆`;
               <motion.div onClick={e=>e.stopPropagation()} className="league-config-dialog max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6">
                 <div className="mb-5 flex items-center justify-between"><h3 className="font-display text-xl font-black uppercase italic text-primary">{{DATA:'Editar dados da liga',POINTS:'Regras de pontuação',ADMINS:'Administradores',SEASON:'Nova etapa da liga'}[leagueConfigModal]}</h3><button onClick={()=>setLeagueConfigModal(null)} className="rounded-xl bg-slate-100 p-2"><X size={18}/></button></div>
                 {leagueConfigModal==='DATA'&&<div className="space-y-3"><label className="league-field-label">Nome da liga<input value={rankingName} onChange={e=>setRankingName(e.target.value)} placeholder="Digite o nome da liga" className="input-field mt-1 py-4 text-xs"/></label><label className="league-field-label">Descrição / sobre a liga<textarea value={rankingDescription} onChange={e=>setRankingDescription(e.target.value)} placeholder="Conte aos atletas sobre a liga" className="mt-1 min-h-28 w-full rounded-2xl bg-slate-50 p-4 text-xs"/></label><label className="league-field-label">Nome da arena<input value={arenaName} onChange={e=>setArenaName(e.target.value)} placeholder="Digite o nome da arena" className="input-field mt-1 py-4 text-xs"/></label><label className="league-field-label">Endereço da arena<button onClick={()=>setShowAddressPopup(true)} className="mt-1 w-full rounded-2xl bg-slate-50 p-4 text-left text-xs">{arenaAddress.street?`${arenaAddress.street}, ${arenaAddress.city}`:'Definir endereço da arena'} </button></label><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar dados</button></div>}
-                {leagueConfigModal==='POINTS'&&<div className="space-y-4"><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Pontos por participação</span><div className="flex items-center gap-3"><button onClick={()=>setPPoints(Math.max(0,pPoints-1))}>−</button><b>{pPoints}</b><button onClick={()=>setPPoints(pPoints+1)}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Penalidade por pneu</span><div className="flex items-center gap-3"><button onClick={()=>setPneuBonus(Math.max(-10,pneuBonus-1))}>−</button><b>{pneuBonus}</b><button onClick={()=>setPneuBonus(Math.min(0,pneuBonus+1))}>+</button></div></div><div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span className="text-xs font-bold">Posições que pontuam</span><div className="flex items-center gap-3"><button onClick={()=>setPositionsThatScore(Math.max(1,positionsThatScore-1))}>−</button><b>Top {positionsThatScore}</b><button onClick={()=>setPositionsThatScore(Math.min(16,positionsThatScore+1))}>+</button></div></div><div className="grid grid-cols-2 gap-2">{Array.from({length:positionsThatScore}).map((_,i)=><label key={i} className="rounded-xl bg-slate-50 p-3 text-[9px] font-bold">#{i+1} lugar<input type="number" value={placementPoints[i+1]||0} onChange={e=>setPlacementPoints(p=>({...p,[i+1]:Number(e.target.value)}))} className="mt-1 w-full bg-transparent text-lg font-black text-primary"/></label>)}</div><button onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar pontuação</button></div>}
+                {leagueConfigModal==='POINTS'&&(
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                      <span className="text-xs font-bold">Pontos por participação</span>
+                      <div className="flex items-center gap-2">
+                        <button type="button" aria-label="Diminuir pontos por participação" onClick={()=>setPPoints(Math.max(0,pPoints-1))} className="league-stepper-button"><Minus size={18}/></button>
+                        <b className="w-8 text-center text-base">{pPoints}</b>
+                        <button type="button" aria-label="Aumentar pontos por participação" onClick={()=>setPPoints(Math.min(30,pPoints+1))} className="league-stepper-button"><Plus size={18}/></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                      <span className="text-xs font-bold">Penalidade por pneu</span>
+                      <div className="flex items-center gap-2">
+                        <button type="button" aria-label="Aumentar penalidade por pneu" onClick={()=>setPneuBonus(Math.max(-10,pneuBonus-1))} className="league-stepper-button"><Minus size={18}/></button>
+                        <b className="w-8 text-center text-base">{pneuBonus}</b>
+                        <button type="button" aria-label="Diminuir penalidade por pneu" onClick={()=>setPneuBonus(Math.min(0,pneuBonus+1))} className="league-stepper-button"><Plus size={18}/></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                      <span className="text-xs font-bold">Posições que pontuam</span>
+                      <div className="flex items-center gap-2">
+                        <button type="button" aria-label="Diminuir posições que pontuam" onClick={()=>setPositionsThatScore(Math.max(1,positionsThatScore-1))} className="league-stepper-button"><Minus size={18}/></button>
+                        <b className="min-w-12 text-center text-base">Top {positionsThatScore}</b>
+                        <button type="button" aria-label="Aumentar posições que pontuam" onClick={()=>setPositionsThatScore(Math.min(16,positionsThatScore+1))} className="league-stepper-button"><Plus size={18}/></button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {Array.from({length:positionsThatScore}).map((_,i)=>{
+                        const position=i+1;
+                        const currentPoints=placementPoints[position]||0;
+                        return (
+                          <div key={position} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+                            <span className="text-xs font-bold">{position}º lugar</span>
+                            <div className="flex items-center gap-2">
+                              <button type="button" aria-label={`Diminuir pontos do ${position}º lugar`} onClick={()=>setPlacementPoints(previous=>({...previous,[position]:Math.max(0,currentPoints-1)}))} className="league-stepper-button"><Minus size={18}/></button>
+                              <b className="w-8 text-center text-base text-primary">{currentPoints}</b>
+                              <button type="button" aria-label={`Aumentar pontos do ${position}º lugar`} onClick={()=>setPlacementPoints(previous=>({...previous,[position]:Math.min(30,currentPoints+1)}))} className="league-stepper-button"><Plus size={18}/></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={async()=>{await updateRankingGeneral();setLeagueConfigModal(null)}} className="w-full rounded-full bg-primary py-4 text-[10px] font-black uppercase text-white">Salvar pontuação</button>
+                  </div>
+                )}
                 {leagueConfigModal==='ADMINS'&&<div><div className="flex gap-2"><input value={newAdminEmail} onChange={e=>setNewAdminEmail(e.target.value)} placeholder="E-mail do novo administrador" className="min-w-0 flex-1 rounded-2xl bg-slate-50 p-4 text-xs"/><button onClick={()=>addAdminToRanking(activeRanking.id,newAdminEmail)} className="rounded-2xl bg-primary px-5 text-white"><Check/></button></div><div className="mt-4 space-y-2">{activeRanking.adminIds.map(id=><div key={id} className="rounded-xl bg-slate-50 p-3 text-[10px] font-bold">{adminProfiles[id]?.displayName||adminProfiles[id]?.email||id}{id===activeRanking.ownerId?' · Fundador':''}</div>)}</div></div>}
                 {leagueConfigModal==='SEASON'&&<div><p className="text-sm leading-relaxed text-slate-600">A classificação atual será arquivada como etapa {activeRanking.currentSeason||1}. Todos os pontos da liga serão zerados.</p><button onClick={()=>{setLeagueConfigModal(null);setLeagueResetStep(1)}} className="mt-5 w-full rounded-full bg-amber-500 py-4 text-[10px] font-black uppercase text-white">Zerar e iniciar nova etapa</button>{leagueSeasons.length>0&&<div className="mt-5 space-y-2">{leagueSeasons.map((s:any)=><div key={s.id} className="rounded-xl bg-slate-50 p-3 text-xs">Etapa {s.number} · {new Date(s.archivedAt).toLocaleDateString('pt-BR')}</div>)}</div>}</div>}
               </motion.div>
