@@ -28,7 +28,7 @@ workflows:
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          for variable in NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_APP_ID; do
+          for variable in NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_REVENUECAT_IOS_API_KEY; do
             if [ -z "${!variable:-}" ]; then
               echo "Missing Firebase variable: $variable. Check the firebase group in Codemagic."
               exit 1

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Zap, Trophy, BarChart3, Users, Star, Check } from 'lucide-react';
 
@@ -15,6 +15,42 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
   const [selectedPlan, setSelectedPlan] = useState<'annual' | 'monthly'>('annual');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [annualPrice, setAnnualPrice] = useState('R$ 118,90');
+  const [annualMonthlyPrice, setAnnualMonthlyPrice] = useState('R$ 9,91');
+  const [monthlyPrice, setMonthlyPrice] = useState('R$ 19,90');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLocalizedPrices = async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (!Capacitor.isNativePlatform()) return;
+
+        const { initPurchases } = await import('../lib/subscription');
+        const { Purchases } = await import('@revenuecat/purchases-capacitor');
+        await initPurchases(uid);
+        const { current } = await Purchases.getOfferings();
+        if (!active || !current) return;
+
+        if (current.annual) {
+          setAnnualPrice(current.annual.product.priceString);
+          setAnnualMonthlyPrice(
+            current.annual.product.pricePerMonthString ?? current.annual.product.priceString,
+          );
+        }
+        if (current.monthly) {
+          setMonthlyPrice(current.monthly.product.priceString);
+        }
+      } catch (error) {
+        // Mantém os valores brasileiros de fallback enquanto a loja carrega.
+        console.warn('[subscription] Não foi possível carregar os preços localizados:', error);
+      }
+    };
+
+    void loadLocalizedPrices();
+    return () => { active = false; };
+  }, [uid]);
 
   const getReasonConfig = () => {
     switch (reason) {
@@ -223,9 +259,9 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
                     Anual — 7 dias grátis
                   </p>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="premium-annual-price text-2xl font-black text-slate-900">R$ 9,90</span>
+                    <span className="premium-annual-price text-2xl font-black text-slate-900">{annualMonthlyPrice}</span>
                     <span className="premium-annual-detail text-slate-500 text-xs">/mês</span>
-                    <span className="premium-annual-detail text-slate-500 text-[9px] font-black">· R$ 118,80/ano</span>
+                    <span className="premium-annual-detail text-slate-500 text-[9px] font-black">· {annualPrice}/ano</span>
                   </div>
                   <p className="text-[8px] font-black text-amber-600 mt-0.5">Cancele antes de 7 dias sem custo</p>
                 </div>
@@ -250,7 +286,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
                 <div>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Mensal</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-black text-slate-900">R$ 19,90</span>
+                    <span className="text-2xl font-black text-slate-900">{monthlyPrice}</span>
                     <span className="text-slate-400 text-xs">/mês</span>
                   </div>
                 </div>
