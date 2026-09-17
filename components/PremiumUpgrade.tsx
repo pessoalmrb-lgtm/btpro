@@ -322,8 +322,26 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
             >
               Já assinou? Restaurar compras
             </button>
-            <p className="text-center text-[8px] text-slate-300 px-4 leading-relaxed">
-              Ao assinar, você concorda com nossos termos. A renovação é automática e pode ser cancelada a qualquer momento.
+            <p className="text-center text-[8px] text-slate-400 px-4 leading-relaxed">
+              Ao assinar, você concorda com os{' '}
+              <a
+                href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-slate-600 underline underline-offset-2"
+              >
+                Termos de Uso (EULA)
+              </a>{' '}
+              e com a{' '}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-slate-600 underline underline-offset-2"
+              >
+                Política de Privacidade
+              </a>
+              . A renovação é automática e pode ser cancelada a qualquer momento.
             </p>
           </div>
         </div>

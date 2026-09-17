@@ -3320,7 +3320,10 @@ export default function BeachProApp() {
                   </div>
 
                   <p className="text-center text-[10px] text-on-surface-variant font-black uppercase tracking-widest mt-10 px-8 leading-relaxed opacity-40">
-                    Ao entrar, você concorda com nossos <br/> <a className="underline decoration-primary/30" href="#">Termos</a> e <a className="underline decoration-primary/30" href="#">Privacidade</a>.
+                    Ao entrar, você concorda com nossos <br/>{' '}
+                    <a className="underline decoration-primary/30" href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" target="_blank" rel="noopener noreferrer">Termos</a>{' '}
+                    e{' '}
+                    <a className="underline decoration-primary/30" href="/privacy" target="_blank" rel="noopener noreferrer">Privacidade</a>.
                   </p>
                 </div>
               </div>
