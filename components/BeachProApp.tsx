@@ -3084,7 +3084,7 @@ export default function BeachProApp() {
         bgColor,
         user && "authenticated-theme"
       )} data-app-step={step} data-authenticated={Boolean(user)}>
-        <div className="w-full flex-grow">
+        <div className="app-content-frame w-full max-w-[820px] flex-grow">
           <AnimatePresence mode="wait">
             {(!isAuthReady || !splashDone) && (
               <motion.div
@@ -8243,72 +8243,6 @@ O play na palma da mão! 🏆`;
           )}
         </AnimatePresence>
 
-        {/* Upgrade Modal */}
-        <AnimatePresence>
-          {showUpgradeModal && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className="bg-white rounded-[3rem] p-10 md:p-14 max-w-lg w-full shadow-2xl border border-surface-container relative overflow-hidden"
-              >
-                <div className="absolute top-0 right-0 p-8">
-                  <button onClick={() => setShowUpgradeModal(false)} className="text-on-surface-variant/20 hover:text-primary transition-colors">
-                    <X size={28} />
-                  </button>
-                </div>
-
-                <div className="bg-accent/20 w-24 h-24 rounded-[2rem] flex items-center justify-center text-accent mb-10 mx-auto shadow-inner">
-                  <Zap size={48} />
-                </div>
-
-                <div className="text-center space-y-4 mb-12">
-                  <h3 className="text-4xl font-display font-black text-primary tracking-tight uppercase italic">
-                    Seja <span className="text-accent">BeachPró Premium</span>
-                  </h3>
-                  <p className="text-on-surface-variant/60 text-sm font-black uppercase tracking-widest leading-relaxed">
-                    Libere todos os formatos de torneio e organize eventos profissionais sem limites.
-                  </p>
-                </div>
-
-                <div className="space-y-5 mb-12">
-                  {[
-                    'Torneios Mata-Mata Ilimitados',
-                    'Configuração de Grupos Personalizada',
-                    'Fases Eliminatórias (Oitavas a Final)',
-                    'Suporte Prioritário',
-                    'Sem Anúncios'
-                  ].map((feature, i) => (
-                    <div key={i} className="flex items-center gap-4 text-primary font-black text-[10px] uppercase tracking-widest">
-                      <div className="bg-accent/20 p-1.5 rounded-full text-accent shadow-sm">
-                        <CheckCircle2 size={18} />
-                      </div>
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-6">
-                  <button 
-                    onClick={() => {
-                      // In a real app, this would trigger the Google Play Billing flow
-                      setShowUpgradeModal(false);
-                    }}
-                    className="w-full py-6 bg-primary text-on-primary rounded-full text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3 group hover:bg-primary-dim transition-all"
-                  >
-                    <span>ASSINAR AGORA</span>
-                    <ChevronRight size={24} className="group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  <p className="text-[10px] text-on-surface-variant/30 text-center font-black uppercase tracking-widest">
-                    Apenas R$ 19,90 / mês
-                  </p>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
         {/* Follow tournament by code */}
         <AnimatePresence>
           {showFollowTournament && (
@@ -8984,8 +8918,8 @@ O play na palma da mão! 🏆`;
                         </div>
                       </div>
                       <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-center">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">A partir de</p>
-                        <p className="text-2xl font-black text-slate-900">R$ 9,90<span className="text-sm text-slate-400">/mês</span></p>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Escolha o melhor para você</p>
+                        <p className="text-lg font-black text-slate-900">Planos mensal e anual</p>
                         <p className="text-[8px] text-slate-400 font-black">· sem anúncios · sem dados vendidos</p>
                       </div>
                       <button onClick={openPremium} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2">
@@ -9033,17 +8967,15 @@ O play na palma da mão! 🏆`;
                       <button onClick={openPremium} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center active:scale-95 transition-all hover:border-[#bef264]/40">
                         <div className="text-4xl mb-2">🎾</div>
                         <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">Uma bolinha</p>
-                        <p className="text-xl font-black text-white">R$ 19,90</p>
-                        <p className="text-[7px] text-white/30 font-black uppercase tracking-widest">/mês · mensal</p>
+                        <p className="text-base font-black text-white">Plano mensal</p>
                         <p className="text-[7px] text-white/40 mt-1 leading-tight">Cancele quando quiser</p>
                       </button>
                       <button onClick={openPremium} className="bg-[#bef264]/10 border-2 border-[#bef264]/40 rounded-2xl p-4 text-center active:scale-95 transition-all relative">
                         <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-[#bef264] text-slate-900 text-[6px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">MELHOR</div>
                         <div className="text-4xl mb-2">🏸</div>
                         <p className="text-[8px] font-black text-[#bef264] uppercase tracking-widest mb-1">A parcela da raquete</p>
-                        <p className="text-xl font-black text-white">R$ 9,90</p>
-                        <p className="text-[7px] text-white/30 font-black uppercase tracking-widest">/mês · anual</p>
-                        <p className="text-[7px] text-white/40 mt-1 leading-tight">R$ 118,80/ano · 7 dias grátis</p>
+                        <p className="text-base font-black text-white">Plano anual</p>
+                        <p className="text-[7px] text-white/40 mt-1 leading-tight">Consulte o valor localizado na tela de assinatura</p>
                       </button>
                     </div>
                     <div className="px-6 pb-7 pt-4 space-y-2">
@@ -9477,7 +9409,7 @@ O play na palma da mão! 🏆`;
                     <p>Ao confirmar, você enviará uma solicitação para excluir permanentemente seu perfil, torneios criados, ligas administradas, fotos e demais dados.</p>
                     <p>Você também será removido das ligas de outras pessoas. Resultados históricos poderão permanecer sem vínculo com seu perfil.</p>
                     <p className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-3 text-sky-200">A exclusão será concluída em até 7 dias e você receberá uma confirmação por e-mail.</p>
-                    <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200">Excluir a conta não cancela uma assinatura ativa da App Store ou Google Play. Cancele-a na loja do aparelho para evitar novas cobranças.</p>
+                    <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200">Excluir a conta não cancela uma assinatura ativa. Cancele-a na loja de aplicativos do dispositivo para evitar novas cobranças.</p>
                   </div>
                 ) : (
                   <div className="mt-4 text-left">

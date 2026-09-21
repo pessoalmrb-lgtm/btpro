@@ -22,7 +22,7 @@ export default function DeleteAccount() {
       <h2 style={{ fontSize: 20, marginTop: 32 }}>Dados eventualmente mantidos</h2>
       <p>Dados somente serão mantidos quando necessários para cumprimento de obrigação legal, prevenção de fraude, segurança ou resolução de disputas, pelo prazo estritamente necessário. Cópias residuais poderão permanecer temporariamente em backups até o ciclo técnico de exclusão.</p>
       <h2 style={{ fontSize: 20, marginTop: 32 }}>Assinaturas</h2>
-      <p>A exclusão da conta não cancela automaticamente uma assinatura ativa. O cancelamento deve ser realizado diretamente na Google Play Store ou Apple App Store.</p>
+      <p>A exclusão da conta não cancela automaticamente uma assinatura ativa. O cancelamento deve ser realizado diretamente na loja de aplicativos vinculada à assinatura.</p>
       <p style={{ marginTop: 32 }}>Consulte também a <a href="/privacy">Política de Privacidade do BeachPró Super 8 Beach Tennis</a>.</p>
     </main>
   );

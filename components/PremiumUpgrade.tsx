@@ -73,7 +73,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
       const isNative = Capacitor.isNativePlatform();
 
       if (!isNative) {
-        setErrorMsg('Assinatura disponível apenas no aplicativo para iOS ou Android.');
+        setErrorMsg('Assinatura disponível apenas no aplicativo móvel.');
         return;
       }
 
@@ -137,7 +137,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
     try {
       const { Capacitor } = await import('@capacitor/core');
       if (!Capacitor.isNativePlatform()) {
-        setErrorMsg('Restauração disponível apenas no aplicativo para iOS ou Android.');
+        setErrorMsg('Restauração disponível apenas no aplicativo móvel.');
         return;
       }
       const { restorePurchases, mirrorExpirationToFirestore } =
@@ -256,14 +256,16 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
                 </div>
                 <div>
                   <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${selectedPlan === 'annual' ? 'text-amber-700' : 'text-slate-400'}`}>
-                    Anual — 7 dias grátis
+                    Plano anual
                   </p>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="premium-annual-price text-2xl font-black text-slate-900">{annualMonthlyPrice}</span>
-                    <span className="premium-annual-detail text-slate-500 text-xs">/mês</span>
-                    <span className="premium-annual-detail text-slate-500 text-[9px] font-black">· {annualPrice}/ano</span>
+                    <span className="premium-annual-price text-2xl font-black text-slate-900">{annualPrice}</span>
+                    <span className="premium-annual-detail text-slate-500 text-xs font-black">/ano</span>
                   </div>
-                  <p className="text-[8px] font-black text-amber-600 mt-0.5">Cancele antes de 7 dias sem custo</p>
+                  <p className="premium-annual-detail text-[9px] font-bold text-slate-500 mt-1">
+                    Equivale a {annualMonthlyPrice}/mês
+                  </p>
+                  <p className="text-[8px] font-black text-amber-700 mt-0.5">7 dias grátis; depois {annualPrice} por ano</p>
                 </div>
               </div>
             </button>
@@ -307,7 +309,7 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
               {isLoading
                 ? <span className="animate-spin text-lg">⏳</span>
                 : <>
-                    {selectedPlan === 'annual' ? 'COMEÇAR 7 DIAS GRÁTIS' : 'ASSINAR AGORA'}
+                    {selectedPlan === 'annual' ? `ASSINAR POR ${annualPrice}/ANO` : `ASSINAR POR ${monthlyPrice}/MÊS`}
                     <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
                   </>
               }
@@ -341,7 +343,8 @@ export const PremiumUpgrade = ({ uid, onClose, onSuccess, reason = 'GENERIC' }: 
               >
                 Política de Privacidade
               </a>
-              . A renovação é automática e pode ser cancelada a qualquer momento.
+              . Plano anual: 7 dias grátis e depois {annualPrice} por ano. Plano mensal: {monthlyPrice} por mês.
+              A renovação é automática até o cancelamento nas configurações da loja do dispositivo.
             </p>
           </div>
         </div>
