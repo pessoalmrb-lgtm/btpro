@@ -14,13 +14,13 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
   const darkNavigation = true;
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[40] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[40] flex justify-center px-4 md:px-8">
     <motion.nav
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 100, opacity: 0 }}
       className={cn(
-        "pointer-events-auto h-[4.5rem] w-full max-w-[440px] rounded-full px-4 py-1 flex items-center justify-between transition-colors duration-500",
+        "pointer-events-auto h-[4.5rem] w-full max-w-[440px] rounded-full px-4 py-1 flex items-center justify-between transition-colors duration-500 md:h-20 md:max-w-[600px] md:px-6",
         darkNavigation ? "bottom-nav-night" : "bottom-nav-glass"
       )}
     >
@@ -37,7 +37,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         )}>
           <Home size={20} className={activeStep === 'HOME' ? "fill-primary/10" : ""} />
         </div>
-        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Início</span>
+        <span className="text-[8px] font-black uppercase tracking-widest leading-none md:text-[10px]">Início</span>
       </button>
       
       <button 
@@ -53,7 +53,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         )}>
           <Award size={20} className={activeStep === 'MY_RANKINGS' || activeStep === 'RANKING_DETAILS' || activeStep === 'CREATE_RANKING' ? "fill-primary/10" : "opacity-40"} />
         </div>
-        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Ligas</span>
+        <span className="text-[8px] font-black uppercase tracking-widest leading-none md:text-[10px]">Ligas</span>
       </button>
 
       <button 
@@ -69,7 +69,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         )}>
           <TrophyIcon size={20} className={activeStep === 'TOURNAMENTS_LIST' || activeStep === 'TOURNAMENT' ? "fill-current/10" : ""} />
         </div>
-        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Torneios</span>
+        <span className="text-[8px] font-black uppercase tracking-widest leading-none md:text-[10px]">Torneios</span>
       </button>
       
       <button 
@@ -85,7 +85,7 @@ export const BottomNav = ({ activeStep, setStep, isVisible, resetApp }: { active
         )}>
           <UserIcon size={20} className={activeStep === 'PROFILE' ? "fill-primary/10" : ""} />
         </div>
-        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Perfil</span>
+        <span className="text-[8px] font-black uppercase tracking-widest leading-none md:text-[10px]">Perfil</span>
       </button>
     </motion.nav>
     </div>,

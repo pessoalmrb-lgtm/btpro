@@ -1359,3 +1359,47 @@
 .match-pending {
   @apply bg-white border-slate-200;
 }
+
+/*
+ * Adaptação para iPad e outras telas largas. O app continua distribuído como
+ * iPhone, mas a App Store permite executá-lo no iPad em modo compatível. Estes
+ * ajustes impedem conteúdo excessivamente esticado, textos microscópicos e
+ * controles com área de toque pequena quando o WebView recebe um viewport de
+ * tablet.
+ */
+@media (min-width: 768px) {
+  body {
+    background: #010814;
+  }
+
+  .app-content-frame {
+    min-height: 100dvh;
+    overflow: hidden;
+    border-inline: 1px solid rgba(56, 189, 248, 0.12);
+    box-shadow: 0 0 64px rgba(0, 0, 0, 0.38);
+  }
+
+  .app-content-frame button,
+  .app-content-frame input,
+  .app-content-frame select,
+  .app-content-frame textarea {
+    min-height: 44px;
+  }
+
+  .app-content-frame .text-\[6px\],
+  .app-content-frame .text-\[7px\] {
+    font-size: 0.625rem !important;
+    line-height: 0.875rem !important;
+  }
+
+  .app-content-frame .text-\[8px\],
+  .app-content-frame .text-\[9px\] {
+    font-size: 0.6875rem !important;
+    line-height: 0.95rem !important;
+  }
+
+  .app-content-frame .text-\[10px\] {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
+}
